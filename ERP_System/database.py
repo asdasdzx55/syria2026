@@ -1,8 +1,14 @@
 import sqlite3
 import os
+import sys
+
+def get_base_dir():
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
 
 def get_db_path():
-    base_dir = os.path.dirname(os.path.abspath(__file__))
+    base_dir = get_base_dir()
     return os.path.join(base_dir, 'my_business_v3.db')
 
 def setup_database():
