@@ -1,0 +1,127 @@
+﻿
+    <!DOCTYPE html>
+    <html lang="ar" dir="rtl">
+    <head>
+        <meta charset="UTF-8">
+        <title>فاتورة مشتريات رقم 5</title>
+        <style>
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                width: 190mm;
+                margin: 10mm auto;
+                padding: 15px;
+                color: #2c3e50;
+                background: #fff;
+                direction: rtl;
+            }
+            .header-box {
+                text-align: center;
+                border-bottom: 3px solid #1f538d;
+                padding-bottom: 10px;
+                margin-bottom: 15px;
+            }
+            .header-box h1 { margin: 0; color: #1f538d; font-size: 24px; }
+            .header-box h2 { margin: 5px 0; color: #7f8c8d; font-size: 16px; }
+            .info-grid {
+                display: flex;
+                justify-content: space-between;
+                background: #f8f9fa;
+                padding: 10px 15px;
+                border-radius: 8px;
+                margin-bottom: 15px;
+                font-weight: bold;
+            }
+            .items-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 15px;
+            }
+            .items-table th {
+                background-color: #1f538d;
+                color: white;
+                padding: 8px;
+                border: 1px solid #1f538d;
+                text-align: center;
+            }
+            .items-table td {
+                padding: 8px;
+                border: 1px solid #ddd;
+                text-align: center;
+            }
+            .items-table tr:nth-child(even) { background-color: #f9f9f9; }
+            .summary-box {
+                width: 300px;
+                float: left;
+                background: #eef2f7;
+                padding: 12px;
+                border-radius: 8px;
+                font-weight: bold;
+                margin-top: 10px;
+            }
+            .summary-row {
+                display: flex;
+                justify-content: space-between;
+                margin-bottom: 6px;
+            }
+            .summary-row.total {
+                border-top: 2px solid #1f538d;
+                padding-top: 6px;
+                color: #27ae60;
+                font-size: 16px;
+            }
+            .clearfix { clear: both; }
+            @media print {
+                body { width: 100%; margin: 0; padding: 0; }
+                .no-print { display: none; }
+            }
+        </style>
+    </head>
+    <body onload="setTimeout(function(){ window.print(); }, 400);">
+        <div class="header-box">
+            <h1>📦 نظام الكاشير والمخازن</h1>
+            <h2>🧾 فاتورة توريد ومشتريات بضاعة (استلام مخزن)</h2>
+        </div>
+
+        <div class="info-grid">
+            <div>رقم الفاتورة: <span style="color:#c0392b;">#5</span></div>
+            <div>المورد: <span style="color:#1f538d;">شركة جهينة للألبان</span></div>
+            <div>التاريخ: <span>2026-08-08 16:37</span></div>
+        </div>
+
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th width="40">م</th>
+                    <th>اسم المنتج / الصنف</th>
+                    <th width="110">سعر التكلفة</th>
+                    <th width="100">الكمية/الوزن</th>
+                    <th width="120">الإجمالي الصافي</th>
+                </tr>
+            </thead>
+            <tbody>
+                
+        <tr>
+            <td>1</td>
+            <td style="text-align: right;">سكر دبي 1 كجم</td>
+            <td>29 ج.م</td>
+            <td>4.2 كغم</td>
+            <td>121.8 ج.م</td>
+        </tr>
+        
+            </tbody>
+        </table>
+
+        <div class="summary-box">
+            <div class="summary-row"><span>الخصم الممنوح:</span> <span>0 ج.م</span></div>
+            <div class="summary-row total"><span>الإجمالي المطلوب:</span> <span>121.8 ج.م</span></div>
+            <div class="summary-row"><span>المدفوع كاش:</span> <span>0 ج.م</span></div>
+            <div class="summary-row"><span>المتبقي آجل:</span> <span>121.8 ج.م</span></div>
+        </div>
+        <div class="clearfix"></div>
+
+        <div style="text-align: center; margin-top: 30px; font-size: 12px; color: #7f8c8d;">
+            توقيع المستلم / أخصائي المخزن: ____________________ &nbsp;&nbsp;&nbsp;&nbsp; توقيع المورد / المندوب: ____________________
+        </div>
+    </body>
+    </html>
+    
