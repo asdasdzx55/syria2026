@@ -52,10 +52,6 @@ class POSPage(ctk.CTkFrame):
         self.lbl_pos_header = ctk.CTkLabel(nav_row, text="🛒 سوبر ماركت المنزل السوري | الكاشير المباشر", font=ctk.CTkFont(size=15, weight="bold"), text_color="white")
         self.lbl_pos_header.pack(side="left", padx=15, pady=4)
 
-    def quick_sync_cloud(self):
-        self.sync_mgr.trigger_instant_sync()
-        self.show_status("⚡ جاري المزامنة اللحظية مع السيرفر المركزي بالخلفية...", "#2ecc71")
-
         # السطر الثاني: بيانات العميل والطيار
         cust_row = ctk.CTkFrame(top_card, fg_color="transparent")
         cust_row.pack(fill="x", padx=10, pady=(2, 8))
@@ -247,6 +243,9 @@ class POSPage(ctk.CTkFrame):
         ctk.CTkButton(action_btns_frame, text="🖨️ طباعة مبدئية", font=ctk.CTkFont(weight="bold"), fg_color="#8e44ad", hover_color="#732d91", height=42, command=self.print_temp_receipt).pack(side="right", expand=True, fill="x", padx=(0, 3))
         ctk.CTkButton(action_btns_frame, text="💾 دفع وطباعة (F5)", font=ctk.CTkFont(size=15, weight="bold"), fg_color="#27ae60", hover_color="#1e8449", height=42, command=self.pos_checkout).pack(side="left", expand=True, fill="x", padx=(3, 0))
 
+    def quick_sync_cloud(self):
+        self.sync_mgr.trigger_instant_sync()
+        self.show_status("⚡ جاري المزامنة اللحظية مع السيرفر المركزي بالخلفية...", "#2ecc71")
 
     def setup_shortcuts(self):
         top = self.winfo_toplevel()
