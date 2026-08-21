@@ -194,7 +194,13 @@ $currency = 'ج.م';
                     <span>إضافة منتج</span>
                 </button>
 
-                <!-- 7. زر تطبيق الدليفري والطيارين -->
+                <!-- 7. صفحة الجرد والمخزون -->
+                <button onclick="switchView('inventory')" id="tab-inventory" class="nav-tab px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-indigo-400 font-bold text-xs sm:text-sm flex items-center gap-1.5 border border-slate-700/60 transition-all">
+                    <i class="fa-solid fa-clipboard-list text-indigo-400"></i>
+                    <span>الجرد والمخزون 📋</span>
+                </button>
+
+                <!-- 8. زر تطبيق الدليفري والطيارين -->
                 <a href="delivery.php" target="_blank" class="px-2.5 sm:px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 font-black text-xs sm:text-sm flex items-center gap-1.5 border border-amber-500/40 transition-all shadow-md">
                     <i class="fa-solid fa-motorcycle text-amber-400"></i>
                     <span>تطبيق الدليفري 🛵</span>
@@ -733,6 +739,136 @@ $currency = 'ج.م';
 
         </section>
 
+        <!-- ================================================================= -->
+        <!-- الصفحة 7: شاشة الجرد والمخزون الشامل (Inventory Audit & Stock Take)-->
+        <!-- ================================================================= -->
+        <section id="view-inventory" class="page-view hidden flex flex-col gap-4">
+            
+            <!-- 1. شريط إحصائيات المخزون والقيمة المالية -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div class="bg-slate-900/90 border border-slate-800 p-3 sm:p-4 rounded-2xl flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-lg font-bold shrink-0">
+                        <i class="fa-solid fa-boxes-stacked"></i>
+                    </div>
+                    <div>
+                        <p class="text-[11px] text-slate-400 font-semibold">إجمالي الأصناف</p>
+                        <h4 id="inv-stat-total-items" class="text-base sm:text-lg font-black text-white">0 صنف</h4>
+                    </div>
+                </div>
+
+                <div class="bg-slate-900/90 border border-slate-800 p-3 sm:p-4 rounded-2xl flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg font-bold shrink-0">
+                        <i class="fa-solid fa-coins"></i>
+                    </div>
+                    <div>
+                        <p class="text-[11px] text-slate-400 font-semibold">قيمة المخزون (بالتكلفة)</p>
+                        <h4 id="inv-stat-cost-value" class="text-base sm:text-lg font-black text-emerald-400">0.00 ج.م</h4>
+                    </div>
+                </div>
+
+                <div class="bg-slate-900/90 border border-slate-800 p-3 sm:p-4 rounded-2xl flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-lg font-bold shrink-0">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                    </div>
+                    <div>
+                        <p class="text-[11px] text-slate-400 font-semibold">أصناف منتهية / نواقص</p>
+                        <h4 id="inv-stat-zero-stock" class="text-base sm:text-lg font-black text-amber-400">0 صنف</h4>
+                    </div>
+                </div>
+
+                <div class="bg-slate-900/90 border border-slate-800 p-3 sm:p-4 rounded-2xl flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center text-lg font-bold shrink-0">
+                        <i class="fa-solid fa-clipboard-check"></i>
+                    </div>
+                    <div>
+                        <p class="text-[11px] text-slate-400 font-semibold">أصناف تم جردها بالجلسة</p>
+                        <h4 id="inv-stat-modified-count" class="text-base sm:text-lg font-black text-purple-300">0 صنف</h4>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. شريط البحث والتحكم بالجرد السريع -->
+            <div class="bg-slate-900 border border-slate-800 p-3 sm:p-4 rounded-2xl flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 shadow-lg">
+                <div class="flex-1 flex flex-wrap items-center gap-2">
+                    
+                    <!-- حقل البحث ومسح الباركود السريع -->
+                    <div class="relative flex-1 min-w-[220px]">
+                        <i class="fa-solid fa-barcode absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                        <input type="text" id="inv-search-input" onkeyup="filterInventoryTable()" placeholder="امسح الباركود أو ابحث بالاسم / الكود (5 أرقام)..." class="w-full pl-3 pr-10 py-2.5 bg-slate-950 border border-slate-700/80 rounded-xl text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition">
+                    </div>
+
+                    <!-- زر تشغيل الكاميرا للجرد في الأرفف -->
+                    <button onclick="scanBarcodeForInventory()" class="px-3.5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 shadow-md active:scale-95 transition-all">
+                        <i class="fa-solid fa-camera animate-pulse"></i>
+                        <span>كاميرا الجرد 📷</span>
+                    </button>
+
+                    <!-- فلتر الأقسام -->
+                    <select id="inv-category-filter" onchange="filterInventoryTable()" class="px-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs sm:text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+                        <option value="">جميع الأقسام</option>
+                        <?php foreach($categories as $cat): ?>
+                            <option value="<?php echo htmlspecialchars($cat['name']); ?>"><?php echo htmlspecialchars($cat['name']); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+
+                    <!-- فلتر حالة الجرد والفوارق -->
+                    <select id="inv-status-filter" onchange="filterInventoryTable()" class="px-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs sm:text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+                        <option value="all">كل الأصناف</option>
+                        <option value="discrepancy">أصناف بها فارق (عجز أو زيادة)</option>
+                        <option value="shortage">أصناف بها عجز 🔴</option>
+                        <option value="surplus">أصناف بها زيادة 🔵</option>
+                        <option value="matched">أصناف مطابقة 🟢</option>
+                        <option value="zero">أصناف منتهية (رصيد 0) ⚠️</option>
+                        <option value="modified">أصناف تم تعديلها في الجلسة 🔄</option>
+                    </select>
+                </div>
+
+                <!-- أزرار الإجراءات الشاملة -->
+                <div class="flex items-center gap-2 shrink-0">
+                    <button onclick="printInventorySheet()" class="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white rounded-xl text-xs font-bold flex items-center gap-1.5 border border-slate-700 transition">
+                        <i class="fa-solid fa-print"></i>
+                        <span>طباعة كشف</span>
+                    </button>
+
+                    <button onclick="saveAllInventoryAudit()" class="px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs sm:text-sm font-black flex items-center gap-2 shadow-lg shadow-indigo-950 active:scale-95 transition-all">
+                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                        <span>تطبيق وحفظ الجرد الشامل 💾</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 3. جدول الجرد التفاعلي الشامل -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+                <div class="overflow-x-auto max-h-[62vh]">
+                    <table class="w-full text-right text-xs">
+                        <thead class="bg-slate-850 text-slate-400 font-extrabold sticky top-0 z-10 border-b border-slate-800">
+                            <tr>
+                                <th class="p-3 w-14 text-center">كود</th>
+                                <th class="p-3 min-w-[200px]">اسم الصنف</th>
+                                <th class="p-3 min-w-[110px]">القسم</th>
+                                <th class="p-3 text-center">سعر التكلفة</th>
+                                <th class="p-3 text-center">سعر البيع</th>
+                                <th class="p-3 text-center min-w-[100px]">رصيد السيستم</th>
+                                <th class="p-3 text-center min-w-[210px] bg-slate-800/80 text-white">الكمية الفعلية بالجرد 📋</th>
+                                <th class="p-3 text-center min-w-[120px]">الفارق (عجز/زيادة)</th>
+                                <th class="p-3 text-center min-w-[90px]">حفظ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="inventory-tbody" class="divide-y divide-slate-800/60 text-slate-300">
+                            <!-- تعبأ ديناميكياً بواسطة JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- تذييل جدول الجرد -->
+                <div class="p-3 bg-slate-850 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400 font-semibold">
+                    <span id="inv-showing-count">جاري تحميل بيانات المخزون...</span>
+                    <span class="text-indigo-400 text-[11px]"><i class="fa-solid fa-circle-info ml-1"></i> يتم تحديث الفارق تلقائياً عند تغيير الكمية الفعلية</span>
+                </div>
+            </div>
+
+        </section>
+
     </div>
 
     <!-- ================================================================= -->
@@ -1132,6 +1268,10 @@ $currency = 'ج.م';
                 loadShiftReportsData();
             } else if (viewName === 'expenses') {
                 loadExpensesData();
+            } else if (viewName === 'add-product') {
+                renderManageProductsTable(products);
+            } else if (viewName === 'inventory') {
+                initInventoryView();
             }
         }
 
@@ -1724,14 +1864,18 @@ $currency = 'ج.م';
                 html5QrScanner = new Html5Qrcode("interactive-scanner-view");
             }
 
-            const config = { fps: 15, qrbox: { width: 260, height: 200 } };
+            const config = { 
+                fps: 20, 
+                qrbox: { width: 280, height: 220 },
+                aspectRatio: 1.0
+            };
             html5QrScanner.start(
                 { facingMode: currentFacingMode },
                 config,
                 (decodedText) => {
                     playBeep();
 
-                    // إذا كان المسح مخصص لخانة إضافة منتج
+                    // 1. إذا كان المسح مخصص لخانة إضافة منتج
                     if (cameraScanTarget === 'add_product_barcode') {
                         document.getElementById('add-prod-barcode').value = decodedText;
                         showScannedFeedback('تم مسح الباركود بنجاح: ' + decodedText);
@@ -1740,7 +1884,17 @@ $currency = 'ج.م';
                         return;
                     }
 
-                    // إذا كان المسح العادي للكاشير
+                    // 2. إذا كان المسح مخصص لقسم الجرد
+                    if (cameraScanTarget === 'inventory_scan') {
+                        handleInventoryBarcodeScan(decodedText);
+                        const isContinuous = document.getElementById('continuous-scan-check').checked;
+                        if (!isContinuous) {
+                            stopCameraScanner();
+                        }
+                        return;
+                    }
+
+                    // 3. إذا كان المسح العادي للكاشير
                     handleBarcodeScan(decodedText);
                     const isContinuous = document.getElementById('continuous-scan-check').checked;
                     if (!isContinuous) {
@@ -1749,7 +1903,7 @@ $currency = 'ج.م';
                 },
                 (error) => {}
             ).catch(err => {
-                alert("تعذر تشغيل الكاميرا! يرجى منح إذن الكاميرا للمتصفح.");
+                alert("تعذر تشغيل الكاميرا! يرجى منح إذن الكاميرا للمتصفح والتأكد من فتح الموقع عبر HTTPS.");
                 closeModal('camera-modal');
             });
         }
@@ -2055,6 +2209,350 @@ $currency = 'ج.م';
         function closeModal(id) {
             const el = document.getElementById(id);
             if (el) el.classList.add('hidden');
+        }
+
+        // ==========================================
+        // 📋 إدارة قسم الجرد والمخزون التفاعلي (Inventory Audit)
+        // ==========================================
+        let inventoryData = [];
+
+        function initInventoryView() {
+            if (!products || products.length === 0) return;
+
+            // تهيئة بيانات الجرد مع حفظ الكمية الفعلية المبدئية مساوية لكمية السيستم
+            inventoryData = products.map(p => {
+                const existing = inventoryData.find(i => i.id === p.id);
+                return {
+                    id: p.id,
+                    name: p.name,
+                    category: p.category || 'عام',
+                    barcode: p.barcode || '',
+                    barcode2: p.barcode2 || '',
+                    local_code: p.local_code || '',
+                    cost: parseFloat(p.cost) || 0,
+                    price: parseFloat(p.price) || 0,
+                    stock: parseFloat(p.stock) || 0,
+                    actual_stock: existing ? existing.actual_stock : (parseFloat(p.stock) || 0),
+                    modified: existing ? existing.modified : false
+                };
+            });
+
+            updateInventoryStats();
+            filterInventoryTable();
+        }
+
+        function updateInventoryStats() {
+            const totalItems = inventoryData.length;
+            const costVal = inventoryData.reduce((acc, p) => acc + (p.cost * p.stock), 0);
+            const zeroStock = inventoryData.filter(p => p.stock <= 0).length;
+            const modifiedCount = inventoryData.filter(p => p.modified).length;
+
+            const elTotal = document.getElementById('inv-stat-total-items');
+            const elCost = document.getElementById('inv-stat-cost-value');
+            const elZero = document.getElementById('inv-stat-zero-stock');
+            const elMod = document.getElementById('inv-stat-modified-count');
+
+            if (elTotal) elTotal.innerText = `${totalItems} صنف`;
+            if (elCost) elCost.innerText = `${costVal.toFixed(2)} ج.م`;
+            if (elZero) elZero.innerText = `${zeroStock} صنف`;
+            if (elMod) elMod.innerText = `${modifiedCount} صنف`;
+        }
+
+        function filterInventoryTable() {
+            const query = (document.getElementById('inv-search-input')?.value || '').trim().toLowerCase();
+            const category = document.getElementById('inv-category-filter')?.value || '';
+            const statusFilter = document.getElementById('inv-status-filter')?.value || 'all';
+
+            let filtered = inventoryData.filter(item => {
+                // فلتر البحث
+                if (query) {
+                    const matchName = item.name.toLowerCase().includes(query);
+                    const matchCode = item.local_code && item.local_code.includes(query);
+                    const matchBarcode = (item.barcode && item.barcode.includes(query)) || (item.barcode2 && item.barcode2.includes(query));
+                    if (!matchName && !matchCode && !matchBarcode) return false;
+                }
+
+                // فلتر الأقسام
+                if (category && item.category !== category) return false;
+
+                // فلتر الحالة والفارق
+                const diff = (item.actual_stock || 0) - item.stock;
+                if (statusFilter === 'discrepancy' && Math.abs(diff) < 0.001) return false;
+                if (statusFilter === 'shortage' && diff >= 0) return false;
+                if (statusFilter === 'surplus' && diff <= 0) return false;
+                if (statusFilter === 'matched' && Math.abs(diff) >= 0.001) return false;
+                if (statusFilter === 'zero' && item.stock > 0) return false;
+                if (statusFilter === 'modified' && !item.modified) return false;
+
+                return true;
+            });
+
+            renderInventoryTable(filtered);
+        }
+
+        function renderInventoryTable(itemsToRender = null) {
+            const tbody = document.getElementById('inventory-tbody');
+            if (!tbody) return;
+
+            const list = itemsToRender || inventoryData;
+            const countEl = document.getElementById('inv-showing-count');
+            if (countEl) {
+                countEl.innerText = `يتم عرض (${list.length}) صنف من إجمالي (${inventoryData.length}) صنف`;
+            }
+
+            if (list.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="9" class="p-8 text-center text-slate-500 font-bold">
+                            <i class="fa-solid fa-box-open text-3xl mb-2 text-slate-600 block"></i>
+                            لا توجد أصناف تطابق شروط البحث أو الفلترة المحددة
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = list.map(item => {
+                const diff = (parseFloat(item.actual_stock) || 0) - item.stock;
+                let diffBadge = '';
+                if (Math.abs(diff) < 0.001) {
+                    diffBadge = `<span class="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-400 font-bold inline-flex items-center gap-1"><i class="fa-solid fa-check text-[10px]"></i> مطابق</span>`;
+                } else if (diff < 0) {
+                    diffBadge = `<span class="px-2.5 py-1 rounded-lg bg-rose-500/20 text-rose-400 font-bold inline-flex items-center gap-1"><i class="fa-solid fa-arrow-trend-down text-[10px]"></i> عجز (${Math.abs(diff).toFixed(2)})</span>`;
+                } else {
+                    diffBadge = `<span class="px-2.5 py-1 rounded-lg bg-sky-500/20 text-sky-400 font-bold inline-flex items-center gap-1"><i class="fa-solid fa-arrow-trend-up text-[10px]"></i> زيادة (+${diff.toFixed(2)})</span>`;
+                }
+
+                const isModifiedClass = item.modified ? 'bg-indigo-950/30' : '';
+
+                return `
+                    <tr id="inv-row-${item.id}" class="hover:bg-slate-800/50 transition-colors ${isModifiedClass}">
+                        <td class="p-3 text-center font-mono font-bold text-slate-400 text-xs">${item.local_code || '---'}</td>
+                        <td class="p-3">
+                            <div class="font-bold text-slate-200 text-xs">${item.name}</div>
+                            <div class="text-[10px] text-slate-500 font-mono">${item.barcode || 'بدون باركود'}</div>
+                        </td>
+                        <td class="p-3">
+                            <span class="px-2 py-0.5 bg-slate-800 text-slate-400 rounded text-[10px] font-semibold">${item.category}</span>
+                        </td>
+                        <td class="p-3 text-center font-mono text-slate-400">${item.cost.toFixed(2)}</td>
+                        <td class="p-3 text-center font-mono font-bold text-slate-300">${item.price.toFixed(2)}</td>
+                        <td class="p-3 text-center">
+                            <span class="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 font-mono font-bold text-xs">
+                                ${item.stock.toFixed(2)}
+                            </span>
+                        </td>
+                        <td class="p-3 text-center bg-slate-850/50">
+                            <div class="flex items-center justify-center gap-1">
+                                <button type="button" onclick="quickAddInventory(${item.id}, -1)" class="w-7 h-7 bg-slate-800 hover:bg-rose-500 hover:text-white rounded-lg text-slate-300 font-bold text-xs transition flex items-center justify-center">-1</button>
+                                <input type="number" step="any" min="0" value="${item.actual_stock}" onchange="handleInventoryInput(${item.id}, this.value)" class="w-20 py-1 px-1.5 bg-slate-950 border border-slate-700 focus:border-indigo-500 rounded-lg text-center font-mono font-black text-sm text-indigo-300 focus:outline-none transition">
+                                <button type="button" onclick="quickAddInventory(${item.id}, 1)" class="w-7 h-7 bg-slate-800 hover:bg-emerald-500 hover:text-white rounded-lg text-slate-300 font-bold text-xs transition flex items-center justify-center">+1</button>
+                                <button type="button" onclick="quickAddInventory(${item.id}, 5)" class="w-7 h-7 bg-slate-800 hover:bg-indigo-500 hover:text-white rounded-lg text-slate-300 font-bold text-[10px] transition hidden sm:flex items-center justify-center">+5</button>
+                                <button type="button" onclick="quickAddInventory(${item.id}, 10)" class="w-7 h-7 bg-slate-800 hover:bg-purple-500 hover:text-white rounded-lg text-slate-300 font-bold text-[10px] transition hidden sm:flex items-center justify-center">+10</button>
+                            </div>
+                        </td>
+                        <td class="p-3 text-center font-mono text-xs">
+                            ${diffBadge}
+                        </td>
+                        <td class="p-3 text-center">
+                            <button type="button" onclick="saveSingleInventory(${item.id})" class="px-2.5 py-1 bg-slate-800 hover:bg-emerald-600 text-slate-300 hover:text-white rounded-lg font-bold text-xs transition shadow-sm flex items-center gap-1 mx-auto">
+                                <i class="fa-solid fa-check"></i>
+                                <span class="hidden sm:inline">حفظ</span>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function handleInventoryInput(productId, val) {
+            const item = inventoryData.find(i => i.id == productId);
+            if (!item) return;
+
+            item.actual_stock = parseFloat(val) || 0;
+            item.modified = true;
+            updateInventoryStats();
+            filterInventoryTable();
+        }
+
+        function quickAddInventory(productId, delta) {
+            const item = inventoryData.find(i => i.id == productId);
+            if (!item) return;
+
+            item.actual_stock = Math.max(0, (parseFloat(item.actual_stock) || 0) + delta);
+            item.modified = true;
+            updateInventoryStats();
+            filterInventoryTable();
+        }
+
+        async function saveSingleInventory(productId) {
+            const item = inventoryData.find(i => i.id == productId);
+            if (!item) return;
+
+            try {
+                const formData = new FormData();
+                formData.append('action', 'update_inventory_stock');
+                formData.append('product_id', item.id);
+                formData.append('new_stock', item.actual_stock);
+
+                const res = await fetch('api_sync.php', { method: 'POST', body: formData });
+                const data = await res.json();
+
+                if (data.success) {
+                    playBeep();
+                    item.stock = item.actual_stock;
+                    item.modified = false;
+                    
+                    // تحديث في المنتجات العامة
+                    const p = products.find(prod => prod.id == item.id);
+                    if (p) p.stock = item.actual_stock;
+
+                    updateInventoryStats();
+                    filterInventoryTable();
+                    alert(`✅ ${data.message}`);
+                } else {
+                    alert(`❌ حدث خطأ: ${data.error}`);
+                }
+            } catch (e) {
+                alert("❌ تعذر الاتصال بالسيرفر لحفظ رصيد الجرد!");
+            }
+        }
+
+        async function saveAllInventoryAudit() {
+            const modifiedItems = inventoryData.filter(i => i.modified);
+            if (modifiedItems.length === 0) {
+                alert("ℹ️ لم يتم تعديل كمية أي صنف بالجرد الحالي!");
+                return;
+            }
+
+            if (!confirm(`هل أنت متأكد من تطبيق الجرد الشامل وتحديث كميات (${modifiedItems.length}) صنفاً في المخزون فوراً؟`)) {
+                return;
+            }
+
+            try {
+                const payload = {
+                    action: 'bulk_inventory_audit',
+                    auditor: 'كاشير المحل',
+                    items: modifiedItems.map(i => ({ id: i.id, new_stock: i.actual_stock }))
+                };
+
+                const res = await fetch('api_sync.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    playBeep();
+                    modifiedItems.forEach(item => {
+                        item.stock = item.actual_stock;
+                        item.modified = false;
+                        const p = products.find(prod => prod.id == item.id);
+                        if (p) p.stock = item.actual_stock;
+                    });
+
+                    updateInventoryStats();
+                    filterInventoryTable();
+                    alert(`🎉 تم بنجاح تطبيق وحفظ الجرد الشامل لـ (${data.updated_count}) صنف!`);
+                } else {
+                    alert(`❌ حدث خطأ: ${data.error}`);
+                }
+            } catch (e) {
+                alert("❌ تعذر الاتصال بالسيرفر لتطبيق الجرد الشامل!");
+            }
+        }
+
+        function scanBarcodeForInventory() {
+            cameraScanTarget = 'inventory_scan';
+            startCameraScanner('inventory_scan');
+        }
+
+        function handleInventoryBarcodeScan(code) {
+            if (!code) return;
+            code = code.trim();
+            const item = inventoryData.find(p => p.barcode === code || p.barcode2 === code || p.local_code === code);
+            if (item) {
+                item.actual_stock = (parseFloat(item.actual_stock) || 0) + 1;
+                item.modified = true;
+                updateInventoryStats();
+                filterInventoryTable();
+                showScannedFeedback(`تم جرد: ${item.name} (الرصيد: ${item.actual_stock})`);
+
+                setTimeout(() => {
+                    const row = document.getElementById(`inv-row-${item.id}`);
+                    if (row) {
+                        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        row.classList.add('bg-indigo-900/60', 'ring-2', 'ring-indigo-400');
+                        setTimeout(() => row.classList.remove('bg-indigo-900/60', 'ring-2', 'ring-indigo-400'), 2000);
+                    }
+                }, 150);
+            } else {
+                playBeep();
+                alert(`⚠️ لم يتم العثور على صنف بالباركود: ${code}`);
+            }
+        }
+
+        function printInventorySheet() {
+            const printWin = window.open('', '_blank');
+            const dateStr = new Date().toLocaleString('ar-EG');
+            const totalCost = inventoryData.reduce((acc, p) => acc + (p.cost * p.stock), 0);
+
+            const rowsHtml = inventoryData.map(item => {
+                const diff = (parseFloat(item.actual_stock) || 0) - item.stock;
+                return `
+                    <tr>
+                        <td style="border:1px solid #ccc; padding:6px; text-align:center;">${item.local_code || '-'}</td>
+                        <td style="border:1px solid #ccc; padding:6px;">${item.name}</td>
+                        <td style="border:1px solid #ccc; padding:6px; text-align:center;">${item.category}</td>
+                        <td style="border:1px solid #ccc; padding:6px; text-align:center;">${item.cost.toFixed(2)}</td>
+                        <td style="border:1px solid #ccc; padding:6px; text-align:center;">${item.price.toFixed(2)}</td>
+                        <td style="border:1px solid #ccc; padding:6px; text-align:center; font-weight:bold;">${item.stock.toFixed(2)}</td>
+                        <td style="border:1px solid #ccc; padding:6px; text-align:center; font-weight:bold;">${item.actual_stock.toFixed(2)}</td>
+                        <td style="border:1px solid #ccc; padding:6px; text-align:center; font-weight:bold;">${diff.toFixed(2)}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            printWin.document.write(`
+                <!DOCTYPE html>
+                <html lang="ar" dir="rtl">
+                <head>
+                    <title>كشف جرد المخزون - سوبر ماركت المنزل السوري</title>
+                    <style>
+                        body { font-family: sans-serif; padding: 20px; direction: rtl; }
+                        h2, h4 { margin: 4px 0; text-align: center; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 12px; }
+                        th { background: #f0f0f0; border: 1px solid #999; padding: 8px; }
+                        @media print { button { display: none; } }
+                    </style>
+                </head>
+                <body>
+                    <h2>سوبر ماركت المنزل السوري 🇸🇾</h2>
+                    <h4>كشف الجرد الفعلي للمخزون - التاريخ: ${dateStr}</h4>
+                    <p style="text-align:center; font-size:12px;">إجمالي الأصناف: ${inventoryData.length} | قيمة المخزون بالتكلفة: ${totalCost.toFixed(2)} ج.م</p>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>كود</th>
+                                <th>اسم الصنف</th>
+                                <th>القسم</th>
+                                <th>التكلفة</th>
+                                <th>البيع</th>
+                                <th>رصيد السيستم</th>
+                                <th>الجرد الفعلي</th>
+                                <th>الفارق</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rowsHtml}
+                        </tbody>
+                    </table>
+                    <script>window.print();<\/script>
+                </body>
+                </html>
+            `);
+            printWin.document.close();
         }
     </script>
 </body>

@@ -12,6 +12,7 @@ from pages.hr_page import HRPage
 from pages.expenses_page import ExpensesPage
 from pages.returns_page import ReturnsPage
 from pages.admin_page import AdminPage
+from pages.inventory_page import InventoryPage
 import tkinter.messagebox as messagebox
 
 class ERPSystem(ctk.CTk):
@@ -42,13 +43,14 @@ class ERPSystem(ctk.CTk):
         # ----------------- القائمة الجانبية -----------------
         self.sidebar = ctk.CTkFrame(self, width=220, corner_radius=0, fg_color="#1e272e")
         self.sidebar.grid(row=0, column=0, sticky="nsew")
-        self.sidebar.grid_rowconfigure(9, weight=1)
+        self.sidebar.grid_rowconfigure(10, weight=1)
 
         ctk.CTkLabel(self.sidebar, text="🏪 المنزل السوري", font=ctk.CTkFont(size=20, weight="bold"), text_color="#2ecc71").grid(row=0, column=0, padx=15, pady=(25, 25))
 
         nav_buttons = [
             ("🛒 شاشة الكاشير", "pos"), 
             ("📦 إدارة المنتجات", "products"), 
+            ("📋 الجرد والمخزون", "inventory"),
             ("🤝 الموردين والمشتريات", "suppliers"), 
             ("👥 شؤون العاملين", "hr"), 
             ("💸 المصروفات العامة", "expenses"), 
@@ -64,11 +66,11 @@ class ERPSystem(ctk.CTk):
                 font=ctk.CTkFont(size=14, weight="bold"),
                 fg_color="#2c3e50", 
                 hover_color="#34495e", 
-                height=42,
+                height=40,
                 corner_radius=8,
                 command=lambda n=name: self.show_frame(n)
             )
-            btn.grid(row=i, column=0, padx=15, pady=6, sticky="ew")
+            btn.grid(row=i, column=0, padx=15, pady=5, sticky="ew")
             self.nav_btns[name] = btn
 
         # ----------------- مساحة العمل -----------------
@@ -82,6 +84,7 @@ class ERPSystem(ctk.CTk):
         
         self.frames["pos"] = POSPage(self.main_container, self.db, self)
         self.frames["products"] = ProductsPage(self.main_container, self.db, self)
+        self.frames["inventory"] = InventoryPage(self.main_container, self.db, self)
         self.frames["suppliers"] = SuppliersPage(self.main_container, self.db, self)
         self.frames["hr"] = HRPage(self.main_container, self.db, self)
         self.frames["expenses"] = ExpensesPage(self.main_container, self.db, self)

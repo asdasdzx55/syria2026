@@ -661,6 +661,95 @@ try {
             ], JSON_UNESCAPED_UNICODE);
             break;
 
+        // ============================================================
+        // 16. تحديث رصيد ومخزون منتج في الجرد (Single Product Stock)
+        // ============================================================
+        case 'update_inventory_stock':
+            $data = !empty($json_payload) ? $json_payload : $_POST;
+            $product_id = (int)($data['product_id'] ?? 0);
+            $barcode = trim($data['barcode'] ?? '');
+            $new_stock = isset($data['new_stock']) ? (float)$data['new_stock'] : null;
+            $note = trim($data['note'] ?? 'تعديل جرد يدوي');
+
+            if ($new_stock === null || ($product_id <= 0 && empty($barcode))) {
+                echo json_encode(['success' => false, 'error' => 'يرجى تحديد المنتج والكمية الجديدة بالجرد']);
+                break;
+            }
+
+            if ($product_id > 0) {
+                $stmt = $pdo->prepare("SELECT id, name, stock, cost, price FROM products WHERE id = ?");
+                $stmt->execute([$product_id]);
+            } else {
+                $stmt = $pdo->prepare("SELECT id, name, stock, cost, price FROM products WHERE barcode = ? OR local_code = ?");
+                $stmt->execute([$barcode, $barcode]);
+            }
+            $prod = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$prod) {
+                echo json_encode(['success' => false, 'error' => 'المنتج غير موجود في قاعدة البيانات']);
+                break;
+            }
+
+            $old_stock = (float)$prod['stock'];
+            $upd = $pdo->prepare("UPDATE products SET stock = ? WHERE id = ?");
+            $upd->execute([$new_stock, $prod['id']]);
+
+            echo json_encode([
+                'success' => true,
+                'message' => "تم تحديث رصيد ({$prod['name']}) من {$old_stock} إلى {$new_stock} بنجاح ✓",
+                'product_id' => (int)$prod['id'],
+                'name' => $prod['name'],
+                'old_stock' => $old_stock,
+                'new_stock' => $new_stock,
+                'diff' => ($new_stock - $old_stock)
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 17. تطبيق الجرد الشامل وتحديث كميات متعددة دفعة واحدة
+        // ============================================================
+        case 'bulk_inventory_audit':
+            $data = !empty($json_payload) ? $json_payload : $_POST;
+            $items = $data['items'] ?? [];
+            $auditor = trim($data['auditor'] ?? 'مسؤول الجرد');
+
+            if (is_string($items)) {
+                $items = json_decode($items, true) ?: [];
+            }
+
+            if (empty($items)) {
+                echo json_encode(['success' => false, 'error' => 'لا توجد أصناف لتطبيق الجرد عليها']);
+                break;
+            }
+
+            $updated_count = 0;
+            $upd_stmt = $pdo->prepare("UPDATE products SET stock = ? WHERE id = ?");
+            foreach ($items as $it) {
+                $p_id = (int)($it['id'] ?? 0);
+                $n_stock = isset($it['new_stock']) ? (float)$it['new_stock'] : null;
+                if ($p_id > 0 && $n_stock !== null) {
+                    $upd_stmt->execute([$n_stock, $p_id]);
+                    $updated_count++;
+                }
+            }
+
+            // تسجيل إشعار بنظام الإدارة
+            try {
+                $pdo->prepare("INSERT INTO notifications (title, body, link) VALUES (?, ?, ?)")
+                    ->execute([
+                        "📋 تم تطبيق جرد مخزون جديد",
+                        "قام ($auditor) بتطبيق جرد شامل وتحديث كميات ($updated_count) صنفاً",
+                        "pos.php"
+                    ]);
+            } catch (Exception $e) {}
+
+            echo json_encode([
+                'success' => true,
+                'message' => "تم تطبيق الجرد الشامل وتحديث كميات {$updated_count} صنف بنجاح!",
+                'updated_count' => $updated_count
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
         default:
             echo json_encode(['success' => false, 'error' => 'Unknown action']);
             break;
