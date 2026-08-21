@@ -266,7 +266,7 @@ $currency = 'ج.م';
     </header>
 
     <!-- 2. المحتوى الرئيسي المقسم إلى صفحات وتبويبات كاملة -->
-    <div class="flex-1 max-w-7xl w-full mx-auto p-2 sm:p-4 overflow-y-auto">
+    <div class="flex-1 max-w-7xl w-full mx-auto p-2 sm:p-4 overflow-y-auto pb-28 sm:pb-8">
 
         <!-- ================================================================= -->
         <!-- الصفحة 1: شاشة الكاشير والبيع المباشر (POS Sales View)            -->
@@ -1234,6 +1234,26 @@ $currency = 'ج.م';
         </div>
     </div>
 
+    <!-- 🌟 شريط العمليات السريع العائم للموبايل (Mobile Sticky Checkout & Camera Bar) -->
+    <div class="md:hidden fixed bottom-3 left-3 right-3 z-30 flex items-center gap-2">
+        <button onclick="openCartDrawer()" class="flex-1 bg-gradient-to-r from-emerald-600 via-brand-600 to-emerald-700 text-white p-3 rounded-2xl shadow-2xl flex items-center justify-between font-black border border-emerald-400/40 active:scale-95 transition-transform backdrop-blur-md">
+            <div class="flex items-center gap-2">
+                <span class="w-8 h-8 rounded-xl bg-black/30 flex items-center justify-center text-sm">
+                    <i class="fa-solid fa-cart-shopping"></i>
+                </span>
+                <span id="mobile-cart-items-count" class="text-xs">0 أصناف</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <span id="mobile-cart-total-badge" class="text-sm font-black text-amber-300">0.00 ج.م</span>
+                <span class="text-[11px] bg-white/20 px-2 py-0.5 rounded-lg">الدفع <i class="fa-solid fa-arrow-left text-[9px]"></i></span>
+            </div>
+        </button>
+
+        <button onclick="startCameraScanner()" class="w-12 h-12 bg-gradient-to-tr from-emerald-600 to-teal-500 text-white rounded-2xl shadow-xl flex items-center justify-center text-lg active:scale-95 transition-transform shrink-0 border border-emerald-300/40" title="مسح بالكاميرا">
+            <i class="fa-solid fa-camera"></i>
+        </button>
+    </div>
+
     <!-- ================================================================= -->
     <!-- 5. جافاسكريبت التطبيق الشامل والأداء فائق السرعة                  -->
     <!-- ================================================================= -->
@@ -1509,12 +1529,19 @@ $currency = 'ج.م';
             const items = Object.values(cart);
             const totalCount = items.length;
 
-            // تحديث زر السلة المصغر تحت الباركود
+            // تحديث زر السلة المصغر وشريط الموبايل العائم
             let subtotal = 0;
             items.forEach(it => subtotal += (it.price * it.qty));
 
-            document.getElementById('mini-cart-count-badge').innerText = `${totalCount} أصناف`;
-            document.getElementById('mini-cart-total-badge').innerText = `${subtotal.toFixed(2)} ج.م`;
+            const miniCount = document.getElementById('mini-cart-count-badge');
+            const miniTotal = document.getElementById('mini-cart-total-badge');
+            const mobCount = document.getElementById('mobile-cart-items-count');
+            const mobTotal = document.getElementById('mobile-cart-total-badge');
+
+            if (miniCount) miniCount.innerText = `${totalCount} أصناف`;
+            if (miniTotal) miniTotal.innerText = `${subtotal.toFixed(2)} ج.م`;
+            if (mobCount) mobCount.innerText = `${totalCount} أصناف`;
+            if (mobTotal) mobTotal.innerText = `${subtotal.toFixed(2)} ج.م`;
 
             if (totalCount === 0) {
                 emptyView.classList.remove('hidden');
@@ -1587,6 +1614,9 @@ $currency = 'ج.م';
 
             document.getElementById('subtotal-val').innerText = subtotal.toFixed(2) + ' ج.م';
             document.getElementById('grand-total-val').innerText = grandTotal.toFixed(2) + ' ج.م';
+            
+            const mobTotal = document.getElementById('mobile-cart-total-badge');
+            if (mobTotal) mobTotal.innerText = `${grandTotal.toFixed(2)} ج.م`;
         }
 
         function selectPaymentMethod(methodName) {
@@ -1900,7 +1930,6 @@ $currency = 'ج.م';
         }
 
         let cameraScanTarget = 'pos_cart';
-        let html5QrScanner = null;
         let lastScannedCode = '';
         let lastScannedTime = 0;
 
