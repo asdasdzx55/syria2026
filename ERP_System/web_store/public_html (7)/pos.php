@@ -109,6 +109,54 @@ $currency = 'ج.م';
             z-index: 20;
         }
 
+        /* تنسيقات ماسح Html5-QRCode في الوضع الداكن */
+        #interactive-scanner-view {
+            border: none !important;
+            background: #090d16 !important;
+            border-radius: 1.25rem !important;
+            overflow: hidden !important;
+        }
+        #interactive-scanner-view img {
+            display: none !important;
+        }
+        #interactive-scanner-view video {
+            border-radius: 1rem !important;
+            object-fit: cover !important;
+            width: 100% !important;
+            max-height: 360px !important;
+        }
+        #interactive-scanner-view button {
+            background: #16a34a !important;
+            color: white !important;
+            font-weight: bold !important;
+            border-radius: 0.75rem !important;
+            padding: 8px 16px !important;
+            border: none !important;
+            font-family: inherit !important;
+            cursor: pointer !important;
+            margin: 6px 4px !important;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3) !important;
+            transition: all 0.2s ease !important;
+        }
+        #interactive-scanner-view button:hover {
+            background: #15803d !important;
+        }
+        #interactive-scanner-view select {
+            background: #1e293b !important;
+            color: white !important;
+            font-weight: bold !important;
+            border-radius: 0.75rem !important;
+            padding: 8px 12px !important;
+            border: 1px solid #334155 !important;
+            font-family: inherit !important;
+            margin: 6px 4px !important;
+        }
+        #interactive-scanner-view a {
+            color: #38bdf8 !important;
+            font-size: 11px !important;
+            text-decoration: none !important;
+        }
+
         /* أنيميشن انزلاق السلة والدفع */
         .drawer-slide {
             transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -1092,69 +1140,34 @@ $currency = 'ج.م';
                     </div>
                 </div>
 
-                <div class="flex items-center gap-2">
-                    <!-- قائمة اختيار الكاميرا المتاحة -->
-                    <select id="camera-device-select" onchange="changeCameraDevice(this.value)" class="bg-slate-800 text-slate-300 text-[11px] font-bold px-2.5 py-1.5 rounded-xl border border-slate-700 focus:outline-none focus:border-emerald-500 max-w-[150px]">
-                        <option value="">جاري كشف الكاميرات...</option>
-                    </select>
+                <button onclick="stopCameraScanner()" class="w-8 h-8 rounded-full bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center">
+                    <i class="fa-solid fa-xmark text-base"></i>
+                </button>
+            </div>
 
-                    <button onclick="stopCameraScanner()" class="w-8 h-8 rounded-full bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center">
-                        <i class="fa-solid fa-xmark text-base"></i>
-                    </button>
+            <!-- منطقة المسح بالكاميرا الرسمية -->
+            <div class="p-3 bg-slate-950 flex-1 flex flex-col items-center justify-center overflow-y-auto min-h-[320px]">
+                <div class="w-full max-w-md mx-auto text-white rounded-2xl overflow-hidden shadow-inner">
+                    <div id="interactive-scanner-view" style="width: 100%; min-height: 280px;"></div>
                 </div>
             </div>
 
-            <div class="relative bg-black flex-1 min-h-[320px] flex items-center justify-center overflow-hidden">
-                <video id="native-camera-video" autoplay playsinline muted class="w-full h-full min-h-[320px] object-cover"></video>
-                <canvas id="native-camera-canvas" class="hidden"></canvas>
-                <div id="interactive-scanner-view" class="w-full h-full min-h-[320px] absolute inset-0 pointer-events-none"></div>
-                
-                <div id="camera-laser-anim" class="laser-line"></div>
-                <div id="camera-target-box" class="absolute w-64 h-48 border-2 border-dashed border-emerald-400/80 rounded-2xl pointer-events-none z-10 shadow-[0_0_15px_rgba(16,185,129,0.3)]"></div>
-
-                <!-- شاشة المساعدة في حال رفض الإذن -->
-                <div id="camera-error-view" class="hidden absolute inset-0 bg-slate-950/95 z-20 flex flex-col items-center justify-center p-6 text-center">
-                    <div class="w-14 h-14 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-2xl mb-3 border border-amber-500/30 animate-bounce">
-                        <i class="fa-solid fa-camera"></i>
-                    </div>
-                    <h4 class="text-base font-bold text-white mb-1.5">تشغيل كاميرا اللابتوب / المحل</h4>
-                    <p id="camera-error-msg" class="text-xs text-slate-300 max-w-sm mb-4 leading-relaxed">
-                        اضغط على الزر الأخضر أدناه لتشغيل الكاميرا والموافقة على إشعار المتصفح.
-                    </p>
-                    <div class="flex items-center gap-2">
-                        <button onclick="requestCameraAccessDirectly()" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black shadow-lg transition flex items-center gap-2">
-                            <i class="fa-solid fa-play"></i> تشغيل الكاميرا الآن
-                        </button>
-                        <button onclick="stopCameraScanner()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition">
-                            إغلاق
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="p-3 bg-slate-950 border-t border-slate-800 space-y-2">
+            <div class="p-3 bg-slate-900 border-t border-slate-800 space-y-2">
                 <div id="last-scanned-banner" class="hidden bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 px-3 py-1.5 rounded-xl text-xs flex items-center justify-between font-bold">
                     <span id="last-scanned-text">تم المسح بنجاح!</span>
                     <i class="fa-solid fa-circle-check text-emerald-400"></i>
                 </div>
 
-                <div class="flex items-center justify-between text-xs gap-2 flex-wrap">
+                <div class="flex items-center justify-between text-xs gap-2">
                     <label class="flex items-center gap-2 cursor-pointer text-slate-300 font-bold">
                         <input type="checkbox" id="continuous-scan-check" checked class="w-4 h-4 text-brand-600 rounded bg-slate-900 border-slate-700 focus:ring-brand-500">
                         <span>مسح مستمر (إضافة متتابعة)</span>
                     </label>
 
-                    <div class="flex items-center gap-2">
-                        <button onclick="startHtml5QrcodeScannerUI()" class="px-2.5 py-1.5 bg-brand-700/60 hover:bg-brand-600 text-white rounded-lg font-bold flex items-center gap-1.5 transition text-[11px]">
-                            <i class="fa-solid fa-qrcode"></i>
-                            <span>ماسح Html5-QRCode</span>
-                        </button>
-
-                        <button onclick="switchCameraFacing()" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-bold flex items-center gap-1.5 text-[11px]">
-                            <i class="fa-solid fa-arrows-rotate"></i>
-                            <span>تبديل الكاميرا</span>
-                        </button>
-                    </div>
+                    <button onclick="restartCameraScanner()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-bold flex items-center gap-1.5 text-xs">
+                        <i class="fa-solid fa-arrows-rotate"></i>
+                        <span>إعادة تشغيل</span>
+                    </button>
                 </div>
             </div>
         </div>
@@ -1885,157 +1898,68 @@ $currency = 'ج.م';
         }
 
         let cameraScanTarget = 'pos_cart';
-        let availableCameras = [];
-        let selectedCameraId = null;
-        let mediaStream = null;
-        let scanInterval = null;
-        let isDetectingBarcode = false;
-        let html5QrcodeScannerInstance = null;
+        let html5QrScanner = null;
+        let lastScannedCode = '';
+        let lastScannedTime = 0;
 
         // ==========================================
-        // كاميرا الباركود المزدوجة (BarcodeDetector + Html5-QRCode)
+        // كاميرا وماسح الباركود الرسمي (Html5QrcodeScanner)
         // ==========================================
         function scanBarcodeForProductField() {
             cameraScanTarget = 'add_product_barcode';
             startCameraScanner('add_product_barcode');
         }
 
-        async function requestCameraAccessDirectly() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-                const video = document.getElementById('native-camera-video');
-                const errView = document.getElementById('camera-error-view');
-                if (errView) errView.classList.add('hidden');
-                
-                mediaStream = stream;
-                if (video) {
-                    video.srcObject = stream;
-                    video.play();
-                }
-                startBarcodeDetectionLoop(video);
-            } catch (e) {
-                // إذا رفض، يتم تشغيل ماسح Html5-QRCode الكلاسيكي تلقائياً
-                startHtml5QrcodeScannerUI();
-            }
-        }
-
-        async function startCameraScanner(target = 'pos_cart') {
+        function startCameraScanner(target = 'pos_cart') {
             cameraScanTarget = target;
             openModal('camera-modal');
 
-            const video = document.getElementById('native-camera-video');
-            const qrView = document.getElementById('interactive-scanner-view');
-            const errView = document.getElementById('camera-error-view');
-            const selectEl = document.getElementById('camera-device-select');
-            
-            if (video) video.classList.remove('hidden');
-            if (qrView) qrView.classList.add('pointer-events-none');
-            if (errView) errView.classList.add('hidden');
-
-            stopCameraScanner(false);
-
-            try {
-                let constraints = { video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false };
-                if (selectedCameraId) {
-                    constraints = { video: { deviceId: { exact: selectedCameraId } }, audio: false };
-                }
-
-                mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-
-                if (video) {
-                    video.srcObject = mediaStream;
-                    video.play();
-                }
-
+            // إيقاف أي كائن ماسح سابق
+            if (html5QrScanner) {
                 try {
-                    const devices = await navigator.mediaDevices.enumerateDevices();
-                    const videoDevs = devices.filter(d => d.kind === 'videoinput');
-                    if (videoDevs.length > 0 && selectEl) {
-                        availableCameras = videoDevs;
-                        selectEl.innerHTML = videoDevs.map((d, idx) => {
-                            const isBack = d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear') || d.label.toLowerCase().includes('environment');
-                            const label = d.label || `كاميرا ${idx + 1} ${isBack ? '(خلفية)' : ''}`;
-                            return `<option value="${d.deviceId}">${label}</option>`;
-                        }).join('');
-
-                        const activeTrack = mediaStream.getVideoTracks()[0];
-                        const activeSettings = activeTrack ? activeTrack.getSettings() : null;
-                        if (activeSettings && activeSettings.deviceId) {
-                            selectedCameraId = activeSettings.deviceId;
-                            selectEl.value = selectedCameraId;
-                        }
-                    }
+                    html5QrScanner.clear();
                 } catch (e) {}
-
-                startBarcodeDetectionLoop(video);
-
-            } catch (err) {
-                console.warn("Direct stream failed, launching Html5QrcodeScanner...", err);
-                startHtml5QrcodeScannerUI();
+                html5QrScanner = null;
             }
+
+            const qrContainer = document.getElementById('interactive-scanner-view');
+            if (qrContainer) {
+                qrContainer.innerHTML = '';
+            }
+
+            // تشغيل الماسح الرسمي المباشر
+            setTimeout(() => {
+                try {
+                    html5QrScanner = new Html5QrcodeScanner(
+                        "interactive-scanner-view",
+                        {
+                            fps: 20,
+                            qrbox: (viewfinderWidth, viewfinderHeight) => {
+                                const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+                                const edgeSize = Math.floor(minEdge * 0.75);
+                                return { width: Math.max(260, edgeSize), height: Math.max(180, Math.floor(edgeSize * 0.7)) };
+                            },
+                            aspectRatio: 1.333333,
+                            rememberLastUsedCamera: true,
+                            showTorchButtonIfSupported: true,
+                            showZoomSliderIfSupported: true
+                        },
+                        /* verbose= */ false
+                    );
+
+                    html5QrScanner.render(
+                        (decodedText) => onBarcodeScanned(decodedText),
+                        (error) => {}
+                    );
+                } catch (err) {
+                    console.error("Html5QrcodeScanner initialization error:", err);
+                }
+            }, 100);
         }
 
-        function startHtml5QrcodeScannerUI() {
-            const video = document.getElementById('native-camera-video');
-            const qrView = document.getElementById('interactive-scanner-view');
-            const errView = document.getElementById('camera-error-view');
-            
-            if (video) video.classList.add('hidden');
-            if (errView) errView.classList.add('hidden');
-            if (qrView) {
-                qrView.classList.remove('pointer-events-none', 'hidden');
-                qrView.innerHTML = '';
-            }
-
-            if (html5QrcodeScannerInstance) {
-                try { html5QrcodeScannerInstance.clear(); } catch (e) {}
-            }
-
-            try {
-                html5QrcodeScannerInstance = new Html5QrcodeScanner(
-                    "interactive-scanner-view", 
-                    { 
-                        fps: 15, 
-                        qrbox: { width: 260, height: 220 },
-                        aspectRatio: 1.0,
-                        rememberLastUsedCamera: true
-                    }, 
-                    false
-                );
-
-                html5QrcodeScannerInstance.render(
-                    (decodedText) => onBarcodeScanned(decodedText),
-                    (error) => {}
-                );
-            } catch (e) {
-                console.error("Html5QrcodeScanner render failed", e);
-            }
+        function restartCameraScanner() {
+            startCameraScanner(cameraScanTarget);
         }
-
-        function startBarcodeDetectionLoop(video) {
-            if (scanInterval) clearInterval(scanInterval);
-
-            if ('BarcodeDetector' in window) {
-                const detector = new BarcodeDetector({
-                    formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'qr_code', 'itf', 'data_matrix']
-                });
-
-                scanInterval = setInterval(async () => {
-                    if (isDetectingBarcode || !video || video.readyState < 2) return;
-                    isDetectingBarcode = true;
-                    try {
-                        const barcodes = await detector.detect(video);
-                        if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
-                            onBarcodeScanned(barcodes[0].rawValue);
-                        }
-                    } catch (e) {}
-                    isDetectingBarcode = false;
-                }, 100);
-            }
-        }
-
-        let lastScannedCode = '';
-        let lastScannedTime = 0;
 
         function onBarcodeScanned(decodedText) {
             const now = Date.now();
@@ -2074,44 +1998,14 @@ $currency = 'ج.م';
             }
         }
 
-        async function changeCameraDevice(cameraId) {
-            if (!cameraId) return;
-            selectedCameraId = cameraId;
-            stopCameraScanner(false);
-            startCameraScanner(cameraScanTarget);
-        }
-
-        function stopCameraScanner(closeModalFlag = true) {
-            if (scanInterval) {
-                clearInterval(scanInterval);
-                scanInterval = null;
+        function stopCameraScanner() {
+            if (html5QrScanner) {
+                try {
+                    html5QrScanner.clear();
+                } catch (e) {}
+                html5QrScanner = null;
             }
-            if (mediaStream) {
-                mediaStream.getTracks().forEach(track => track.stop());
-                mediaStream = null;
-            }
-            const video = document.getElementById('native-camera-video');
-            if (video) {
-                video.srcObject = null;
-            }
-            if (html5QrcodeScannerInstance) {
-                try { html5QrcodeScannerInstance.clear(); } catch (e) {}
-            }
-            if (closeModalFlag) {
-                closeModal('camera-modal');
-            }
-        }
-
-        function switchCameraFacing() {
-            if (availableCameras.length > 1) {
-                const currentIndex = availableCameras.findIndex(c => c.deviceId === selectedCameraId);
-                const nextIndex = (currentIndex + 1) % availableCameras.length;
-                selectedCameraId = availableCameras[nextIndex].deviceId;
-                const selectEl = document.getElementById('camera-device-select');
-                if (selectEl) selectEl.value = selectedCameraId;
-                stopCameraScanner(false);
-                startCameraScanner(cameraScanTarget);
-            }
+            closeModal('camera-modal');
         }
 
         // ==========================================
