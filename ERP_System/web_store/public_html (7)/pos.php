@@ -66,7 +66,7 @@ $currency = 'ج.م';
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- HTML5 QR / Barcode Scanner Library -->
-    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js" type="text/javascript"></script>
 
     <style>
         body {
@@ -1138,16 +1138,23 @@ $currency = 'ج.م';
                     <i class="fa-solid fa-circle-check text-emerald-400"></i>
                 </div>
 
-                <div class="flex items-center justify-between text-xs">
+                <div class="flex items-center justify-between text-xs gap-2 flex-wrap">
                     <label class="flex items-center gap-2 cursor-pointer text-slate-300 font-bold">
                         <input type="checkbox" id="continuous-scan-check" checked class="w-4 h-4 text-brand-600 rounded bg-slate-900 border-slate-700 focus:ring-brand-500">
                         <span>مسح مستمر (إضافة متتابعة)</span>
                     </label>
 
-                    <button onclick="switchCameraFacing()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-bold flex items-center gap-1.5">
-                        <i class="fa-solid fa-arrows-rotate"></i>
-                        <span>تبديل الكاميرا</span>
-                    </button>
+                    <div class="flex items-center gap-2">
+                        <button onclick="startHtml5QrcodeScannerUI()" class="px-2.5 py-1.5 bg-brand-700/60 hover:bg-brand-600 text-white rounded-lg font-bold flex items-center gap-1.5 transition text-[11px]">
+                            <i class="fa-solid fa-qrcode"></i>
+                            <span>ماسح Html5-QRCode</span>
+                        </button>
+
+                        <button onclick="switchCameraFacing()" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-bold flex items-center gap-1.5 text-[11px]">
+                            <i class="fa-solid fa-arrows-rotate"></i>
+                            <span>تبديل الكاميرا</span>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1883,9 +1890,10 @@ $currency = 'ج.م';
         let mediaStream = null;
         let scanInterval = null;
         let isDetectingBarcode = false;
+        let html5QrcodeScannerInstance = null;
 
         // ==========================================
-        // كاميرا الباركود المباشرة (Native HTML5 + BarcodeDetector)
+        // كاميرا الباركود المزدوجة (BarcodeDetector + Html5-QRCode)
         // ==========================================
         function scanBarcodeForProductField() {
             cameraScanTarget = 'add_product_barcode';
@@ -1895,12 +1903,19 @@ $currency = 'ج.م';
         async function requestCameraAccessDirectly() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-                stream.getTracks().forEach(t => t.stop());
+                const video = document.getElementById('native-camera-video');
                 const errView = document.getElementById('camera-error-view');
                 if (errView) errView.classList.add('hidden');
-                startCameraScanner(cameraScanTarget);
+                
+                mediaStream = stream;
+                if (video) {
+                    video.srcObject = stream;
+                    video.play();
+                }
+                startBarcodeDetectionLoop(video);
             } catch (e) {
-                alert("يرجى الضغط على أيقونة الإعدادات بجانب رابط الموقع في أعلى المتصفح والسماح بالكاميرا ثم المحاولة مرة أخرى.");
+                // إذا رفض، يتم تشغيل ماسح Html5-QRCode الكلاسيكي تلقائياً
+                startHtml5QrcodeScannerUI();
             }
         }
 
@@ -1909,70 +1924,97 @@ $currency = 'ج.م';
             openModal('camera-modal');
 
             const video = document.getElementById('native-camera-video');
+            const qrView = document.getElementById('interactive-scanner-view');
             const errView = document.getElementById('camera-error-view');
             const selectEl = document.getElementById('camera-device-select');
+            
+            if (video) video.classList.remove('hidden');
+            if (qrView) qrView.classList.add('pointer-events-none');
             if (errView) errView.classList.add('hidden');
 
             stopCameraScanner(false);
 
             try {
-                // طلب فتح بث الكاميرا مباشرة من المتصفح
-                let constraints = { video: true, audio: false };
-
+                let constraints = { video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false };
                 if (selectedCameraId) {
                     constraints = { video: { deviceId: { exact: selectedCameraId } }, audio: false };
                 }
 
-                try {
-                    mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-                } catch (constrErr) {
-                    console.warn("Exact constraint failed, trying basic video...", constrErr);
-                    mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-                }
+                mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
 
                 if (video) {
                     video.srcObject = mediaStream;
-                    await video.play();
+                    video.play();
                 }
 
-                // كشف وتعبئة قائمة الكاميرات المتاحة
                 try {
                     const devices = await navigator.mediaDevices.enumerateDevices();
                     const videoDevs = devices.filter(d => d.kind === 'videoinput');
-                    if (videoDevs.length > 0) {
+                    if (videoDevs.length > 0 && selectEl) {
                         availableCameras = videoDevs;
-                        if (selectEl) {
-                            selectEl.innerHTML = videoDevs.map((d, idx) => {
-                                const isBack = d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear') || d.label.toLowerCase().includes('environment');
-                                const label = d.label || `كاميرا ${idx + 1} ${isBack ? '(خلفية)' : ''}`;
-                                return `<option value="${d.deviceId}">${label}</option>`;
-                            }).join('');
+                        selectEl.innerHTML = videoDevs.map((d, idx) => {
+                            const isBack = d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear') || d.label.toLowerCase().includes('environment');
+                            const label = d.label || `كاميرا ${idx + 1} ${isBack ? '(خلفية)' : ''}`;
+                            return `<option value="${d.deviceId}">${label}</option>`;
+                        }).join('');
 
-                            const activeTrack = mediaStream.getVideoTracks()[0];
-                            const activeSettings = activeTrack ? activeTrack.getSettings() : null;
-                            if (activeSettings && activeSettings.deviceId) {
-                                selectedCameraId = activeSettings.deviceId;
-                                selectEl.value = selectedCameraId;
-                            }
+                        const activeTrack = mediaStream.getVideoTracks()[0];
+                        const activeSettings = activeTrack ? activeTrack.getSettings() : null;
+                        if (activeSettings && activeSettings.deviceId) {
+                            selectedCameraId = activeSettings.deviceId;
+                            selectEl.value = selectedCameraId;
                         }
                     }
                 } catch (e) {}
 
-                // بدء حلقة المسح السريع لكافة أنواع الباركود
                 startBarcodeDetectionLoop(video);
 
             } catch (err) {
-                console.error("Camera access failed:", err);
-                if (errView) {
-                    errView.classList.remove('hidden');
-                }
+                console.warn("Direct stream failed, launching Html5QrcodeScanner...", err);
+                startHtml5QrcodeScannerUI();
+            }
+        }
+
+        function startHtml5QrcodeScannerUI() {
+            const video = document.getElementById('native-camera-video');
+            const qrView = document.getElementById('interactive-scanner-view');
+            const errView = document.getElementById('camera-error-view');
+            
+            if (video) video.classList.add('hidden');
+            if (errView) errView.classList.add('hidden');
+            if (qrView) {
+                qrView.classList.remove('pointer-events-none', 'hidden');
+                qrView.innerHTML = '';
+            }
+
+            if (html5QrcodeScannerInstance) {
+                try { html5QrcodeScannerInstance.clear(); } catch (e) {}
+            }
+
+            try {
+                html5QrcodeScannerInstance = new Html5QrcodeScanner(
+                    "interactive-scanner-view", 
+                    { 
+                        fps: 15, 
+                        qrbox: { width: 260, height: 220 },
+                        aspectRatio: 1.0,
+                        rememberLastUsedCamera: true
+                    }, 
+                    false
+                );
+
+                html5QrcodeScannerInstance.render(
+                    (decodedText) => onBarcodeScanned(decodedText),
+                    (error) => {}
+                );
+            } catch (e) {
+                console.error("Html5QrcodeScanner render failed", e);
             }
         }
 
         function startBarcodeDetectionLoop(video) {
             if (scanInterval) clearInterval(scanInterval);
 
-            // 1. المحرك الأصلي فائق السرعة BarcodeDetector (المدعوم في Google Chrome و Edge)
             if ('BarcodeDetector' in window) {
                 const detector = new BarcodeDetector({
                     formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'qr_code', 'itf', 'data_matrix']
@@ -1989,19 +2031,6 @@ $currency = 'ج.م';
                     } catch (e) {}
                     isDetectingBarcode = false;
                 }, 100);
-            } else {
-                // 2. المحرك الاحتياطي عبر مكتبة ZXing / Html5Qrcode
-                try {
-                    if (!html5QrScanner) {
-                        html5QrScanner = new Html5Qrcode("interactive-scanner-view");
-                    }
-                    html5QrScanner.start(
-                        selectedCameraId || { facingMode: "user" },
-                        { fps: 20, qrbox: { width: 280, height: 220 } },
-                        (decodedText) => onBarcodeScanned(decodedText),
-                        () => {}
-                    ).catch(e => {});
-                } catch (e) {}
             }
         }
 
@@ -2065,8 +2094,8 @@ $currency = 'ج.م';
             if (video) {
                 video.srcObject = null;
             }
-            if (html5QrScanner && html5QrScanner.isScanning) {
-                try { html5QrScanner.stop(); } catch (e) {}
+            if (html5QrcodeScannerInstance) {
+                try { html5QrcodeScannerInstance.clear(); } catch (e) {}
             }
             if (closeModalFlag) {
                 closeModal('camera-modal');
