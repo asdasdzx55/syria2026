@@ -47,14 +47,14 @@ include 'header.php';
             <?php if(empty($slides)): ?>
                 <!-- الشريحة الأولى -->
                 <div class="swiper-slide relative flex items-center justify-center">
-                    <img src="images/hero_banner_1.jpg" class="absolute inset-0 w-full h-full object-cover transform scale-100 transition-transform duration-[12000ms]" alt="سوبر ماركت المنزل السوري">
+                    <img src="images/hero_cheese_sweets.jpg" class="absolute inset-0 w-full h-full object-cover transform scale-100 transition-transform duration-[12000ms]" alt="أجبان ومعمول وبرازق شامية">
                     <div class="absolute inset-0 bg-black/45"></div>
                     <div class="relative z-10 text-center px-4 max-w-3xl text-white">
                         <span class="text-royal-gold text-xs md:text-sm font-bold tracking-widest uppercase mb-3 block animate-pulse">
                             سوبر ماركت المنزل السوري | طعم الأصالة والخير الشامي 🌟
                         </span>
                         <h2 class="text-3xl md:text-5xl mb-6 font-serif tracking-wide leading-tight drop-shadow-lg font-bold">
-                            أشهى المؤونة والمنتجات السورية الأصيلة
+                            أشهى الأجبان البلدية والمعمول والبرازق الشامية
                         </h2>
                         <a href="shop.php" class="inline-block bg-white text-royal-dark font-extrabold px-10 py-4 text-xs tracking-widest uppercase hover:bg-royal-gold hover:text-white transition duration-300 shadow-xl rounded-xl btn-shine">
                             تصفح المنتجات الآن
@@ -63,14 +63,14 @@ include 'header.php';
                 </div>
                 <!-- الشريحة الثانية -->
                 <div class="swiper-slide relative flex items-center justify-center">
-                    <img src="images/hero_banner_2.jpg" class="absolute inset-0 w-full h-full object-cover transform scale-100 transition-transform duration-[12000ms]" alt="حلويات ومؤونة شامية">
+                    <img src="images/hero_sweets_delight.jpg" class="absolute inset-0 w-full h-full object-cover transform scale-100 transition-transform duration-[12000ms]" alt="حلويات ومؤونة شامية">
                     <div class="absolute inset-0 bg-black/45"></div>
                     <div class="relative z-10 text-center px-4 max-w-3xl text-white">
                         <span class="text-royal-gold text-xs md:text-sm font-bold tracking-widest uppercase mb-3 block animate-pulse">
                             جودة فاخرة وطازجة يومياً 🍯
                         </span>
                         <h2 class="text-3xl md:text-5xl mb-6 font-serif tracking-wide leading-tight drop-shadow-lg font-bold">
-                            تشكيلة الحلويات والموالح والبهارات الشامية
+                            تشكيلة المكدوس والزيوت والبهارات والحلويات الفاخرة
                         </h2>
                         <a href="shop.php" class="inline-block bg-white text-royal-dark font-extrabold px-10 py-4 text-xs tracking-widest uppercase hover:bg-royal-gold hover:text-white transition duration-300 shadow-xl rounded-xl btn-shine">
                             تسوق العروض المميزة
@@ -271,19 +271,32 @@ include 'header.php';
         <div class="text-center mb-12">
             <span class="text-royal-darkgold text-xs font-bold tracking-widest uppercase mb-2.5 block">#GALLERY</span>
             <h3 class="text-3xl font-serif text-royal-dark font-bold relative inline-block pb-3">
-                معرض صور المتجر
+                معرض صور وتشكيلات المتجر
                 <span class="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-12 h-[2px] bg-royal-gold"></span>
             </h3>
-            <p class="text-gray-400 text-xs mt-3 font-light">استكشف صور وتجارب عملائنا المميزة مع منتجات المتجر.</p>
+            <p class="text-gray-500 text-xs mt-3 font-light">استكشف صور وتجارب عملائنا المميزة مع أشهى منتجات المؤونة والحلويات والأجبان الشامية الأصيلة.</p>
         </div>
         
         <div class="grid grid-cols-2 md:grid-cols-6 gap-4">
-            <?php for($i=1; $i<=6; $i++): ?>
-            <div class="aspect-square rounded-2xl overflow-hidden shadow-sm border border-royal-gold/5 relative group cursor-pointer">
-                <img src="placeholder.php?w=500&h=500" class="w-full h-full object-cover group-hover:scale-110 transition duration-550" loading="lazy" decoding="async">
-                <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white"><i class="fa-brands fa-instagram text-2xl"></i></div>
+            <?php 
+            $gallery_items = [
+                ['img' => 'images/gallery_1.jpg', 'title' => 'أجبان شامية بلدية', 'sub' => 'شلل وحلوم وقشقوان'],
+                ['img' => 'images/gallery_2.jpg', 'title' => 'معمول وبرازق دمشقية', 'sub' => 'بالفستق والسمسم'],
+                ['img' => 'images/gallery_3.jpg', 'title' => 'مكدوس سوري بلدي', 'sub' => 'بالجوز وزيت الزيتون'],
+                ['img' => 'images/gallery_4.jpg', 'title' => 'عطارة وزعتر حلبي', 'sub' => 'بهارات وسماق ودبس'],
+                ['img' => 'images/gallery_5.jpg', 'title' => 'بن وقهوة بالهيل', 'sub' => 'محمص ومطحون طازج'],
+                ['img' => 'images/gallery_6.jpg', 'title' => 'زيتون وزيت إدلب', 'sub' => 'عصرة أولى بكر ممتاز']
+            ];
+            foreach($gallery_items as $g): 
+            ?>
+            <div class="aspect-square rounded-2xl overflow-hidden shadow-md border border-royal-gold/10 relative group cursor-pointer">
+                <img src="<?php echo htmlspecialchars($g['img']); ?>" class="w-full h-full object-cover group-hover:scale-110 transition duration-700" alt="<?php echo htmlspecialchars($g['title']); ?>" loading="lazy" decoding="async">
+                <div class="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col items-center justify-end p-2.5 text-center text-white">
+                    <span class="text-xs font-bold text-royal-gold leading-tight"><?php echo htmlspecialchars($g['title']); ?></span>
+                    <span class="text-[10px] text-gray-200 opacity-90"><?php echo htmlspecialchars($g['sub']); ?></span>
+                </div>
             </div>
-            <?php endfor; ?>
+            <?php endforeach; ?>
         </div>
     </div>
 </div>
