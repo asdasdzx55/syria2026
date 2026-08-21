@@ -67,8 +67,8 @@ $store_address = $settings['store_address'] ?? 'الفرع الرئيسي - مص
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <!-- Font Awesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Html5-Qrcode GitHub Standard Barcode & QR Scanner Library -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+    <!-- QuaggaJS - The Specialized Retail Barcode Scanner Library (serratus/quaggaJS) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 
     <style>
         body {
@@ -105,6 +105,32 @@ $store_address = $settings['store_address'] ?? 'الفرع الرئيسي - مص
             animation: laser-sweep 2s infinite ease-in-out;
             pointer-events: none;
             z-index: 20;
+        }
+
+        #quagga-reader-container {
+            position: relative;
+            width: 100%;
+            max-width: 380px;
+            height: 270px;
+            overflow: hidden;
+            border-radius: 1rem;
+            background: #000;
+        }
+        #quagga-reader-container video, #quagga-reader-container canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        #quagga-reader-container canvas.drawingBuffer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
         }
 
         .drawer-slide {
@@ -698,8 +724,8 @@ $store_address = $settings['store_address'] ?? 'الفرع الرئيسي - مص
             </div>
 
             <div class="p-3 bg-slate-950 flex-1 flex flex-col items-center justify-center min-h-[290px] relative overflow-hidden">
-                <div id="html5-qrcode-reader" class="w-full max-w-sm min-h-[270px] bg-black rounded-2xl overflow-hidden relative shadow-inner border border-slate-800 flex items-center justify-center text-xs text-slate-500">
-                    جاري تحميل قارئ الباركود...
+                <div id="quagga-reader-container" class="w-full max-w-sm h-[270px] bg-black rounded-2xl overflow-hidden relative shadow-inner border border-slate-800 flex items-center justify-center text-xs text-slate-500">
+                    <div class="laser-line"></div>
                 </div>
             </div>
 
@@ -855,6 +881,14 @@ $store_address = $settings['store_address'] ?? 'الفرع الرئيسي - مص
                 });
                 barcodeInput.addEventListener('input', (e) => {
                     filterProductsByName(barcodeInput.value.trim());
+                });
+            }
+
+            if (typeof Quagga !== 'undefined') {
+                Quagga.onDetected((result) => {
+                    if (result && result.codeResult && result.codeResult.code) {
+                        onBarcodeScanned(result.codeResult.code);
+                    }
                 });
             }
         });
@@ -1280,8 +1314,10 @@ $store_address = $settings['store_address'] ?? 'الفرع الرئيسي - مص
         }
 
         // ==========================================
-        // قارئ وكاميرا الباركود المعتمد عالمياً (Html5Qrcode Standard GitHub Engine)
+        // قارئ وكاميرا الباركود المعتمد بـ QuaggaJS (serratus/quaggaJS)
         // ==========================================
+        let quaggaRunning = false;
+
         function scanBarcodeForProductField() {
             cameraScanTarget = 'add_product_barcode';
             startCameraScanner('add_product_barcode');
@@ -1293,11 +1329,10 @@ $store_address = $settings['store_address'] ?? 'الفرع الرئيسي - مص
 
             const statusEl = document.getElementById('camera-status-text');
             if (statusEl) {
-                statusEl.innerText = 'جاري الاتصال بالكاميرا...';
+                statusEl.innerText = 'جاري الاتصال بالكاميرا وتشغيل QuaggaJS...';
                 statusEl.className = 'text-[10px] text-amber-400 font-bold';
             }
 
-            // فحص دعم المتصفح والبيئة الآمنة
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                 console.error("المتصفح لا يدعم الكاميرا أو البيئة غير آمنة Secure Context");
                 if (statusEl) {
@@ -1307,128 +1342,152 @@ $store_address = $settings['store_address'] ?? 'الفرع الرئيسي - مص
                 return;
             }
 
-            await stopCameraStreamOnly();
+            stopCameraStreamOnly();
 
             try {
-                if (!html5QrCode) {
-                    const formatsToSupport = [
-                        Html5QrcodeSupportedFormats.EAN_13,
-                        Html5QrcodeSupportedFormats.EAN_8,
-                        Html5QrcodeSupportedFormats.CODE_128,
-                        Html5QrcodeSupportedFormats.CODE_39,
-                        Html5QrcodeSupportedFormats.UPC_A,
-                        Html5QrcodeSupportedFormats.UPC_E,
-                        Html5QrcodeSupportedFormats.QR_CODE,
-                        Html5QrcodeSupportedFormats.ITF
-                    ];
-                    html5QrCode = new Html5Qrcode("html5-qrcode-reader", { formatsToSupport: formatsToSupport, verbose: false });
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(d => d.kind === 'videoinput');
+                if (videoDevices.length > 0) {
+                    availableCameras = videoDevices;
+                    const selectEl = document.getElementById('camera-device-select');
+                    if (selectEl) {
+                        selectEl.innerHTML = videoDevices.map((d, idx) => {
+                            const isBack = d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear') || d.label.toLowerCase().includes('environment');
+                            return `<option value="${d.deviceId}" ${selectedCameraDeviceId === d.deviceId ? 'selected' : ''}>${d.label || 'كاميرا ' + (idx + 1) + (isBack ? ' (خلفية)' : '')}</option>`;
+                        }).join('');
+                    }
+                    if (!selectedCameraDeviceId) {
+                        const backCam = videoDevices.find(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear') || d.label.toLowerCase().includes('environment'));
+                        selectedCameraDeviceId = backCam ? backCam.deviceId : videoDevices[0].deviceId;
+                    }
+                }
+            } catch(e) {}
+
+            const constraints = {
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+                audio: false
+            };
+
+            if (selectedCameraDeviceId) {
+                constraints.deviceId = { exact: selectedCameraDeviceId };
+            } else {
+                constraints.facingMode = "environment";
+            }
+
+            Quagga.init({
+                inputStream: {
+                    name: "Live",
+                    type: "LiveStream",
+                    target: document.querySelector('#quagga-reader-container'),
+                    constraints: constraints,
+                    area: {
+                        top: "10%",
+                        right: "10%",
+                        left: "10%",
+                        bottom: "10%"
+                    }
+                },
+                locator: {
+                    patchSize: "medium",
+                    halfSample: true
+                },
+                numOfWorkers: 2,
+                frequency: 10,
+                decoder: {
+                    readers: [
+                        "ean_reader",
+                        "ean_8_reader",
+                        "code_128_reader",
+                        "code_39_reader",
+                        "upc_reader",
+                        "upc_e_reader"
+                    ]
+                },
+                locate: true
+            }, function(err) {
+                if (err) {
+                    console.error("Quagga init error:", err);
+                    Quagga.init({
+                        inputStream: {
+                            name: "Live",
+                            type: "LiveStream",
+                            target: document.querySelector('#quagga-reader-container'),
+                            constraints: { video: true, audio: false }
+                        },
+                        decoder: {
+                            readers: ["ean_reader", "ean_8_reader", "code_128_reader", "code_39_reader", "upc_reader"]
+                        }
+                    }, function(err2) {
+                        if (err2) {
+                            if (statusEl) {
+                                statusEl.innerText = "تعذر فتح الكاميرا (يمكنك استخدام زر التقاط صورة)";
+                                statusEl.className = 'text-[10px] text-rose-400 font-bold';
+                            }
+                            return;
+                        }
+                        Quagga.start();
+                        quaggaRunning = true;
+                        if (statusEl) {
+                            statusEl.innerText = 'قارئ QuaggaJS نشط - وجه الكاميرا نحو الباركود';
+                            statusEl.className = 'text-[10px] text-emerald-400 font-bold';
+                        }
+                    });
+                    return;
                 }
 
-                // كشف الكاميرات المتاحة
-                try {
-                    const cameras = await Html5Qrcode.getCameras();
-                    if (cameras && cameras.length > 0) {
-                        availableCameras = cameras;
-                        const selectEl = document.getElementById('camera-device-select');
-                        if (selectEl) {
-                            selectEl.innerHTML = cameras.map((c, idx) => {
-                                const isBack = c.label.toLowerCase().includes('back') || c.label.toLowerCase().includes('rear') || c.label.toLowerCase().includes('environment');
-                                return `<option value="${c.id}" ${selectedCameraDeviceId === c.id ? 'selected' : ''}>${c.label || 'كاميرا ' + (idx + 1) + (isBack ? ' (خلفية)' : '')}</option>`;
-                            }).join('');
-                        }
-                        if (!selectedCameraDeviceId) {
-                            const backCam = cameras.find(c => c.label.toLowerCase().includes('back') || c.label.toLowerCase().includes('rear') || c.label.toLowerCase().includes('environment'));
-                            selectedCameraDeviceId = backCam ? backCam.id : cameras[0].id;
-                        }
-                    }
-                } catch(e) {
-                    console.warn("Cameras enum error:", e);
-                }
-
-                const qrConfig = {
-                    fps: 15,
-                    qrbox: { width: 260, height: 160 },
-                    aspectRatio: 1.0
-                };
-
-                const camIdOrConfig = selectedCameraDeviceId ? selectedCameraDeviceId : { facingMode: "environment" };
-
-                await html5QrCode.start(
-                    camIdOrConfig,
-                    qrConfig,
-                    (decodedText, decodedResult) => {
-                        onBarcodeScanned(decodedText);
-                    },
-                    (errorMessage) => {
-                        // scanning frame...
-                    }
-                );
+                Quagga.start();
+                quaggaRunning = true;
 
                 if (statusEl) {
-                    statusEl.innerText = 'الكاميرا نشطة - وجهها نحو الباركود';
+                    statusEl.innerText = 'قارئ QuaggaJS نشط - وجه الكاميرا نحو الباركود';
                     statusEl.className = 'text-[10px] text-emerald-400 font-bold';
                 }
-
-            } catch (err) {
-                console.error("Html5Qrcode start error:", err);
-                try {
-                    await html5QrCode.start(
-                        { facingMode: "user" },
-                        { fps: 15, qrbox: { width: 260, height: 160 } },
-                        (decodedText) => onBarcodeScanned(decodedText),
-                        () => {}
-                    );
-                    if (statusEl) {
-                        statusEl.innerText = 'الكاميرا نشطة';
-                        statusEl.className = 'text-[10px] text-emerald-400 font-bold';
-                    }
-                } catch (e2) {
-                    if (statusEl) {
-                        statusEl.innerText = 'تعذر تشغيل الكاميرا (يرجى مراجعة إذن المتصفح أو التقاط صورة)';
-                        statusEl.className = 'text-[10px] text-rose-400 font-bold';
-                    }
-                }
-            }
+            });
         }
 
-        async function stopCameraStreamOnly() {
-            if (html5QrCode && html5QrCode.isScanning) {
+        function stopCameraStreamOnly() {
+            if (quaggaRunning && typeof Quagga !== 'undefined') {
                 try {
-                    await html5QrCode.stop();
+                    Quagga.stop();
                 } catch(e) {}
+                quaggaRunning = false;
             }
         }
 
-        async function stopCameraScanner() {
-            await stopCameraStreamOnly();
+        function stopCameraScanner() {
+            stopCameraStreamOnly();
             closeModal('camera-modal');
         }
 
         async function decodeBarcodeFromImage(inputEl) {
             if (!inputEl.files || inputEl.files.length === 0) return;
             const file = inputEl.files[0];
+            const imgUrl = URL.createObjectURL(file);
 
             const statusEl = document.getElementById('camera-status-text');
             if (statusEl) {
-                statusEl.innerText = 'جاري قراءة الباركود من الصورة...';
+                statusEl.innerText = 'جاري فحص الصورة بـ QuaggaJS...';
                 statusEl.className = 'text-[10px] text-cyan-400 font-bold';
             }
 
-            try {
-                if (!html5QrCode) {
-                    html5QrCode = new Html5Qrcode("html5-qrcode-reader", { verbose: false });
+            Quagga.decodeSingle({
+                src: imgUrl,
+                numOfWorkers: 0,
+                inputStream: { size: 800 },
+                decoder: {
+                    readers: ["ean_reader", "ean_8_reader", "code_128_reader", "code_39_reader", "upc_reader", "upc_e_reader"]
                 }
-                const decodedText = await html5QrCode.scanFile(file, false);
-                if (decodedText) {
-                    onBarcodeScanned(decodedText);
-                    showScannedFeedback('تمت القراءة بنجاح من الصورة: ' + decodedText);
-                }
-            } catch (e) {
-                console.error("Image scan error:", e);
-                alert('⚠️ تعذر قراءة الباركود من هذه الصورة، يرجى التقاط صورة أقرب وأوضح.');
-            } finally {
+            }, function(result) {
+                URL.revokeObjectURL(imgUrl);
                 inputEl.value = '';
-            }
+                if (result && result.codeResult && result.codeResult.code) {
+                    onBarcodeScanned(result.codeResult.code);
+                    showScannedFeedback('تمت القراءة بـ QuaggaJS: ' + result.codeResult.code);
+                } else {
+                    alert('⚠️ لم يتمكن QuaggaJS من التعرف على الباركود في هذه الصورة، يرجى التقاط صورة أقرب وأوضح.');
+                }
+            });
         }
 
         function onBarcodeScanned(decodedText) {
@@ -1466,14 +1525,11 @@ $store_address = $settings['store_address'] ?? 'الفرع الرئيسي - مص
         }
 
         async function switchCameraFacing() {
-            try {
-                const cameras = await Html5Qrcode.getCameras();
-                if (cameras && cameras.length > 1) {
-                    const currentIdx = cameras.findIndex(c => c.id === selectedCameraDeviceId);
-                    const nextIdx = (currentIdx + 1) % cameras.length;
-                    selectedCameraDeviceId = cameras[nextIdx].id;
-                }
-            } catch(e) {}
+            if (availableCameras && availableCameras.length > 1) {
+                const currentIdx = availableCameras.findIndex(d => d.deviceId === selectedCameraDeviceId);
+                const nextIdx = (currentIdx + 1) % availableCameras.length;
+                selectedCameraDeviceId = availableCameras[nextIdx].deviceId;
+            }
             await startCameraScanner(cameraScanTarget);
         }
 
