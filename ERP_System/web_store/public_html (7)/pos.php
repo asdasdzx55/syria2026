@@ -713,18 +713,25 @@ $store_address = $settings['store_address'] ?? 'الفرع الرئيسي - مص
                     <i class="fa-solid fa-circle-check text-emerald-400"></i>
                 </div>
 
-                <div class="flex items-center justify-between text-xs gap-2">
+                <div class="flex items-center justify-between text-xs gap-1.5 flex-wrap">
                     <label class="flex items-center gap-1.5 cursor-pointer text-slate-300 font-bold text-[11px]">
                         <input type="checkbox" id="continuous-scan-check" checked class="w-4 h-4 text-brand-600 rounded bg-slate-900 border-slate-700">
-                        <span>مسح مستمر متتابع</span>
+                        <span>مسح متتابع</span>
                     </label>
 
                     <div class="flex items-center gap-1.5">
-                        <button onclick="switchCameraFacing()" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-bold flex items-center gap-1 text-[11px]">
+                        <label class="px-2.5 py-1.5 bg-brand-600/30 hover:bg-brand-600 text-brand-300 hover:text-white rounded-lg font-bold flex items-center gap-1 text-[11px] cursor-pointer border border-brand-500/40 transition">
+                            <i class="fa-solid fa-camera-retro"></i>
+                            <span>التقاط صورة</span>
+                            <input type="file" accept="image/*" capture="environment" onchange="decodeBarcodeFromImage(this)" class="hidden">
+                        </label>
+
+                        <button onclick="switchCameraFacing()" class="px-2 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-bold flex items-center gap-1 text-[11px]">
                             <i class="fa-solid fa-arrows-rotate"></i>
                             <span>تبديل</span>
                         </button>
-                        <button onclick="restartCameraScanner()" class="px-3 py-1.5 bg-emerald-700/60 hover:bg-emerald-600 text-white rounded-lg font-bold flex items-center gap-1 text-[11px]">
+
+                        <button onclick="restartCameraScanner()" class="px-2.5 py-1.5 bg-emerald-700/60 hover:bg-emerald-600 text-white rounded-lg font-bold flex items-center gap-1 text-[11px]">
                             <i class="fa-solid fa-play"></i>
                             <span>تشغيل</span>
                         </button>
@@ -1280,6 +1287,9 @@ $store_address = $settings['store_address'] ?? 'الفرع الرئيسي - مص
             openModal('thermal-receipt-modal');
         }
 
+        // ==========================================
+        // قارئ وكاميرا الباركود الصافي فائق الاستقرار (ZXing Single-Stream Engine)
+        // ==========================================
         function scanBarcodeForProductField() {
             cameraScanTarget = 'add_product_barcode';
             startCameraScanner('add_product_barcode');
@@ -1291,105 +1301,86 @@ $store_address = $settings['store_address'] ?? 'الفرع الرئيسي - مص
 
             const statusEl = document.getElementById('camera-status-text');
             if (statusEl) {
-                statusEl.innerText = 'جاري تشغيل الكاميرا...';
+                statusEl.innerText = 'جاري الاتصال بالكاميرا...';
                 statusEl.className = 'text-[10px] text-amber-400 font-bold';
             }
 
             stopCameraStreamOnly();
 
-            const video = document.getElementById('native-barcode-video');
-            if (!video) return;
-
             try {
-                let videoConstraints = {
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 }
-                };
-
-                if (selectedCameraDeviceId) {
-                    videoConstraints.deviceId = { exact: selectedCameraDeviceId };
-                } else {
-                    videoConstraints.facingMode = { ideal: currentFacingMode };
+                if (!zxingReader) {
+                    zxingReader = new ZXing.BrowserMultiFormatReader();
                 }
 
-                cameraStream = await navigator.mediaDevices.getUserMedia({
-                    video: videoConstraints,
-                    audio: false
-                });
+                // كشف الكاميرات المتاحة
+                try {
+                    const devices = await zxingReader.listVideoInputDevices();
+                    if (devices && devices.length > 0) {
+                        availableCameras = devices;
+                        const selectEl = document.getElementById('camera-device-select');
+                        if (selectEl) {
+                            selectEl.innerHTML = devices.map((d, idx) => {
+                                const isBack = d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear') || d.label.toLowerCase().includes('environment');
+                                const label = d.label || `كاميرا ${idx + 1} ${isBack ? '(خلفية)' : ''}`;
+                                return `<option value="${d.deviceId}" ${selectedCameraDeviceId === d.deviceId ? 'selected' : ''}>${label}</option>`;
+                            }).join('');
+                        }
+                        if (!selectedCameraDeviceId) {
+                            const backCam = devices.find(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear') || d.label.toLowerCase().includes('environment'));
+                            selectedCameraDeviceId = backCam ? backCam.deviceId : devices[0].deviceId;
+                        }
+                    }
+                } catch(e) {
+                    console.warn("Could not list video devices:", e);
+                }
 
-                video.srcObject = cameraStream;
-                video.setAttribute('playsinline', 'true');
-                video.muted = true;
-                await video.play();
+                await zxingReader.decodeFromVideoDevice(
+                    selectedCameraDeviceId || undefined,
+                    'native-barcode-video',
+                    (result, err) => {
+                        if (result && result.getText()) {
+                            onBarcodeScanned(result.getText());
+                        }
+                    }
+                );
 
                 if (statusEl) {
                     statusEl.innerText = 'الكاميرا نشطة - وجهها نحو الباركود';
                     statusEl.className = 'text-[10px] text-emerald-400 font-bold';
                 }
 
-                try {
-                    const devices = await navigator.mediaDevices.enumerateDevices();
-                    const videoDevices = devices.filter(d => d.kind === 'videoinput');
-                    if (videoDevices.length > 0) {
-                        availableCameras = videoDevices;
-                        const selectEl = document.getElementById('camera-device-select');
-                        if (selectEl) {
-                            selectEl.innerHTML = videoDevices.map((d, idx) => {
-                                const isBack = d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear') || d.label.toLowerCase().includes('environment');
-                                const label = d.label || `كاميرا ${idx + 1} ${isBack ? '(خلفية)' : ''}`;
-                                return `<option value="${d.deviceId}" ${selectedCameraDeviceId === d.deviceId ? 'selected' : ''}>${label}</option>`;
-                            }).join('');
-                        }
-                    }
-                } catch(e) {}
-
-                startBarcodeScanningEngine(video);
-
             } catch (err) {
                 console.error("Camera access error:", err);
                 if (statusEl) {
-                    statusEl.innerText = 'تعذر تشغيل الكاميرا (يرجى مراجعة إذن المتصفح)';
+                    statusEl.innerText = 'تعذر تشغيل البث المباشر (يمكنك استخدام زر التقاط صورة)';
                     statusEl.className = 'text-[10px] text-rose-400 font-bold';
                 }
             }
         }
 
-        function startBarcodeScanningEngine(video) {
-            if (scanLoopTimer) clearInterval(scanLoopTimer);
+        async function decodeBarcodeFromImage(inputEl) {
+            if (!inputEl.files || inputEl.files.length === 0) return;
+            const file = inputEl.files[0];
+            const imgUrl = URL.createObjectURL(file);
 
-            if ('BarcodeDetector' in window) {
-                try {
-                    barcodeDetectorInstance = new BarcodeDetector({
-                        formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'qr_code', 'itf', 'data_matrix']
-                    });
-
-                    let isProcessing = false;
-                    scanLoopTimer = setInterval(async () => {
-                        if (isProcessing || !video || video.readyState < 2 || video.paused) return;
-                        isProcessing = true;
-                        try {
-                            const barcodes = await barcodeDetectorInstance.detect(video);
-                            if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
-                                onBarcodeScanned(barcodes[0].rawValue);
-                            }
-                        } catch (e) {}
-                        isProcessing = false;
-                    }, 80);
-                    return;
-                } catch (e) {}
+            const statusEl = document.getElementById('camera-status-text');
+            if (statusEl) {
+                statusEl.innerText = 'جاري قراءة الباركود من الصورة...';
+                statusEl.className = 'text-[10px] text-cyan-400 font-bold';
             }
 
             try {
-                if (typeof ZXing !== 'undefined') {
-                    if (!zxingReader) zxingReader = new ZXing.BrowserMultiFormatReader();
-                    zxingReader.decodeFromVideoDevice(selectedCameraDeviceId, 'native-barcode-video', (result, err) => {
-                        if (result && result.getText()) {
-                            onBarcodeScanned(result.getText());
-                        }
-                    });
+                if (!zxingReader) zxingReader = new ZXing.BrowserMultiFormatReader();
+                const result = await zxingReader.decodeFromImageUrl(imgUrl);
+                if (result && result.getText()) {
+                    onBarcodeScanned(result.getText());
+                    showScannedFeedback('تمت القراءة بنجاح من الصورة: ' + result.getText());
                 }
             } catch (e) {
-                console.error("ZXing init error:", e);
+                alert('⚠️ تعذر قراءة الباركود من هذه الصورة، يرجى التقاط صورة أقرب وأوضح للباركود.');
+            } finally {
+                URL.revokeObjectURL(imgUrl);
+                inputEl.value = '';
             }
         }
 
@@ -1422,19 +1413,11 @@ $store_address = $settings['store_address'] ?? 'الفرع الرئيسي - مص
         }
 
         function stopCameraStreamOnly() {
-            if (scanLoopTimer) {
-                clearInterval(scanLoopTimer);
-                scanLoopTimer = null;
-            }
             if (zxingReader) {
-                try { zxingReader.reset(); } catch(e) {}
+                try {
+                    zxingReader.reset();
+                } catch(e) {}
             }
-            if (cameraStream) {
-                cameraStream.getTracks().forEach(track => track.stop());
-                cameraStream = null;
-            }
-            const video = document.getElementById('native-barcode-video');
-            if (video) video.srcObject = null;
         }
 
         function stopCameraScanner() {
@@ -1449,8 +1432,13 @@ $store_address = $settings['store_address'] ?? 'الفرع الرئيسي - مص
         }
 
         async function switchCameraFacing() {
-            currentFacingMode = (currentFacingMode === "environment") ? "user" : "environment";
-            selectedCameraDeviceId = null;
+            if (availableCameras && availableCameras.length > 1) {
+                const currentIdx = availableCameras.findIndex(d => d.deviceId === selectedCameraDeviceId);
+                const nextIdx = (currentIdx + 1) % availableCameras.length;
+                selectedCameraDeviceId = availableCameras[nextIdx].deviceId;
+            } else {
+                selectedCameraDeviceId = null;
+            }
             await startCameraScanner(cameraScanTarget);
         }
 
