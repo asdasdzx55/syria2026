@@ -24,9 +24,9 @@ if (session_status() === PHP_SESSION_NONE) {
 // 1. إعدادات قاعدة البيانات
 // ==========================================
 $host = 'localhost'; 
-$dbname = 'u323440923_Royal123'; 
-$user = 'u323440923_Royal123';
-$pass = 'IE90v!ds4;';
+$dbname = 'u323440923_SUPERMARKET'; 
+$user = 'u323440923_SUPERMARKET';
+$pass = 'SyrianHome#2026!Pos';
 
 // التحقق من البيئة المحلية تلقائياً لتسهيل التجربة والتطوير
 $is_local = false;

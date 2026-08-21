@@ -155,6 +155,8 @@ def setup_database():
         cursor.executemany("INSERT OR IGNORE INTO partners (name) VALUES (?)", p_defaults)
 
     cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('admin_password', '1234')")
+    cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('cloud_api_url', 'https://supermarkrt.almagd555.com/api_sync.php')")
+    cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('cloud_api_key', 'syrian_home_pos_secret_token_2026')")
 
     conn.commit()
     return conn
