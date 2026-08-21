@@ -768,7 +768,7 @@ $store_address = $settings['store_address'] ?? 'الفرع الرئيسي - مص
     </div>
 
     <!-- نافذة الوزن -->
-    <div id="weight-modal" class="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm hidden flex items-center justify-center p-3">
+    <div id="weight-modal" class="fixed inset-0 z-[60] bg-slate-950/85 backdrop-blur-sm hidden flex items-center justify-center p-3">
         <div class="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl p-4 space-y-3">
             <div class="flex items-center justify-between border-b border-slate-800 pb-2.5">
                 <div class="flex items-center gap-2">
@@ -815,7 +815,7 @@ $store_address = $settings['store_address'] ?? 'الفرع الرئيسي - مص
     </div>
 
     <!-- نافذة الفاتورة الحرارية -->
-    <div id="thermal-receipt-modal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm hidden flex items-center justify-center p-3">
+    <div id="thermal-receipt-modal" class="fixed inset-0 z-[70] bg-slate-950/85 backdrop-blur-sm hidden flex items-center justify-center p-3">
         <div class="bg-white text-black w-full max-w-[340px] rounded-2xl p-4 shadow-2xl text-xs font-mono select-text" id="printable-receipt-card">
             <div class="text-center pb-2 border-b border-dashed border-gray-400 space-y-0.5">
                 <h2 class="text-base font-black"><?php echo htmlspecialchars($store_name); ?></h2>
@@ -1314,6 +1314,9 @@ $store_address = $settings['store_address'] ?? 'الفرع الرئيسي - مص
             document.getElementById('rcpt-discount').innerText = (parseFloat(document.getElementById('discount-input')?.value) || 0).toFixed(2) + ' ج.م';
             document.getElementById('rcpt-grand-total').innerText = grandTotal.toFixed(2) + ' ج.م';
 
+            stopCameraScanner();
+            closeCartDrawer();
+            closeModal('weight-modal');
             openModal('thermal-receipt-modal');
         }
 
@@ -1329,6 +1332,8 @@ $store_address = $settings['store_address'] ?? 'الفرع الرئيسي - مص
 
         async function startCameraScanner(target = 'pos_cart') {
             cameraScanTarget = target;
+            closeModal('weight-modal');
+            closeModal('thermal-receipt-modal');
             openModal('camera-modal');
 
             const statusEl = document.getElementById('camera-status-text');
@@ -1544,6 +1549,9 @@ $store_address = $settings['store_address'] ?? 'الفرع الرئيسي - مص
         function openWeightModal(productId) {
             const product = products.find(p => p.id == productId);
             if (!product) return;
+
+            stopCameraScanner();
+            closeModal('thermal-receipt-modal');
 
             currentWeightProduct = product;
             document.getElementById('weight-prod-name').innerText = product.name;
