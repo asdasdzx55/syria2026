@@ -1248,25 +1248,27 @@ $currency = 'ج.م';
         let currentFacingMode = "environment";
         let audioContext = null;
 
-        // تهيئة النظام
+        // تهيئة النظام الآمنة
         document.addEventListener('DOMContentLoaded', () => {
-            renderProducts(products);
-            renderSuppliersList(suppliers);
-            renderCart();
-            loadExpensesData();
+            try { if (typeof renderProducts === 'function') renderProducts(products); } catch (e) { console.error(e); }
+            try { if (typeof renderSuppliersList === 'function') renderSuppliersList(suppliers); } catch (e) { console.error(e); }
+            try { if (typeof renderCart === 'function') renderCart(); } catch (e) { console.error(e); }
+            try { if (typeof loadExpensesData === 'function') loadExpensesData(); } catch (e) { console.error(e); }
 
             // مستمع الباركود
             const barcodeInput = document.getElementById('barcode-input');
-            barcodeInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleBarcodeScan(barcodeInput.value.trim());
-                    barcodeInput.value = '';
-                }
-            });
-            barcodeInput.addEventListener('input', (e) => {
-                filterProductsByName(barcodeInput.value.trim());
-            });
+            if (barcodeInput) {
+                barcodeInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleBarcodeScan(barcodeInput.value.trim());
+                        barcodeInput.value = '';
+                    }
+                });
+                barcodeInput.addEventListener('input', (e) => {
+                    filterProductsByName(barcodeInput.value.trim());
+                });
+            }
         });
 
         // تشغيل صوت التنبيه Beep
@@ -2274,6 +2276,103 @@ $currency = 'ج.م';
                     `;
                 }
             } catch (e) {}
+        }
+
+        // ==========================================
+        // إدارة المصروفات العامة ومسحوبات الشركاء
+        // ==========================================
+        async function loadExpensesData() {
+            const tbody = document.getElementById('expenses-table-body');
+            if (!tbody) return;
+            try {
+                const res = await fetch('api_sync.php?action=get_pos_reports&api_key=syrian_home_pos_secret_token_2026');
+                const data = await res.json();
+                if (data.success && data.recent_expenses) {
+                    if (data.recent_expenses.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-slate-500 font-bold">لا توجد مصروفات مسجلة اليوم</td></tr>';
+                        return;
+                    }
+                    tbody.innerHTML = data.recent_expenses.map(e => `
+                        <tr class="hover:bg-slate-800/40">
+                            <td class="py-2.5 font-bold text-rose-400">${e.category}</td>
+                            <td class="py-2.5 text-slate-300">${e.note || '-'}</td>
+                            <td class="py-2.5 text-slate-400 font-mono">${e.payment_method || 'كاش'}</td>
+                            <td class="py-2.5 font-black text-rose-400">${parseFloat(e.amount).toFixed(2)} ج.م</td>
+                            <td class="py-2.5 text-slate-500 text-[11px] font-mono">${e.date ? (e.date.length > 10 ? e.date.substring(11, 16) : e.date) : '-'}</td>
+                        </tr>
+                    `).join('');
+                }
+            } catch (err) {
+                console.error("loadExpensesData error:", err);
+            }
+        }
+
+        async function submitNewExpensePage(e) {
+            e.preventDefault();
+            const btn = document.getElementById('page-exp-btn');
+            if (btn) btn.disabled = true;
+
+            const category = document.getElementById('page-exp-category')?.value || 'نثريات';
+            const amount = parseFloat(document.getElementById('page-exp-amount')?.value || 0);
+            const method = document.getElementById('page-exp-method')?.value || 'كاش';
+            const note = document.getElementById('page-exp-note')?.value || '';
+
+            if (amount <= 0) {
+                alert("يرجى إدخال مبلغ صحيح أكبر من الصفر!");
+                if (btn) btn.disabled = false;
+                return;
+            }
+
+            try {
+                const res = await fetch('api_sync.php?action=record_expense&api_key=syrian_home_pos_secret_token_2026', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ category, amount, payment_method: method, note })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert("✅ تم تسجيل المصروف وخصمه بنجاح!");
+                    if (document.getElementById('page-exp-amount')) document.getElementById('page-exp-amount').value = '';
+                    if (document.getElementById('page-exp-note')) document.getElementById('page-exp-note').value = '';
+                    loadExpensesData();
+                } else {
+                    alert("خطأ: " + data.error);
+                }
+            } catch (err) {
+                alert("تعذر الاتصال بالسيرفر!");
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        }
+
+        async function submitPartnerWithdrawPage(e) {
+            e.preventDefault();
+            const partner = document.getElementById('page-partner-select')?.value || 'المالك';
+            const amount = parseFloat(document.getElementById('page-partner-amount')?.value || 0);
+            const note = document.getElementById('page-partner-note')?.value || '';
+
+            if (amount <= 0) {
+                alert("يرجى إدخال مبلغ صحيح أكبر من الصفر!");
+                return;
+            }
+
+            try {
+                const res = await fetch('api_sync.php?action=withdraw_partner&api_key=syrian_home_pos_secret_token_2026', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ partner_name: partner, amount, note })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert("✅ تم تسجيل المسحوبات بنجاح!");
+                    if (document.getElementById('page-partner-amount')) document.getElementById('page-partner-amount').value = '';
+                    if (document.getElementById('page-partner-note')) document.getElementById('page-partner-note').value = '';
+                } else {
+                    alert("خطأ: " + data.error);
+                }
+            } catch (err) {
+                alert("تعذر الاتصال بالسيرفر!");
+            }
         }
 
         async function refreshCatalog() {
