@@ -1282,17 +1282,25 @@ $currency = 'ج.م';
     <!-- 5. جافاسكريبت التطبيق الشامل والأداء فائق السرعة                  -->
     <!-- ================================================================= -->
     <script>
-        // المتغيرات العامة
+        // المتغيرات العامة الموحدة للكاشير والكاميرا
         let products = <?php echo json_encode($products, JSON_UNESCAPED_UNICODE); ?>;
         let suppliers = <?php echo json_encode($suppliers, JSON_UNESCAPED_UNICODE); ?>;
         let cart = {}; // { productId: { name, price, cost, qty, is_weight, barcode } }
         let selectedPaymentMethod = 'كاش';
         let currentWeightProduct = null;
-        let html5QrCode = null;
-        let availableCameras = [];
-        let selectedCameraId = null;
-        let currentFacingMode = "environment";
         let audioContext = null;
+        
+        // متغيرات الكاميرا والباركود
+        let cameraStream = null;
+        let barcodeDetectorInstance = null;
+        let zxingReader = null;
+        let scanLoopTimer = null;
+        let cameraScanTarget = 'pos_cart';
+        let lastScannedCode = '';
+        let lastScannedTime = 0;
+        let availableCameras = [];
+        let selectedCameraDeviceId = null;
+        let currentFacingMode = "environment";
 
         // تهيئة النظام الآمنة
         document.addEventListener('DOMContentLoaded', () => {
@@ -1954,17 +1962,6 @@ $currency = 'ج.م';
             addToCart(currentWeightProduct.id, kg);
             closeModal('weight-modal');
         }
-
-        let cameraStream = null;
-        let barcodeDetectorInstance = null;
-        let zxingReader = null;
-        let scanLoopTimer = null;
-        let cameraScanTarget = 'pos_cart';
-        let lastScannedCode = '';
-        let lastScannedTime = 0;
-        let availableCameras = [];
-        let selectedCameraDeviceId = null;
-        let currentFacingMode = "environment";
 
         // ==========================================
         // قارئ الباركود المباشر الخالي من أي تضارب (Native HTML5 + BarcodeDetector + ZXing)
