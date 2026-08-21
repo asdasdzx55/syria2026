@@ -1158,6 +1158,17 @@ $currency = 'ج.م';
                     <i class="fa-solid fa-circle-check text-emerald-400"></i>
                 </div>
 
+                <!-- إرشادات إذن الكاميرا عند الحظر -->
+                <div class="bg-amber-500/10 border border-amber-500/30 rounded-xl p-2.5 text-[11px] text-amber-300 flex items-start gap-2">
+                    <i class="fa-solid fa-circle-info text-amber-400 mt-0.5 shrink-0 text-sm"></i>
+                    <div>
+                        <span class="font-bold text-amber-300">إذا ظهر تنبيه الإذن (Permission denied):</span>
+                        <p class="text-slate-300 text-[10px] mt-0.5 leading-relaxed">
+                            اضغط على أيقونة <b>القفل / الإعدادات 🔒</b> بجانب رابط الموقع أعلى المتصفح، وغير <b>الكاميرا إلى سماح (Allow)</b> ثم اضغط إعادة تشغيل.
+                        </p>
+                    </div>
+                </div>
+
                 <div class="flex items-center justify-between text-xs gap-2">
                     <label class="flex items-center gap-2 cursor-pointer text-slate-300 font-bold">
                         <input type="checkbox" id="continuous-scan-check" checked class="w-4 h-4 text-brand-600 rounded bg-slate-900 border-slate-700 focus:ring-brand-500">
