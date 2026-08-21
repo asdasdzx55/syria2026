@@ -1880,7 +1880,7 @@ $currency = 'ج.م';
         let selectedCameraId = null;
 
         // ==========================================
-        // كاميرا الباركود الشاملة المقاومة للأخطاء
+        // كاميرا الباركود الشاملة المقاومة للأخطاء (100% متوافقة مع الكمبيوتر والموبايل)
         // ==========================================
         function scanBarcodeForProductField() {
             cameraScanTarget = 'add_product_barcode';
@@ -1890,54 +1890,69 @@ $currency = 'ج.م';
         async function startCameraScanner(target = 'pos_cart') {
             cameraScanTarget = target;
             openModal('camera-modal');
-            
+
             const errView = document.getElementById('camera-error-view');
+            const selectEl = document.getElementById('camera-device-select');
             if (errView) errView.classList.add('hidden');
 
-            if (!html5QrScanner) {
-                html5QrScanner = new Html5Qrcode("interactive-scanner-view");
-            }
-
-            // إذا كانت الكاميرا تعمل بالفعل، نوقفها قبل البدء
-            if (html5QrScanner.isScanning) {
-                try { await html5QrScanner.stop(); } catch (e) {}
-            }
-
-            // كشف الأجهزة وقائمة الكاميرات المتاحة
+            // 1. طلب إذن الكاميرا بشكل صريح ومباشر من المتصفح
+            let streamGranted = false;
             try {
-                if (availableCameras.length === 0) {
-                    const devices = await Html5Qrcode.getCameras();
-                    if (devices && devices.length > 0) {
-                        availableCameras = devices;
-                        const selectEl = document.getElementById('camera-device-select');
-                        if (selectEl) {
-                            selectEl.innerHTML = devices.map((d, idx) => {
-                                const isBack = d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear') || d.label.toLowerCase().includes('environment');
-                                const label = d.label || `كاميرا ${idx + 1} ${isBack ? '(خلفية)' : ''}`;
-                                return `<option value="${d.id}">${label}</option>`;
-                            }).join('');
-
-                            // تفضيل الكاميرا الخلفية على الموبايل
-                            const backCam = devices.find(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear'));
-                            if (backCam) {
-                                selectedCameraId = backCam.id;
-                                selectEl.value = backCam.id;
-                            } else {
-                                selectedCameraId = devices[0].id;
-                                selectEl.value = devices[0].id;
-                            }
-                        }
+                const testStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                testStream.getTracks().forEach(track => track.stop());
+                streamGranted = true;
+            } catch (permErr) {
+                console.error("Camera permission error:", permErr);
+                if (errView) {
+                    errView.classList.remove('hidden');
+                    const msgEl = document.getElementById('camera-error-msg');
+                    if (msgEl) {
+                        msgEl.innerText = "يرجى الضغط على أيقونة الإعدادات ⚙️ أو القفل 🔒 أعلى المتصفح بجانب الرابط، واختيار (السماح بالكاميرا) ثم الضغط على 'إعادة المحاولة'.";
                     }
                 }
-            } catch (err) {
-                console.warn("Could not enumerate cameras, falling back to facingMode constraints", err);
+                return;
+            }
+
+            // 2. إيقاف أي ماسح قديم وإعادة إنشاء الكائن لضمان نظافة الحالة
+            if (html5QrScanner) {
+                try {
+                    if (html5QrScanner.isScanning) {
+                        await html5QrScanner.stop();
+                    }
+                    await html5QrScanner.clear();
+                } catch (e) {}
+            }
+            html5QrScanner = new Html5Qrcode("interactive-scanner-view");
+
+            // 3. جلب وتعبئة قائمة الكاميرات المتاحة
+            try {
+                const devices = await Html5Qrcode.getCameras();
+                if (devices && devices.length > 0) {
+                    availableCameras = devices;
+                    if (selectEl) {
+                        selectEl.innerHTML = devices.map((d, idx) => {
+                            const isBack = d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear') || d.label.toLowerCase().includes('environment');
+                            const label = d.label || `كاميرا ${idx + 1} ${isBack ? '(خلفية)' : ''}`;
+                            return `<option value="${d.id}">${label}</option>`;
+                        }).join('');
+
+                        if (!selectedCameraId || !devices.some(d => d.id === selectedCameraId)) {
+                            // إذا كان موبايل فيه كاميرا خلفية نختارها، وإلا أول كاميرا متاحة (مثل ACER QHD)
+                            const backCam = devices.find(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear'));
+                            selectedCameraId = backCam ? backCam.id : devices[0].id;
+                        }
+                        selectEl.value = selectedCameraId;
+                    }
+                }
+            } catch (e) {
+                console.warn("Could not get cameras list, using default stream constraint", e);
             }
 
             const scanConfig = { 
-                fps: 20, 
+                fps: 25, 
                 qrbox: (viewfinderWidth, viewfinderHeight) => {
                     const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-                    const edgeSize = Math.floor(minEdge * 0.75);
+                    const edgeSize = Math.floor(minEdge * 0.8);
                     return { width: Math.max(260, edgeSize), height: Math.max(200, Math.floor(edgeSize * 0.75)) };
                 },
                 aspectRatio: 1.0,
@@ -1976,11 +1991,9 @@ $currency = 'ج.م';
                 }
             };
 
-            const onScanError = (errorMessage) => {
-                // تجاهل أخطاء عدم العثور على باركود في الفريم
-            };
+            const onScanError = (err) => {};
 
-            // محاولة التشغيل بالـ Camera ID أو التبديل التلقائي
+            // 4. تشغيل الكاميرا بالأولوية
             let started = false;
 
             if (selectedCameraId) {
@@ -1988,16 +2001,7 @@ $currency = 'ج.م';
                     await html5QrScanner.start(selectedCameraId, scanConfig, onScanSuccess, onScanError);
                     started = true;
                 } catch (e) {
-                    console.warn("Starting with selectedCameraId failed, trying facingMode environment...", e);
-                }
-            }
-
-            if (!started) {
-                try {
-                    await html5QrScanner.start({ facingMode: currentFacingMode }, scanConfig, onScanSuccess, onScanError);
-                    started = true;
-                } catch (e) {
-                    console.warn("Starting with facingMode environment failed, trying facingMode user...", e);
+                    console.warn("Failed starting by cameraId, trying generic constraints...", e);
                 }
             }
 
@@ -2006,28 +2010,34 @@ $currency = 'ج.م';
                     await html5QrScanner.start({ facingMode: "user" }, scanConfig, onScanSuccess, onScanError);
                     started = true;
                 } catch (e) {
-                    console.warn("Starting with facingMode user failed, trying default video constraint...", e);
+                    console.warn("Failed starting facingMode user, trying environment...", e);
                 }
             }
 
             if (!started) {
                 try {
-                    if (availableCameras.length > 0) {
-                        await html5QrScanner.start(availableCameras[0].id, scanConfig, onScanSuccess, onScanError);
-                        started = true;
-                    }
+                    await html5QrScanner.start({ facingMode: "environment" }, scanConfig, onScanSuccess, onScanError);
+                    started = true;
                 } catch (e) {
-                    console.error("All camera start attempts failed", e);
+                    console.warn("Failed starting facingMode environment, trying first available device...", e);
+                }
+            }
+
+            if (!started && availableCameras.length > 0) {
+                try {
+                    await html5QrScanner.start(availableCameras[0].id, scanConfig, onScanSuccess, onScanError);
+                    started = true;
+                } catch (e) {
+                    console.error("All start methods failed:", e);
                 }
             }
 
             if (!started) {
-                // إظهار شاشة الخطأ التوجيهية بدون إغلاق النافذة
                 if (errView) {
                     errView.classList.remove('hidden');
                     const msgEl = document.getElementById('camera-error-msg');
                     if (msgEl) {
-                        msgEl.innerText = "يرجى منح إذن الكاميرا من إعدادات المتصفح (أيقونة القفل أعلى الصفحة بجانب الرابط) واختيار السماح بالكاميرا، ثم الضغط على 'إعادة المحاولة'.";
+                        msgEl.innerText = "تعذر فتح بث الفيديو من الكاميرا. يرجى التأكد من عدم استخدام الكاميرا في تطبيق آخر (مثل Zoom أو Teams) وإعادة المحاولة.";
                     }
                 }
             }
@@ -2053,7 +2063,6 @@ $currency = 'ج.م';
         function switchCameraFacing() {
             currentFacingMode = (currentFacingMode === "environment") ? "user" : "environment";
             if (availableCameras.length > 1) {
-                // تبديل للكاميرا التالية في القائمة
                 const currentIndex = availableCameras.findIndex(c => c.id === selectedCameraId);
                 const nextIndex = (currentIndex + 1) % availableCameras.length;
                 selectedCameraId = availableCameras[nextIndex].id;
