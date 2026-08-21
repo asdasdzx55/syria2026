@@ -508,6 +508,15 @@ try {
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name VARCHAR(100) NOT NULL UNIQUE
             )");
+            $pdo->exec("CREATE TABLE IF NOT EXISTS delivery_drivers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name VARCHAR(100) NOT NULL UNIQUE,
+                phone VARCHAR(50) DEFAULT NULL,
+                pin_code VARCHAR(20) DEFAULT '1234',
+                is_active INTEGER DEFAULT 1,
+                cash_balance DECIMAL(10,2) DEFAULT 0.00,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )");
         } else {
             $pdo->exec("CREATE TABLE IF NOT EXISTS expenses (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -534,6 +543,15 @@ try {
             $pdo->exec("CREATE TABLE IF NOT EXISTS partners (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 name VARCHAR(100) NOT NULL UNIQUE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            $pdo->exec("CREATE TABLE IF NOT EXISTS delivery_drivers (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(100) NOT NULL UNIQUE,
+                phone VARCHAR(50) DEFAULT NULL,
+                pin_code VARCHAR(20) DEFAULT '1234',
+                is_active TINYINT DEFAULT 1,
+                cash_balance DECIMAL(10,2) DEFAULT 0.00,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
         }
 
@@ -562,6 +580,17 @@ try {
             $parts = ["المالك / المدير العام", "الشريك الأول (أبو النور)", "الشريك الثاني (أبو وضاح)"];
             $ins_part = $pdo->prepare("INSERT OR IGNORE INTO partners (name) VALUES (?)");
             foreach ($parts as $p) { $ins_part->execute([$p]); }
+        }
+
+        // إدخال الطيارين الافتراضيين مع رموز الـ PIN
+        if ($pdo->query("SELECT COUNT(*) FROM delivery_drivers")->fetchColumn() == 0) {
+            $drivers = [
+                ["كابتن حسام السريع", "01012345678", "1111", 0.00],
+                ["كابتن طارق الدليفري", "01023456789", "2222", 0.00],
+                ["كابتن محمود الشامي", "01034567890", "3333", 0.00]
+            ];
+            $ins_drv = $pdo->prepare("INSERT OR IGNORE INTO delivery_drivers (name, phone, pin_code, cash_balance) VALUES (?, ?, ?, ?)");
+            foreach ($drivers as $d) { $ins_drv->execute($d); }
         }
     } catch (Exception $e) {}
 

@@ -152,16 +152,20 @@ try {
             }
             $details_str = implode("\n", $items_text);
             
+            // تحديد الحالة الأولية للأوردر
+            $order_status = (!empty($delivery_person) && $delivery_person !== 'بدون توصيل (تيك أواي)') ? 'بانتظار الطيار' : 'مكتمل';
+
             // حفظ الفاتورة في جدول orders
             $stmt = $pdo->prepare("INSERT INTO orders (
                 customer_name, customer_phone, customer_address, order_details, 
                 total_price, discount_amount, shipping_cost, payment_method, payment_status, 
                 status, source, cashier_name, delivery_person, delivery_fee, created_at, synced
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'مدفوع', 'مكتمل', ?, ?, ?, ?, ?, 1)");
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'مدفوع', ?, ?, ?, ?, ?, ?, 1)");
             
             $stmt->execute([
                 $customer, $phone, $address, $details_str,
                 $total, $discount, $delivery_fee, $payment_method,
+                $order_status,
                 $source, $cashier, $delivery_person, $delivery_fee, $date
             ]);
             $remote_order_id = $pdo->lastInsertId();
@@ -455,6 +459,205 @@ try {
                 'orders_today' => (int)$orders_today,
                 'low_stock_count' => (int)$low_stock,
                 'server_time' => date('Y-m-d H:i:s')
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 11. تسجيل دخول الطيار برمز الـ PIN أو الهاتف
+        // ============================================================
+        case 'driver_login':
+            $data = !empty($json_payload) ? $json_payload : $_POST;
+            $pin = trim($data['pin_code'] ?? '');
+            $driver_id = (int)($data['driver_id'] ?? 0);
+            $phone = trim($data['phone'] ?? '');
+
+            if (empty($pin)) {
+                echo json_encode(['success' => false, 'error' => 'يرجى إدخال الرمز السري (PIN) للدخول']);
+                break;
+            }
+
+            if ($driver_id > 0) {
+                $stmt = $pdo->prepare("SELECT * FROM delivery_drivers WHERE id = ? AND pin_code = ? AND is_active = 1");
+                $stmt->execute([$driver_id, $pin]);
+            } elseif (!empty($phone)) {
+                $stmt = $pdo->prepare("SELECT * FROM delivery_drivers WHERE phone = ? AND pin_code = ? AND is_active = 1");
+                $stmt->execute([$phone, $pin]);
+            } else {
+                $stmt = $pdo->prepare("SELECT * FROM delivery_drivers WHERE pin_code = ? AND is_active = 1");
+                $stmt->execute([$pin]);
+            }
+
+            $driver = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($driver) {
+                echo json_encode([
+                    'success' => true,
+                    'message' => 'مرحباً بك كابتن ' . $driver['name'],
+                    'driver' => [
+                        'id' => (int)$driver['id'],
+                        'name' => $driver['name'],
+                        'phone' => $driver['phone'],
+                        'cash_balance' => (float)$driver['cash_balance']
+                    ]
+                ], JSON_UNESCAPED_UNICODE);
+            } else {
+                echo json_encode(['success' => false, 'error' => 'الرمز السري (PIN) غير صحيح أو الحساب معطل']);
+            }
+            break;
+
+        // ============================================================
+        // 12. جلب أوردرات الطيار المعزولة حصراً ومحفظته المالية
+        // ============================================================
+        case 'get_driver_orders':
+            $driver_name = trim($_GET['driver_name'] ?? ($json_payload['driver_name'] ?? ''));
+            if (empty($driver_name)) {
+                echo json_encode(['success' => false, 'error' => 'يرجى تحديد اسم الطيار']);
+                break;
+            }
+
+            // التأكد من جلب الأوردرات المسندة لهذا الطيار فقط
+            $stmt = $pdo->prepare("SELECT * FROM orders WHERE delivery_person = ? ORDER BY id DESC LIMIT 50");
+            $stmt->execute([$driver_name]);
+            $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // تصنيف وإحصاء أوردرات هذا الطيار
+            $in_transit = [];
+            $pending = [];
+            $delivered_today = [];
+            $total_cash_in_hand = 0;
+            $total_commission = 0;
+            $today = date('Y-m-d');
+
+            foreach ($orders as &$ord) {
+                $ord['id'] = (int)$ord['id'];
+                $ord['total_price'] = (float)$ord['total_price'];
+                $ord['shipping_cost'] = (float)($ord['shipping_cost'] ?? 0);
+                $ord['payment_method'] = $ord['payment_method'] ?? 'كاش';
+                $ord['is_cash'] = (mb_stripos($ord['payment_method'], 'كاش') !== false || mb_stripos($ord['payment_method'], 'cash') !== false || empty($ord['payment_method']));
+
+                $status = $ord['status'] ?? 'جديد';
+                $created_date = substr($ord['created_at'] ?? '', 0, 10);
+
+                if ($status === 'جاري التوصيل' || $status === 'في الطريق') {
+                    $in_transit[] = $ord;
+                } elseif ($status === 'بانتظار الطيار' || $status === 'جديد' || $status === 'مؤقتة' || $status === 'معلق') {
+                    $pending[] = $ord;
+                } elseif ($status === 'تم التسليم' || $status === 'مكتملة') {
+                    if ($created_date === $today) {
+                        $delivered_today[] = $ord;
+                    }
+                    if ($ord['is_cash']) {
+                        $total_cash_in_hand += $ord['total_price'];
+                    }
+                    $total_commission += $ord['shipping_cost'];
+                }
+            }
+            unset($ord);
+
+            // جلب الرصيد الحالي المسجل في جدول الطيارين
+            $stmt_bal = $pdo->prepare("SELECT cash_balance FROM delivery_drivers WHERE name = ?");
+            $stmt_bal->execute([$driver_name]);
+            $drv_bal = (float)$stmt_bal->fetchColumn();
+
+            echo json_encode([
+                'success' => true,
+                'driver_name' => $driver_name,
+                'stats' => [
+                    'in_transit_count' => count($in_transit),
+                    'pending_count' => count($pending),
+                    'delivered_today_count' => count($delivered_today),
+                    'cash_in_hand' => $total_cash_in_hand,
+                    'driver_balance' => $drv_bal,
+                    'total_commission' => $total_commission
+                ],
+                'orders_in_transit' => $in_transit,
+                'orders_pending' => $pending,
+                'orders_delivered_today' => $delivered_today,
+                'all_orders' => $orders
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 13. تحديث حالة توصيل الأوردر (استلام / تم التسليم / راجع)
+        // ============================================================
+        case 'update_delivery_status':
+            $data = !empty($json_payload) ? $json_payload : $_POST;
+            $order_id = (int)($data['order_id'] ?? 0);
+            $new_status = trim($data['status'] ?? '');
+            $driver_name = trim($data['driver_name'] ?? '');
+            $note = trim($data['note'] ?? '');
+
+            if ($order_id <= 0 || empty($new_status)) {
+                echo json_encode(['success' => false, 'error' => 'بيانات الطلب أو الحالة غير مكتملة']);
+                break;
+            }
+
+            // التحقق من أن الأوردر مسند لهذا الطيار
+            $chk = $pdo->prepare("SELECT id, total_price, payment_method, status FROM orders WHERE id = ? AND delivery_person = ?");
+            $chk->execute([$order_id, $driver_name]);
+            $order = $chk->fetch(PDO::FETCH_ASSOC);
+
+            if (!$order) {
+                echo json_encode(['success' => false, 'error' => 'عذراً، هذا الأوردر غير مسند إليك أو غير موجود']);
+                break;
+            }
+
+            // تحديث حالة الأوردر
+            $upd = $pdo->prepare("UPDATE orders SET status = ? WHERE id = ?");
+            $upd->execute([$new_status, $order_id]);
+
+            // إذا تم التسليم وكان كاش، نضيف المبلغ لعهدة الطيار
+            $is_cash = (mb_stripos($order['payment_method'] ?? '', 'كاش') !== false || mb_stripos($order['payment_method'] ?? '', 'cash') !== false || empty($order['payment_method']));
+            if ($new_status === 'تم التسليم' && $is_cash) {
+                $amt = (float)$order['total_price'];
+                $pdo->prepare("UPDATE delivery_drivers SET cash_balance = cash_balance + ? WHERE name = ?")->execute([$amt, $driver_name]);
+            }
+
+            echo json_encode([
+                'success' => true,
+                'message' => "تم تحديث حالة الأوردر رقم #{$order_id} إلى ({$new_status}) بنجاح",
+                'order_id' => $order_id,
+                'new_status' => $new_status
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 14. تصفية عهدة الطيار النقدية وتسليمها للكاشير
+        // ============================================================
+        case 'settle_driver_cash':
+            $data = !empty($json_payload) ? $json_payload : $_POST;
+            $driver_name = trim($data['driver_name'] ?? '');
+            $amount = (float)($data['amount'] ?? 0);
+            $note = trim($data['note'] ?? 'تصفية عهدة دليفري وتسليم كاش');
+
+            if (empty($driver_name) || $amount <= 0) {
+                echo json_encode(['success' => false, 'error' => 'يرجى تحديد الطيار والمبلغ المراد تسليمه']);
+                break;
+            }
+
+            // تصفية أو خصم المبلغ من رصيد الطيار
+            $pdo->prepare("UPDATE delivery_drivers SET cash_balance = MAX(0, cash_balance - ?) WHERE name = ?")->execute([$amount, $driver_name]);
+
+            // تسجيل إيراد / قيد حركة استلام عهدة
+            try {
+                $pdo->prepare("INSERT INTO expenses (category, amount, note, date, partner_name, payment_method) VALUES ('توريد عهدة دليفري', ?, ?, ?, ?, 'كاش')")
+                    ->execute([$amount, "استلام كاش من الطيار ($driver_name): " . $note, date('Y-m-d H:i:s'), $driver_name]);
+            } catch (Exception $e) {}
+
+            echo json_encode([
+                'success' => true,
+                'message' => "تم تسليم وتصفية مبلغ {$amount} ج.م من الكابتن {$driver_name} بنجاح!",
+                'settled_amount' => $amount
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 15. جلب قائمة الطيارين المتاحين (للكاشير وشاشة الدخول)
+        // ============================================================
+        case 'get_delivery_drivers':
+            $drivers = $pdo->query("SELECT id, name, phone, cash_balance FROM delivery_drivers WHERE is_active = 1 ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
+            echo json_encode([
+                'success' => true,
+                'drivers' => $drivers
             ], JSON_UNESCAPED_UNICODE);
             break;
 

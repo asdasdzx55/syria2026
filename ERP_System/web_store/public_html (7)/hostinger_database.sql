@@ -446,10 +446,23 @@ INSERT INTO `visitor_logs` (`id`, `ip_address`, `user_id`, `page_url`, `device_t
 -- ------------------------------------------------------------
 -- Table: `wishlist`
 -- ------------------------------------------------------------
-DROP TABLE IF EXISTS `wishlist`;
-CREATE TABLE `wishlist` (
+-- ------------------------------------------------------------
+-- Table: `delivery_drivers`
+-- ------------------------------------------------------------
+DROP TABLE IF EXISTS `delivery_drivers`;
+CREATE TABLE `delivery_drivers` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `name` VARCHAR(100) NOT NULL UNIQUE,
+  `phone` VARCHAR(50) DEFAULT NULL,
+  `pin_code` VARCHAR(20) DEFAULT '1234',
+  `is_active` TINYINT DEFAULT 1,
+  `cash_balance` DECIMAL(10,2) DEFAULT 0.00,
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO `delivery_drivers` (`id`, `name`, `phone`, `pin_code`, `cash_balance`) VALUES
+('1', 'كابتن حسام السريع', '01012345678', '1111', '0.00'),
+('2', 'كابتن طارق الدليفري', '01023456789', '2222', '0.00'),
+('3', 'كابتن محمود الشامي', '01034567890', '3333', '0.00');
 
 SET FOREIGN_KEY_CHECKS = 1;

@@ -193,6 +193,12 @@ $currency = 'ج.م';
                     <i class="fa-solid fa-plus-circle text-emerald-400"></i>
                     <span>إضافة منتج</span>
                 </button>
+
+                <!-- 7. زر تطبيق الدليفري والطيارين -->
+                <a href="delivery.php" target="_blank" class="px-2.5 sm:px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 font-black text-xs sm:text-sm flex items-center gap-1.5 border border-amber-500/40 transition-all shadow-md">
+                    <i class="fa-solid fa-motorcycle text-amber-400"></i>
+                    <span>تطبيق الدليفري 🛵</span>
+                </a>
             </nav>
 
             <!-- زر لوحة تحكم الإدارة -->
@@ -791,6 +797,27 @@ $currency = 'ج.م';
                             <input type="number" id="delivery-fee-input" value="0" min="0" step="1" oninput="calculateTotals()" 
                                    class="w-full bg-transparent text-cyan-400 font-bold text-left text-xs focus:outline-none">
                             <span class="text-slate-500 text-[10px]">ج.م</span>
+                        </div>
+                    </div>
+
+                    <!-- بيانات العميل والتوصيل والطيار -->
+                    <div class="space-y-2 text-xs">
+                        <div class="grid grid-cols-2 gap-2">
+                            <input type="text" id="cust-name-input" placeholder="اسم العميل (اختياري)" 
+                                   class="w-full bg-slate-900 border border-slate-800 text-white rounded-xl px-2.5 py-2 focus:outline-none">
+                            <input type="tel" id="cust-phone-input" placeholder="رقم الهاتف" 
+                                   class="w-full bg-slate-900 border border-slate-800 text-white rounded-xl px-2.5 py-2 focus:outline-none">
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <input type="text" id="cust-address-input" placeholder="عنوان التوصيل (الشارع / العمارة)" 
+                                   class="w-full bg-slate-900 border border-slate-800 text-white rounded-xl px-2.5 py-2 focus:outline-none">
+                            <select id="cust-driver-select" class="w-full bg-slate-900 border border-slate-800 text-amber-300 font-bold rounded-xl px-2.5 py-2 focus:outline-none">
+                                <option value="">-- بدون طيار (استلام محلي) --</option>
+                                <?php foreach ($active_drivers as $drv): ?>
+                                    <option value="<?php echo htmlspecialchars($drv['name']); ?>">🛵 <?php echo htmlspecialchars($drv['name']); ?></option>
+                                <?php endforeach; ?>
+                            </select>
                         </div>
                     </div>
 
@@ -1404,6 +1431,8 @@ $currency = 'ج.م';
                 source: 'web_pos',
                 customer: document.getElementById('cust-name-input').value.trim() || 'عميل نقدي',
                 phone: document.getElementById('cust-phone-input').value.trim() || '',
+                address: document.getElementById('cust-address-input') ? document.getElementById('cust-address-input').value.trim() : '',
+                delivery_person: document.getElementById('cust-driver-select') ? document.getElementById('cust-driver-select').value.trim() : '',
                 delivery_fee: deliveryFee,
                 discount: discount,
                 total: grandTotal,
@@ -1437,6 +1466,8 @@ $currency = 'ج.م';
                     document.getElementById('delivery-fee-input').value = 0;
                     document.getElementById('cust-name-input').value = '';
                     document.getElementById('cust-phone-input').value = '';
+                    if (document.getElementById('cust-address-input')) document.getElementById('cust-address-input').value = '';
+                    if (document.getElementById('cust-driver-select')) document.getElementById('cust-driver-select').value = '';
                 } else {
                     alert("خطأ: " + (data.error || 'تعذر الحفظ'));
                 }
