@@ -1105,7 +1105,9 @@ $currency = 'ج.م';
             </div>
 
             <div class="relative bg-black flex-1 min-h-[320px] flex items-center justify-center overflow-hidden">
-                <div id="interactive-scanner-view" class="w-full h-full min-h-[320px]"></div>
+                <video id="native-camera-video" autoplay playsinline muted class="w-full h-full min-h-[320px] object-cover"></video>
+                <canvas id="native-camera-canvas" class="hidden"></canvas>
+                <div id="interactive-scanner-view" class="w-full h-full min-h-[320px] absolute inset-0 pointer-events-none"></div>
                 
                 <div id="camera-laser-anim" class="laser-line"></div>
                 <div id="camera-target-box" class="absolute w-64 h-48 border-2 border-dashed border-emerald-400/80 rounded-2xl pointer-events-none z-10 shadow-[0_0_15px_rgba(16,185,129,0.3)]"></div>
@@ -1113,15 +1115,15 @@ $currency = 'ج.م';
                 <!-- شاشة المساعدة في حال رفض الإذن -->
                 <div id="camera-error-view" class="hidden absolute inset-0 bg-slate-950/95 z-20 flex flex-col items-center justify-center p-6 text-center">
                     <div class="w-14 h-14 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-2xl mb-3 border border-amber-500/30 animate-bounce">
-                        <i class="fa-solid fa-video-slash"></i>
+                        <i class="fa-solid fa-camera"></i>
                     </div>
-                    <h4 class="text-base font-bold text-white mb-1.5">إذن الكاميرا مطلوب</h4>
+                    <h4 class="text-base font-bold text-white mb-1.5">تشغيل كاميرا اللابتوب / المحل</h4>
                     <p id="camera-error-msg" class="text-xs text-slate-300 max-w-sm mb-4 leading-relaxed">
-                        يرجى الضغط على أيقونة القفل أو الكاميرا بجانب رابط الموقع في أعلى المتصفح واختيار "السماح بالكاميرا" (Allow Camera).
+                        اضغط على الزر الأخضر أدناه لتشغيل الكاميرا والموافقة على إشعار المتصفح.
                     </p>
                     <div class="flex items-center gap-2">
-                        <button onclick="startCameraScanner(cameraScanTarget)" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5">
-                            <i class="fa-solid fa-arrows-rotate"></i> إعادة المحاولة
+                        <button onclick="requestCameraAccessDirectly()" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black shadow-lg transition flex items-center gap-2">
+                            <i class="fa-solid fa-play"></i> تشغيل الكاميرا الآن
                         </button>
                         <button onclick="stopCameraScanner()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition">
                             إغلاق
@@ -1878,200 +1880,207 @@ $currency = 'ج.م';
         let cameraScanTarget = 'pos_cart';
         let availableCameras = [];
         let selectedCameraId = null;
+        let mediaStream = null;
+        let scanInterval = null;
+        let isDetectingBarcode = false;
 
         // ==========================================
-        // كاميرا الباركود الشاملة المقاومة للأخطاء (100% متوافقة مع الكمبيوتر والموبايل)
+        // كاميرا الباركود المباشرة (Native HTML5 + BarcodeDetector)
         // ==========================================
         function scanBarcodeForProductField() {
             cameraScanTarget = 'add_product_barcode';
             startCameraScanner('add_product_barcode');
         }
 
+        async function requestCameraAccessDirectly() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                stream.getTracks().forEach(t => t.stop());
+                const errView = document.getElementById('camera-error-view');
+                if (errView) errView.classList.add('hidden');
+                startCameraScanner(cameraScanTarget);
+            } catch (e) {
+                alert("يرجى الضغط على أيقونة الإعدادات بجانب رابط الموقع في أعلى المتصفح والسماح بالكاميرا ثم المحاولة مرة أخرى.");
+            }
+        }
+
         async function startCameraScanner(target = 'pos_cart') {
             cameraScanTarget = target;
             openModal('camera-modal');
 
+            const video = document.getElementById('native-camera-video');
             const errView = document.getElementById('camera-error-view');
             const selectEl = document.getElementById('camera-device-select');
             if (errView) errView.classList.add('hidden');
 
-            // 1. طلب إذن الكاميرا بشكل صريح ومباشر من المتصفح
-            let streamGranted = false;
+            stopCameraScanner(false);
+
             try {
-                const testStream = await navigator.mediaDevices.getUserMedia({ video: true });
-                testStream.getTracks().forEach(track => track.stop());
-                streamGranted = true;
-            } catch (permErr) {
-                console.error("Camera permission error:", permErr);
+                // طلب فتح بث الكاميرا مباشرة من المتصفح
+                let constraints = { video: true, audio: false };
+
+                if (selectedCameraId) {
+                    constraints = { video: { deviceId: { exact: selectedCameraId } }, audio: false };
+                }
+
+                try {
+                    mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+                } catch (constrErr) {
+                    console.warn("Exact constraint failed, trying basic video...", constrErr);
+                    mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                }
+
+                if (video) {
+                    video.srcObject = mediaStream;
+                    await video.play();
+                }
+
+                // كشف وتعبئة قائمة الكاميرات المتاحة
+                try {
+                    const devices = await navigator.mediaDevices.enumerateDevices();
+                    const videoDevs = devices.filter(d => d.kind === 'videoinput');
+                    if (videoDevs.length > 0) {
+                        availableCameras = videoDevs;
+                        if (selectEl) {
+                            selectEl.innerHTML = videoDevs.map((d, idx) => {
+                                const isBack = d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear') || d.label.toLowerCase().includes('environment');
+                                const label = d.label || `كاميرا ${idx + 1} ${isBack ? '(خلفية)' : ''}`;
+                                return `<option value="${d.deviceId}">${label}</option>`;
+                            }).join('');
+
+                            const activeTrack = mediaStream.getVideoTracks()[0];
+                            const activeSettings = activeTrack ? activeTrack.getSettings() : null;
+                            if (activeSettings && activeSettings.deviceId) {
+                                selectedCameraId = activeSettings.deviceId;
+                                selectEl.value = selectedCameraId;
+                            }
+                        }
+                    }
+                } catch (e) {}
+
+                // بدء حلقة المسح السريع لكافة أنواع الباركود
+                startBarcodeDetectionLoop(video);
+
+            } catch (err) {
+                console.error("Camera access failed:", err);
                 if (errView) {
                     errView.classList.remove('hidden');
-                    const msgEl = document.getElementById('camera-error-msg');
-                    if (msgEl) {
-                        msgEl.innerText = "يرجى الضغط على أيقونة الإعدادات ⚙️ أو القفل 🔒 أعلى المتصفح بجانب الرابط، واختيار (السماح بالكاميرا) ثم الضغط على 'إعادة المحاولة'.";
+                }
+            }
+        }
+
+        function startBarcodeDetectionLoop(video) {
+            if (scanInterval) clearInterval(scanInterval);
+
+            // 1. المحرك الأصلي فائق السرعة BarcodeDetector (المدعوم في Google Chrome و Edge)
+            if ('BarcodeDetector' in window) {
+                const detector = new BarcodeDetector({
+                    formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'qr_code', 'itf', 'data_matrix']
+                });
+
+                scanInterval = setInterval(async () => {
+                    if (isDetectingBarcode || !video || video.readyState < 2) return;
+                    isDetectingBarcode = true;
+                    try {
+                        const barcodes = await detector.detect(video);
+                        if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
+                            onBarcodeScanned(barcodes[0].rawValue);
+                        }
+                    } catch (e) {}
+                    isDetectingBarcode = false;
+                }, 100);
+            } else {
+                // 2. المحرك الاحتياطي عبر مكتبة ZXing / Html5Qrcode
+                try {
+                    if (!html5QrScanner) {
+                        html5QrScanner = new Html5Qrcode("interactive-scanner-view");
                     }
+                    html5QrScanner.start(
+                        selectedCameraId || { facingMode: "user" },
+                        { fps: 20, qrbox: { width: 280, height: 220 } },
+                        (decodedText) => onBarcodeScanned(decodedText),
+                        () => {}
+                    ).catch(e => {});
+                } catch (e) {}
+            }
+        }
+
+        let lastScannedCode = '';
+        let lastScannedTime = 0;
+
+        function onBarcodeScanned(decodedText) {
+            const now = Date.now();
+            if (decodedText === lastScannedCode && (now - lastScannedTime) < 1500) {
+                return;
+            }
+            lastScannedCode = decodedText;
+            lastScannedTime = now;
+
+            playBeep();
+
+            // 1. إذا كان المسح لخانة إضافة منتج
+            if (cameraScanTarget === 'add_product_barcode') {
+                document.getElementById('add-prod-barcode').value = decodedText;
+                showScannedFeedback('تم مسح الباركود: ' + decodedText);
+                stopCameraScanner();
+                cameraScanTarget = 'pos_cart';
+                return;
+            }
+
+            // 2. إذا كان المسح لقسم الجرد
+            if (cameraScanTarget === 'inventory_scan') {
+                handleInventoryBarcodeScan(decodedText);
+                const isContinuous = document.getElementById('continuous-scan-check')?.checked;
+                if (!isContinuous) {
+                    stopCameraScanner();
                 }
                 return;
             }
 
-            // 2. إيقاف أي ماسح قديم وإعادة إنشاء الكائن لضمان نظافة الحالة
-            if (html5QrScanner) {
-                try {
-                    if (html5QrScanner.isScanning) {
-                        await html5QrScanner.stop();
-                    }
-                    await html5QrScanner.clear();
-                } catch (e) {}
-            }
-            html5QrScanner = new Html5Qrcode("interactive-scanner-view");
-
-            // 3. جلب وتعبئة قائمة الكاميرات المتاحة
-            try {
-                const devices = await Html5Qrcode.getCameras();
-                if (devices && devices.length > 0) {
-                    availableCameras = devices;
-                    if (selectEl) {
-                        selectEl.innerHTML = devices.map((d, idx) => {
-                            const isBack = d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear') || d.label.toLowerCase().includes('environment');
-                            const label = d.label || `كاميرا ${idx + 1} ${isBack ? '(خلفية)' : ''}`;
-                            return `<option value="${d.id}">${label}</option>`;
-                        }).join('');
-
-                        if (!selectedCameraId || !devices.some(d => d.id === selectedCameraId)) {
-                            // إذا كان موبايل فيه كاميرا خلفية نختارها، وإلا أول كاميرا متاحة (مثل ACER QHD)
-                            const backCam = devices.find(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear'));
-                            selectedCameraId = backCam ? backCam.id : devices[0].id;
-                        }
-                        selectEl.value = selectedCameraId;
-                    }
-                }
-            } catch (e) {
-                console.warn("Could not get cameras list, using default stream constraint", e);
-            }
-
-            const scanConfig = { 
-                fps: 25, 
-                qrbox: (viewfinderWidth, viewfinderHeight) => {
-                    const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-                    const edgeSize = Math.floor(minEdge * 0.8);
-                    return { width: Math.max(260, edgeSize), height: Math.max(200, Math.floor(edgeSize * 0.75)) };
-                },
-                aspectRatio: 1.0,
-                experimentalFeatures: {
-                    useBarCodeDetectorIfSupported: true
-                }
-            };
-
-            const onScanSuccess = (decodedText) => {
-                playBeep();
-
-                // 1. إذا كان المسح لخانة إضافة منتج
-                if (cameraScanTarget === 'add_product_barcode') {
-                    document.getElementById('add-prod-barcode').value = decodedText;
-                    showScannedFeedback('تم مسح الباركود: ' + decodedText);
-                    stopCameraScanner();
-                    cameraScanTarget = 'pos_cart';
-                    return;
-                }
-
-                // 2. إذا كان المسح لقسم الجرد
-                if (cameraScanTarget === 'inventory_scan') {
-                    handleInventoryBarcodeScan(decodedText);
-                    const isContinuous = document.getElementById('continuous-scan-check').checked;
-                    if (!isContinuous) {
-                        stopCameraScanner();
-                    }
-                    return;
-                }
-
-                // 3. إذا كان المسح العادي للكاشير
-                handleBarcodeScan(decodedText);
-                const isContinuous = document.getElementById('continuous-scan-check').checked;
-                if (!isContinuous) {
-                    stopCameraScanner();
-                }
-            };
-
-            const onScanError = (err) => {};
-
-            // 4. تشغيل الكاميرا بالأولوية
-            let started = false;
-
-            if (selectedCameraId) {
-                try {
-                    await html5QrScanner.start(selectedCameraId, scanConfig, onScanSuccess, onScanError);
-                    started = true;
-                } catch (e) {
-                    console.warn("Failed starting by cameraId, trying generic constraints...", e);
-                }
-            }
-
-            if (!started) {
-                try {
-                    await html5QrScanner.start({ facingMode: "user" }, scanConfig, onScanSuccess, onScanError);
-                    started = true;
-                } catch (e) {
-                    console.warn("Failed starting facingMode user, trying environment...", e);
-                }
-            }
-
-            if (!started) {
-                try {
-                    await html5QrScanner.start({ facingMode: "environment" }, scanConfig, onScanSuccess, onScanError);
-                    started = true;
-                } catch (e) {
-                    console.warn("Failed starting facingMode environment, trying first available device...", e);
-                }
-            }
-
-            if (!started && availableCameras.length > 0) {
-                try {
-                    await html5QrScanner.start(availableCameras[0].id, scanConfig, onScanSuccess, onScanError);
-                    started = true;
-                } catch (e) {
-                    console.error("All start methods failed:", e);
-                }
-            }
-
-            if (!started) {
-                if (errView) {
-                    errView.classList.remove('hidden');
-                    const msgEl = document.getElementById('camera-error-msg');
-                    if (msgEl) {
-                        msgEl.innerText = "تعذر فتح بث الفيديو من الكاميرا. يرجى التأكد من عدم استخدام الكاميرا في تطبيق آخر (مثل Zoom أو Teams) وإعادة المحاولة.";
-                    }
-                }
+            // 3. إذا كان المسح العادي للكاشير
+            handleBarcodeScan(decodedText);
+            const isContinuous = document.getElementById('continuous-scan-check')?.checked;
+            if (!isContinuous) {
+                stopCameraScanner();
             }
         }
 
         async function changeCameraDevice(cameraId) {
             if (!cameraId) return;
             selectedCameraId = cameraId;
-            if (html5QrScanner && html5QrScanner.isScanning) {
-                await html5QrScanner.stop();
-                startCameraScanner(cameraScanTarget);
-            }
+            stopCameraScanner(false);
+            startCameraScanner(cameraScanTarget);
         }
 
-        function stopCameraScanner() {
+        function stopCameraScanner(closeModalFlag = true) {
+            if (scanInterval) {
+                clearInterval(scanInterval);
+                scanInterval = null;
+            }
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream = null;
+            }
+            const video = document.getElementById('native-camera-video');
+            if (video) {
+                video.srcObject = null;
+            }
             if (html5QrScanner && html5QrScanner.isScanning) {
-                html5QrScanner.stop().then(() => closeModal('camera-modal')).catch(() => closeModal('camera-modal'));
-            } else {
+                try { html5QrScanner.stop(); } catch (e) {}
+            }
+            if (closeModalFlag) {
                 closeModal('camera-modal');
             }
         }
 
         function switchCameraFacing() {
-            currentFacingMode = (currentFacingMode === "environment") ? "user" : "environment";
             if (availableCameras.length > 1) {
-                const currentIndex = availableCameras.findIndex(c => c.id === selectedCameraId);
+                const currentIndex = availableCameras.findIndex(c => c.deviceId === selectedCameraId);
                 const nextIndex = (currentIndex + 1) % availableCameras.length;
-                selectedCameraId = availableCameras[nextIndex].id;
+                selectedCameraId = availableCameras[nextIndex].deviceId;
                 const selectEl = document.getElementById('camera-device-select');
                 if (selectEl) selectEl.value = selectedCameraId;
-            }
-            if (html5QrScanner && html5QrScanner.isScanning) {
-                html5QrScanner.stop().then(() => startCameraScanner(cameraScanTarget));
-            } else {
+                stopCameraScanner(false);
                 startCameraScanner(cameraScanTarget);
             }
         }
