@@ -1334,15 +1334,35 @@ $store_address = $settings['store_address'] ?? 'الفرع الرئيسي - مص
                     console.warn("Could not list video devices:", e);
                 }
 
-                await zxingReader.decodeFromVideoDevice(
-                    selectedCameraDeviceId || undefined,
-                    'native-barcode-video',
-                    (result, err) => {
-                        if (result && result.getText()) {
-                            onBarcodeScanned(result.getText());
+                let constraints = {
+                    video: selectedCameraDeviceId 
+                        ? { deviceId: { exact: selectedCameraDeviceId } } 
+                        : { facingMode: { ideal: "environment" } },
+                    audio: false
+                };
+
+                try {
+                    await zxingReader.decodeFromConstraints(
+                        constraints,
+                        'native-barcode-video',
+                        (result, err) => {
+                            if (result && result.getText()) {
+                                onBarcodeScanned(result.getText());
+                            }
                         }
-                    }
-                );
+                    );
+                } catch (fallbackErr) {
+                    console.warn("Retrying with basic video constraint { video: true, audio: false }:", fallbackErr);
+                    await zxingReader.decodeFromConstraints(
+                        { video: true, audio: false },
+                        'native-barcode-video',
+                        (result, err) => {
+                            if (result && result.getText()) {
+                                onBarcodeScanned(result.getText());
+                            }
+                        }
+                    );
+                }
 
                 if (statusEl) {
                     statusEl.innerText = 'الكاميرا نشطة - وجهها نحو الباركود';
