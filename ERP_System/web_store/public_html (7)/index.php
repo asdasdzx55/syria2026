@@ -45,18 +45,35 @@ include 'header.php';
     <div class="swiper main-slider h-[60vh] md:h-[75vh]">
         <div class="swiper-wrapper">
             <?php if(empty($slides)): ?>
-                <div class="swiper-slide relative flex items-center justify-center bg-slate-900">
-                    <img src="placeholder.php?w=1920&h=800" class="absolute inset-0 w-full h-full object-cover" alt="Banner 1920x800">
-                    <div class="absolute inset-0 bg-black/40"></div>
+                <!-- الشريحة الأولى -->
+                <div class="swiper-slide relative flex items-center justify-center">
+                    <img src="images/hero_banner_1.jpg" class="absolute inset-0 w-full h-full object-cover transform scale-100 transition-transform duration-[12000ms]" alt="سوبر ماركت المنزل السوري">
+                    <div class="absolute inset-0 bg-black/45"></div>
                     <div class="relative z-10 text-center px-4 max-w-3xl text-white">
-                        <span class="text-royal-gold text-xs md:text-sm font-bold tracking-widest uppercase mb-3 block">
-                            <?php echo htmlspecialchars($settings['store_tagline'] ?: 'أهلاً بكم في متجرنا'); ?>
+                        <span class="text-royal-gold text-xs md:text-sm font-bold tracking-widest uppercase mb-3 block animate-pulse">
+                            سوبر ماركت المنزل السوري | طعم الأصالة والخير الشامي 🌟
                         </span>
                         <h2 class="text-3xl md:text-5xl mb-6 font-serif tracking-wide leading-tight drop-shadow-lg font-bold">
-                            <?php echo htmlspecialchars($settings['store_name'] ?? 'المتجر الإلكتروني'); ?>
+                            أشهى المؤونة والمنتجات السورية الأصيلة
                         </h2>
                         <a href="shop.php" class="inline-block bg-white text-royal-dark font-extrabold px-10 py-4 text-xs tracking-widest uppercase hover:bg-royal-gold hover:text-white transition duration-300 shadow-xl rounded-xl btn-shine">
-                            تصفح المنتجات
+                            تصفح المنتجات الآن
+                        </a>
+                    </div>
+                </div>
+                <!-- الشريحة الثانية -->
+                <div class="swiper-slide relative flex items-center justify-center">
+                    <img src="images/hero_banner_2.jpg" class="absolute inset-0 w-full h-full object-cover transform scale-100 transition-transform duration-[12000ms]" alt="حلويات ومؤونة شامية">
+                    <div class="absolute inset-0 bg-black/45"></div>
+                    <div class="relative z-10 text-center px-4 max-w-3xl text-white">
+                        <span class="text-royal-gold text-xs md:text-sm font-bold tracking-widest uppercase mb-3 block animate-pulse">
+                            جودة فاخرة وطازجة يومياً 🍯
+                        </span>
+                        <h2 class="text-3xl md:text-5xl mb-6 font-serif tracking-wide leading-tight drop-shadow-lg font-bold">
+                            تشكيلة الحلويات والموالح والبهارات الشامية
+                        </h2>
+                        <a href="shop.php" class="inline-block bg-white text-royal-dark font-extrabold px-10 py-4 text-xs tracking-widest uppercase hover:bg-royal-gold hover:text-white transition duration-300 shadow-xl rounded-xl btn-shine">
+                            تسوق العروض المميزة
                         </a>
                     </div>
                 </div>
@@ -131,7 +148,7 @@ include 'header.php';
             <?php foreach($categories_list as $cat): ?>
             <a href="shop.php?category=<?php echo urlencode($cat['name']); ?>" class="group block bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border border-royal-gold/5 text-center p-3">
                 <div class="overflow-hidden aspect-[4/5] relative rounded-xl mb-4 shadow-inner">
-                    <img src="<?php echo htmlspecialchars($cat['image_url'] ?: 'placeholder.php?w=600&h=800'); ?>" class="w-full h-full object-cover transition duration-1000 group-hover:scale-105" alt="<?php echo htmlspecialchars($cat['name']); ?>" loading="lazy" decoding="async">
+                    <img src="<?php echo htmlspecialchars($cat['image_url'] ?: 'images/cat_pantry.jpg'); ?>" class="w-full h-full object-cover transition duration-1000 group-hover:scale-105" alt="<?php echo htmlspecialchars($cat['name']); ?>" loading="lazy" decoding="async">
                     <div class="absolute inset-0 bg-black/5 group-hover:bg-black/25 transition-colors"></div>
                 </div>
                 <h4 class="text-sm font-serif text-royal-dark font-bold group-hover:text-royal-darkgold transition-colors duration-300 pb-1"><?php echo htmlspecialchars($cat['name']); ?></h4>
@@ -147,14 +164,14 @@ include 'header.php';
     <div class="container mx-auto px-4 md:px-8 max-w-5xl">
         <div class="bg-white rounded-3xl overflow-hidden border border-royal-gold/15 shadow-lg flex flex-col md:flex-row items-center p-6 md:p-10 gap-8 shine-hover">
             <div class="w-full md:w-1/2 aspect-video md:aspect-square rounded-2xl overflow-hidden shadow bg-gray-50 flex items-center justify-center">
-                <img src="placeholder.php?w=600&h=600" class="w-full h-full object-cover" alt="Special Offer" loading="lazy" decoding="async">
+                <img src="images/special_offer.jpg" class="w-full h-full object-cover" alt="سلة الإفطار والمؤونة الشامية" loading="lazy" decoding="async">
             </div>
             <div class="w-full md:w-1/2 text-center md:text-right space-y-4">
-                <span class="bg-royal-gold/15 text-royal-darkgold text-[10px] font-bold py-1 px-3 rounded-full border border-royal-gold/20 inline-block uppercase tracking-wider">عرض خاص وحصري</span>
-                <h3 class="text-2xl md:text-3xl font-serif text-royal-dark font-bold leading-tight">عروض وتخفيضات استثنائية لفترة محدودة</h3>
-                <p class="text-xs text-gray-500 leading-relaxed font-light">استمتع بتجربة تسوق متكاملة مع أقوى الخصومات والعروض الحصرية على أحدث المنتجات والتشكيلات، مع إمكانية الدفع عند الاستلام وشحن سريع لجميع الوجهات.</p>
+                <span class="bg-royal-gold/15 text-royal-darkgold text-[10px] font-bold py-1 px-3 rounded-full border border-royal-gold/20 inline-block uppercase tracking-wider">عرض خاص وحصري ⭐</span>
+                <h3 class="text-2xl md:text-3xl font-serif text-royal-dark font-bold leading-tight">سلة الإفطار والمؤونة الشامية المميزة</h3>
+                <p class="text-xs text-gray-500 leading-relaxed font-light">تشكيلة استثنائية من أشهى الأجبان البلدية (شلل، حلوم، قشقوان)، المكدوس بالجوز، زيت الزيتون البكر الممتاز، والزعتر الحلبي الفاخر بخصم خاص 20% لفترة محدودة مع توصيل سريع حتى باب بيتك!</p>
                 <div class="pt-2">
-                    <a href="shop.php" class="bg-royal-charcoal text-white hover:bg-royal-gold hover:text-royal-charcoal text-xs font-bold py-3.5 px-8 rounded-xl shadow-md btn-shine transition-all">تصفح العروض الآن</a>
+                    <a href="shop.php" class="bg-royal-charcoal text-white hover:bg-royal-gold hover:text-royal-charcoal text-xs font-bold py-3.5 px-8 rounded-xl shadow-md btn-shine transition-all">تصفح العروض والمنتجات</a>
                 </div>
             </div>
         </div>
