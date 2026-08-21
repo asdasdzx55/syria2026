@@ -1305,9 +1305,18 @@ $store_address = $settings['store_address'] ?? 'الفرع الرئيسي - مص
                 statusEl.className = 'text-[10px] text-amber-400 font-bold';
             }
 
-            stopCameraStreamOnly();
+            // 1. فحص دعم المتصفح وبيئة العمل الآمنة (Secure Context / HTTPS)
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                console.error("المتصفح لا يدعم الكاميرا أو البيئة غير آمنة Secure Context");
+                if (statusEl) {
+                    statusEl.innerText = "المتصفح لا يدعم الكاميرا أو البيئة غير آمنة (يمكنك استخدام زر التقاط صورة)";
+                    statusEl.className = 'text-[10px] text-rose-400 font-bold';
+                }
+                return;
+            }
 
             try {
+                stopCameraStreamOnly();
                 if (!zxingReader) {
                     zxingReader = new ZXing.BrowserMultiFormatReader();
                 }
