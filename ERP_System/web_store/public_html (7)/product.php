@@ -155,21 +155,29 @@ include 'header.php';
                     <span class="text-xs text-gray-400 font-bold font-serif">(<?php echo $total_reviews; ?> مراجعة)</span>
                 </div>
 
-                <!-- السعر وتخفيض الخصم -->
-                <div class="flex items-center gap-4 mb-8 bg-royal-sand/30 p-4 rounded-xl border border-royal-gold/5 w-fit">
-                    <span class="text-2xl font-serif font-bold text-royal-darkgold"><?php echo htmlspecialchars($p['price']); ?> <?php echo htmlspecialchars($settings['store_currency'] ?? 'ج.م'); ?></span>
-                    <?php if($p['old_price'] && $p['old_price'] > $p['price']): $discount = round((($p['old_price'] - $p['price']) / $p['old_price']) * 100); ?>
-                        <span class="text-sm text-gray-400 line-through font-serif"><?php echo htmlspecialchars($p['old_price']); ?> <?php echo htmlspecialchars($settings['store_currency'] ?? 'ج.م'); ?></span>
-                        <span class="bg-red-100 text-red-700 text-[10px] font-bold py-1 px-2.5 rounded-full">خصم <?php echo $discount; ?>%</span>
-                    <?php endif; ?>
-                </div>
+                <!-- جلب خيارات الوزن إن كان المنتج يباع بالوزن -->
+                <?php 
+                $weight_options = !empty($p['is_weight_based']) ? getProductWeightOptions($p) : []; 
+                ?>
 
                 <!-- السعر وتخفيض الخصم -->
-                <div class="flex items-center gap-4 mb-6 bg-royal-sand/30 p-4 rounded-xl border border-royal-gold/5 w-fit">
+                <div class="flex flex-wrap items-center gap-4 mb-6 bg-royal-sand/30 p-4 rounded-xl border border-royal-gold/5 w-fit">
                     <span class="text-2xl font-serif font-bold text-royal-darkgold">
-                        <span id="display-product-price"><?php echo htmlspecialchars($p['price']); ?></span>
+                        <span id="display-product-price"><?php 
+                            if (!empty($p['is_weight_based']) && !empty($weight_options)) {
+                                $first_w = (float)$weight_options[0]['weight'];
+                                echo round($p['price'] * $first_w, 2);
+                            } else {
+                                echo htmlspecialchars($p['price']); 
+                            }
+                        ?></span>
                         <span class="text-base font-normal"><?php echo htmlspecialchars($settings['store_currency'] ?? 'ج.م'); ?></span>
                     </span>
+                    <?php if(!empty($p['is_weight_based'])): ?>
+                        <span class="text-xs text-amber-800 bg-amber-100/90 font-bold py-1 px-2.5 rounded-lg border border-amber-200">
+                            (السعر للكيلو: <?php echo htmlspecialchars($p['price']); ?> <?php echo htmlspecialchars($settings['store_currency'] ?? 'ج.م'); ?>)
+                        </span>
+                    <?php endif; ?>
                     <?php if($p['old_price'] && $p['old_price'] > $p['price']): $discount = round((($p['old_price'] - $p['price']) / $p['old_price']) * 100); ?>
                         <span class="text-sm text-gray-400 line-through font-serif"><?php echo htmlspecialchars($p['old_price']); ?> <?php echo htmlspecialchars($settings['store_currency'] ?? 'ج.م'); ?></span>
                         <span class="bg-red-100 text-red-700 text-[10px] font-bold py-1 px-2.5 rounded-full">خصم <?php echo $discount; ?>%</span>
@@ -183,6 +191,50 @@ include 'header.php';
                     <input type="hidden" name="product_name" value="<?php echo htmlspecialchars($p['name']); ?>">
                     <input type="hidden" name="product_price" value="<?php echo $p['price']; ?>">
                     <input type="hidden" name="product_image" value="<?php echo htmlspecialchars($p['image_url']); ?>">
+
+                    <!-- قسم خيارات الوزن لمنتجات الأوزان (ربع، نصف، 3/4، كيلو) -->
+                    <?php if (!empty($p['is_weight_based']) && !empty($weight_options)): ?>
+                        <div class="bg-amber-50/60 p-4 rounded-2xl border border-amber-200/80 space-y-3">
+                            <div class="flex justify-between items-center">
+                                <label class="block text-xs font-bold text-royal-dark flex items-center gap-1.5">
+                                    <i class="fa-solid fa-scale-balanced text-amber-600 text-sm"></i>
+                                    اختر الوزن المطلوب:
+                                </label>
+                                <span class="text-xs text-amber-800 font-bold bg-white px-2.5 py-0.5 rounded-full border border-amber-200 shadow-2xs" id="selected-weight-badge">
+                                    <?php echo htmlspecialchars($weight_options[0]['label']); ?>
+                                </span>
+                            </div>
+
+                            <!-- مربعات وأزرار الأوزان -->
+                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                                <?php foreach ($weight_options as $w_idx => $w_item): 
+                                    $w_val = (float)$w_item['weight'];
+                                    $w_lbl = $w_item['label'];
+                                    $w_calc_price = round($p['price'] * $w_val, 2);
+                                    $is_w_checked = ($w_idx === 0) ? 'checked' : '';
+                                ?>
+                                    <label class="weight-pill-label relative group cursor-pointer border <?php echo $w_idx === 0 ? 'border-amber-500 bg-amber-500/15 text-amber-900 ring-2 ring-amber-500/30 shadow-xs' : 'border-gray-200 bg-white text-gray-700 hover:border-amber-300'; ?> p-3 rounded-xl transition-all select-none flex flex-col items-center justify-center text-center">
+                                        <input type="radio" 
+                                               name="selected_weight_radio" 
+                                               value="<?php echo $w_val; ?>" 
+                                               data-weight="<?php echo $w_val; ?>"
+                                               data-label="<?php echo htmlspecialchars($w_lbl); ?>"
+                                               data-price="<?php echo $w_calc_price; ?>"
+                                               <?php echo $is_w_checked; ?> 
+                                               class="weight-radio-input sr-only">
+                                        
+                                        <span class="font-bold text-xs mb-1 block leading-tight text-gray-800"><?php echo htmlspecialchars($w_lbl); ?></span>
+                                        <span class="text-amber-700 font-serif font-bold text-xs bg-white px-2 py-0.5 rounded border border-amber-200/60 shadow-2xs">
+                                            <?php echo $w_calc_price; ?> <?php echo htmlspecialchars($settings['store_currency'] ?? 'ج.م'); ?>
+                                        </span>
+                                    </label>
+                                <?php endforeach; ?>
+                            </div>
+
+                            <input type="hidden" name="selected_weight" id="hidden_selected_weight" value="<?php echo (float)$weight_options[0]['weight']; ?>">
+                            <input type="hidden" name="weight_label" id="hidden_weight_label" value="<?php echo htmlspecialchars($weight_options[0]['label']); ?>">
+                        </div>
+                    <?php endif; ?>
 
                     <!-- قسم خيارات ومواصفات المنتج (المقاسات، الألوان، السعات) -->
                     <?php if (!empty($grouped_variants)): ?>
@@ -282,14 +334,18 @@ include 'header.php';
                             <label class="block text-[10px] text-gray-400 uppercase tracking-widest font-bold mb-2">الكمية المطلوبة</label>
                             <div class="flex items-center border border-gray-300 h-12 w-full rounded-lg bg-white overflow-hidden shadow-inner">
                                 <button type="button" class="w-10 h-full text-gray-500 hover:bg-gray-100 flex justify-center items-center font-bold text-lg transition-colors qty-minus">-</button>
-                                <input type="number" name="qty" value="1" min="1" class="flex-grow text-center outline-none bg-transparent h-full font-bold pointer-events-none font-serif text-sm" readonly>
+                                <input type="number" name="qty" id="input-prod-qty" value="1" min="1" class="flex-grow text-center outline-none bg-transparent h-full font-bold pointer-events-none font-serif text-sm" readonly>
                                 <button type="button" class="w-10 h-full text-gray-500 hover:bg-gray-100 flex justify-center items-center font-bold text-lg transition-colors qty-plus">+</button>
                             </div>
                         </div>
                         <!-- زر الإضافة -->
                         <div class="w-full sm:w-2/3 flex items-end">
-                            <button type="submit" name="add_to_cart" class="w-full bg-gold-gradient text-white font-bold py-3.5 h-12 text-xs tracking-widest uppercase flex justify-center items-center gap-2 rounded-lg shadow-md bg-gold-gradient-hover btn-shine transition-all">
-                                إضافة للحقيبة <i class="fa-solid fa-bag-shopping"></i>
+                            <button type="submit" name="add_to_cart" id="add-to-cart-submit-btn" class="w-full bg-gold-gradient text-white font-bold py-3.5 h-12 text-xs tracking-widest uppercase flex justify-center items-center gap-2 rounded-lg shadow-md bg-gold-gradient-hover btn-shine transition-all">
+                                <?php if (!empty($p['is_weight_based']) && !empty($weight_options)): ?>
+                                    إضافة (<?php echo htmlspecialchars($weight_options[0]['label']); ?>) للحقيبة <i class="fa-solid fa-bag-shopping"></i>
+                                <?php else: ?>
+                                    إضافة للحقيبة <i class="fa-solid fa-bag-shopping"></i>
+                                <?php endif; ?>
                             </button>
                         </div>
                     </div>
@@ -297,9 +353,122 @@ include 'header.php';
 
                 <script>
                 document.addEventListener('DOMContentLoaded', function() {
-                    const basePrice = <?php echo (float)$p['price']; ?>;
+                    const isWeightBased = <?php echo !empty($p['is_weight_based']) ? 'true' : 'false'; ?>;
+                    const baseKgPrice = <?php echo (float)$p['price']; ?>;
                     const priceDisplay = document.getElementById('display-product-price');
                     const radios = document.querySelectorAll('.variant-radio-input');
+                    const weightRadios = document.querySelectorAll('.weight-radio-input');
+                    const hiddenWeight = document.getElementById('hidden_selected_weight');
+                    const hiddenWeightLabel = document.getElementById('hidden_weight_label');
+                    const weightBadge = document.getElementById('selected-weight-badge');
+                    const btnCart = document.getElementById('add-to-cart-submit-btn');
+
+                    function escapeHtml(str) {
+                        if (!str) return '';
+                        return str.toString()
+                            .replace(/&/g, "&amp;")
+                            .replace(/</g, "&lt;")
+                            .replace(/>/g, "&gt;")
+                            .replace(/"/g, "&quot;")
+                            .replace(/'/g, "&#039;");
+                    }
+
+                    function updateCalculatedPrice() {
+                        let currentWeightFactor = 1.0;
+                        let currentWeightLabel = '';
+
+                        if (isWeightBased && weightRadios.length > 0) {
+                            weightRadios.forEach(wr => {
+                                if (wr.checked) {
+                                    currentWeightFactor = parseFloat(wr.getAttribute('data-weight')) || 1.0;
+                                    currentWeightLabel = wr.getAttribute('data-label') || '';
+                                    
+                                    if (hiddenWeight) hiddenWeight.value = currentWeightFactor;
+                                    if (hiddenWeightLabel) hiddenWeightLabel.value = currentWeightLabel;
+                                    if (weightBadge) weightBadge.textContent = currentWeightLabel;
+
+                                    const parent = wr.closest('.weight-pill-label');
+                                    if (parent) {
+                                        const siblings = parent.parentElement.querySelectorAll('.weight-pill-label');
+                                        siblings.forEach(s => {
+                                            s.className = 'weight-pill-label relative group cursor-pointer border border-gray-200 bg-white text-gray-700 hover:border-amber-300 p-3 rounded-xl transition-all select-none flex flex-col items-center justify-center text-center';
+                                        });
+                                        parent.className = 'weight-pill-label relative group cursor-pointer border border-amber-500 bg-amber-500/15 text-amber-900 ring-2 ring-amber-500/30 shadow-xs p-3 rounded-xl transition-all select-none flex flex-col items-center justify-center text-center';
+                                    }
+                                }
+                            });
+                        }
+
+                        let totalMod = 0;
+                        radios.forEach(r => {
+                            if (r.checked) {
+                                const mod = parseFloat(r.getAttribute('data-price-mod')) || 0;
+                                totalMod += mod;
+
+                                const vType = r.getAttribute('data-type');
+                                const vName = r.getAttribute('data-name');
+                                const lbl = document.querySelector(`.selected-variant-label[data-for-type="${vType}"]`);
+                                if (lbl) lbl.textContent = vName;
+
+                                // 1. تحديث أزرار الألوان (Color Swatches)
+                                const colorSwatch = r.closest('.variant-color-swatch');
+                                if (colorSwatch) {
+                                    const allSwatches = colorSwatch.parentElement.querySelectorAll('.variant-color-swatch');
+                                    allSwatches.forEach(sw => {
+                                        const circle = sw.querySelector('.swatch-circle');
+                                        const check = sw.querySelector('.swatch-check');
+                                        if (circle) circle.classList.remove('ring-2', 'ring-royal-gold', 'ring-offset-2', 'scale-110', 'shadow-md');
+                                        if (check) check.classList.add('opacity-0');
+                                    });
+                                    const activeCircle = colorSwatch.querySelector('.swatch-circle');
+                                    const activeCheck = colorSwatch.querySelector('.swatch-check');
+                                    if (activeCircle) activeCircle.classList.add('ring-2', 'ring-royal-gold', 'ring-offset-2', 'scale-110', 'shadow-md');
+                                    if (activeCheck) activeCheck.classList.remove('opacity-0');
+                                }
+
+                                // 2. تحديث أزرار المقاسات والخيارات الأخرى (Pills)
+                                const parentLabel = r.closest('.variant-pill-label');
+                                if (parentLabel) {
+                                    const siblings = parentLabel.parentElement.querySelectorAll('.variant-pill-label');
+                                    siblings.forEach(s => {
+                                        s.className = 'variant-pill-label relative cursor-pointer border border-gray-200 bg-white text-gray-600 hover:border-gray-300 py-2 px-4 rounded-xl text-xs font-bold transition-all select-none flex items-center gap-2';
+                                    });
+                                    parentLabel.className = 'variant-pill-label relative cursor-pointer border border-royal-gold bg-royal-sand/40 text-royal-dark ring-1 ring-royal-gold py-2 px-4 rounded-xl text-xs font-bold transition-all select-none flex items-center gap-2 shadow-sm';
+                                }
+                            }
+                        });
+
+                        const singleUnitPrice = (baseKgPrice * currentWeightFactor) + totalMod;
+                        const qtyInput = document.getElementById('input-prod-qty');
+                        const qtyVal = parseInt(qtyInput ? qtyInput.value : 1) || 1;
+
+                        if (priceDisplay) {
+                            const newTotal = (singleUnitPrice * qtyVal).toFixed(2);
+                            priceDisplay.textContent = parseFloat(newTotal);
+                        }
+
+                        if (btnCart && isWeightBased && currentWeightLabel) {
+                            btnCart.innerHTML = `إضافة (${escapeHtml(currentWeightLabel)}) للحقيبة <i class="fa-solid fa-bag-shopping ms-1"></i>`;
+                        }
+                    }
+
+                    radios.forEach(r => {
+                        r.addEventListener('change', updateCalculatedPrice);
+                    });
+
+                    weightRadios.forEach(wr => {
+                        wr.addEventListener('change', updateCalculatedPrice);
+                    });
+
+                    document.querySelectorAll('.qty-plus, .qty-minus').forEach(btn => {
+                        btn.addEventListener('click', function() {
+                            setTimeout(updateCalculatedPrice, 20);
+                        });
+                    });
+
+                    updateCalculatedPrice();
+                });
+                </script>
 
                     function updateCalculatedPrice() {
                         let totalMod = 0;

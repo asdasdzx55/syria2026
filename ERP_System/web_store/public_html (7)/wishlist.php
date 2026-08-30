@@ -137,16 +137,22 @@ if (!empty($wishlist_ids)) {
 
                         <img src="<?php echo htmlspecialchars($p['image_url']); ?>" class="w-full h-full object-cover" alt="<?php echo htmlspecialchars($p['name']); ?>">
                         
-                        <!-- زر الإضافة للسلة السريع عند الحوم -->
+                        <!-- زر الإضافة للسلة أو اختيار الوزن السريع عند الحوم -->
                         <div class="absolute inset-x-0 bottom-0 p-3 z-10 add-to-cart-btn">
-                            <form method="POST" action="">
-                                <input type="hidden" name="return_page" value="wishlist.php">
-                                <input type="hidden" name="product_id" value="<?php echo $p['id']; ?>">
-                                <input type="hidden" name="product_name" value="<?php echo htmlspecialchars($p['name']); ?>">
-                                <input type="hidden" name="product_price" value="<?php echo $p['price']; ?>">
-                                <input type="hidden" name="product_image" value="<?php echo htmlspecialchars($p['image_url']); ?>">
-                                <button type="submit" name="add_to_cart" class="w-full bg-royal-charcoal text-white hover:bg-royal-gold hover:text-royal-charcoal text-xs font-bold py-3.5 transition shadow-lg rounded-xl btn-shine">أضف للسلة <i class="fa-solid fa-cart-plus mr-1"></i></button>
-                            </form>
+                            <?php if(!empty($p['is_weight_based'])): ?>
+                                <a href="product.php?id=<?php echo $p['id']; ?>" class="w-full bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold py-3.5 transition shadow-lg rounded-xl btn-shine flex items-center justify-center gap-1.5">
+                                    ⚖️ اختر الوزن <i class="fa-solid fa-arrow-left text-[10px]"></i>
+                                </a>
+                            <?php else: ?>
+                                <form method="POST" action="">
+                                    <input type="hidden" name="return_page" value="wishlist.php">
+                                    <input type="hidden" name="product_id" value="<?php echo $p['id']; ?>">
+                                    <input type="hidden" name="product_name" value="<?php echo htmlspecialchars($p['name']); ?>">
+                                    <input type="hidden" name="product_price" value="<?php echo $p['price']; ?>">
+                                    <input type="hidden" name="product_image" value="<?php echo htmlspecialchars($p['image_url']); ?>">
+                                    <button type="submit" name="add_to_cart" class="w-full bg-royal-charcoal text-white hover:bg-royal-gold hover:text-royal-charcoal text-xs font-bold py-3.5 transition shadow-lg rounded-xl btn-shine">أضف للسلة <i class="fa-solid fa-cart-plus mr-1"></i></button>
+                                </form>
+                            <?php endif; ?>
                         </div>
                     </div>
                     <!-- تفاصيل الكارت -->
@@ -155,7 +161,12 @@ if (!empty($wishlist_ids)) {
                         <a href="product.php?id=<?php echo $p['id']; ?>" class="block text-sm font-semibold text-royal-dark mb-2 hover:text-royal-gold transition-colors duration-300 leading-tight"><?php echo htmlspecialchars($p['name']); ?></a>
                         
                         <div class="flex justify-center items-center gap-2">
-                            <span class="text-royal-darkgold font-serif text-base font-bold"><?php echo htmlspecialchars($p['price']); ?> <?php echo htmlspecialchars($settings['store_currency'] ?? 'ج.م'); ?></span>
+                            <span class="text-royal-darkgold font-serif text-base font-bold">
+                                <?php echo htmlspecialchars($p['price']); ?> <?php echo htmlspecialchars($settings['store_currency'] ?? 'ج.م'); ?>
+                                <?php if(!empty($p['is_weight_based'])): ?>
+                                    <span class="text-[10px] text-gray-400 font-normal">/ كيلو</span>
+                                <?php endif; ?>
+                            </span>
                             <?php if($p['old_price'] && $p['old_price'] > $p['price']): ?>
                                 <span class="text-gray-400 font-serif text-xs line-through"><?php echo htmlspecialchars($p['old_price']); ?> <?php echo htmlspecialchars($settings['store_currency'] ?? 'ج.م'); ?></span>
                             <?php endif; ?>

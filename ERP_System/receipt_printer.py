@@ -3,6 +3,54 @@ import webbrowser
 from datetime import datetime
 import subprocess
 
+CODE128_PATTERNS = [
+    '212222', '222122', '222221', '121223', '121322', '131222', '122213', '122312', '132212', '221213',
+    '221312', '231212', '112232', '122132', '122231', '113222', '123122', '123221', '223211', '221132',
+    '221231', '213212', '223112', '312131', '311222', '321122', '321221', '312212', '322112', '322211',
+    '212123', '212321', '232121', '111323', '131123', '131321', '112313', '132113', '132311', '211313',
+    '231113', '231311', '112133', '112331', '132131', '113123', '113321', '133121', '313121', '211331',
+    '231131', '213113', '213311', '213131', '311123', '311321', '331121', '312113', '312311', '332111',
+    '314111', '221411', '431111', '111224', '111422', '121124', '121421', '141122', '141221', '112214',
+    '112412', '122114', '122411', '142112', '142211', '241211', '221114', '413111', '241112', '134111',
+    '111242', '121142', '121241', '114212', '124112', '124211', '411212', '421112', '421211', '212141',
+    '214121', '412121', '111143', '111341', '131141', '114113', '114311', '411113', '411311', '113141',
+    '114131', '311141', '411131', '211412', '211214', '211232', '2331112'
+]
+
+def generate_code128_svg(text, height=42, bar_width=1.3):
+    text_clean = "".join([c for c in str(text) if 32 <= ord(c) <= 126])
+    if not text_clean:
+        text_clean = "INV-000"
+    values = [ord(c) - 32 for c in text_clean]
+    checksum = (104 + sum((i + 1) * v for i, v in enumerate(values))) % 103
+    pattern_indices = [104] + values + [checksum, 106]
+    
+    widths = []
+    for idx in pattern_indices:
+        pattern = CODE128_PATTERNS[idx]
+        for p in pattern:
+            widths.append(int(p))
+            
+    total_modules = sum(widths)
+    svg_width = total_modules * bar_width
+    
+    rects = []
+    x = 0
+    draw = True
+    for w in widths:
+        rect_w = w * bar_width
+        if draw:
+            rects.append(f'<rect x="{x:.1f}" y="0" width="{rect_w:.1f}" height="{height}" fill="#000" />')
+        x += rect_w
+        draw = not draw
+        
+    rects_str = "".join(rects)
+    svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="{svg_width:.1f}" height="{height + 15}" viewBox="0 0 {svg_width:.1f} {height + 15}" style="margin: 0 auto; display: block;">
+{rects_str}
+<text x="{svg_width/2:.1f}" y="{height + 13}" font-family="Arial, monospace" font-size="12" font-weight="bold" text-anchor="middle" fill="#000">*{text_clean}*</text>
+</svg>'''
+    return svg
+
 def print_salas_receipt(invoice_data, items_list):
     
     shop_ar = invoice_data.get('shop_name_ar', 'اسم المحل')
@@ -189,9 +237,16 @@ def print_salas_receipt(invoice_data, items_list):
             <tr><td style="text-align: right;">المـتـبـقـي</td><td style="text-align: left;">{remain:.2f}</td></tr>
         """
 
+    barcode_text = f"INV-{inv_id}"
+    barcode_svg = generate_code128_svg(barcode_text, height=38, bar_width=1.2)
+
     html_content += f"""
         </table>
         <div class="footer">
+            <div style="margin: 8px 0; text-align: center;">
+                {barcode_svg}
+                <div style="font-size: 10px; font-weight: bold; margin-top: 3px; color: #333;">* امسح الباركود في شاشة المرتجعات *</div>
+            </div>
             <p>{address}</p>
             <p>TEL: {phone}</p>
             <div class="dev-signature">

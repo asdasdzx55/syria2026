@@ -51,118 +51,10 @@ $supported_countries_data = [
         'flag' => '🇪🇬',
         'default_cost' => 50.00,
         'govs' => [
-            'القاهرة', 'الجيزة', 'الإسكندرية', 'القليوبية', 'الدقهلية', 'الشرقية', 'الغربية', 'المنوفية',
+            'القاهرة', 'الجيزة', '6 أكتوبر', 'الشيخ زايد', 'الإسكندرية', 'القليوبية', 'الدقهلية', 'الشرقية', 'الغربية', 'المنوفية',
             'البحيرة', 'كفر الشيخ', 'دمياط', 'الإسماعيلية', 'بورسعيد', 'السويس', 'شمال سيناء', 'جنوب سيناء',
             'بني سويف', 'المنيا', 'الفيوم', 'أسيوط', 'سوهاج', 'قنا', 'الأقصر', 'أسوان', 'البحر الأحمر',
             'الوادي الجديد', 'مرسى مطروح'
-        ]
-    ],
-    'السعودية' => [
-        'code' => 'SA',
-        'currency' => 'ر.س',
-        'currency_en' => 'SAR',
-        'flag' => '🇸🇦',
-        'default_cost' => 25.00,
-        'govs' => [
-            'الرياض', 'مكة المكرمة', 'جدة', 'المدينة المنورة', 'الدمام / المنطقة الشرقية', 'القصيم / بريدة',
-            'عسير / أبها', 'تبوك', 'حائل', 'الحدود الشمالية', 'جازان', 'نجران', 'الباحة', 'الجوف', 'الطائف',
-            'الأحساء', 'الخبر', 'القطيف', 'ينبع', 'حفر الباطن'
-        ]
-    ],
-    'الإمارات' => [
-        'code' => 'AE',
-        'currency' => 'د.إ',
-        'currency_en' => 'AED',
-        'flag' => '🇦🇪',
-        'default_cost' => 20.00,
-        'govs' => [
-            'دبي', 'أبوظبي', 'الشارقة', 'عجمان', 'رأس الخيمة', 'الفجيرة', 'أم القيوين', 'العين'
-        ]
-    ],
-    'سوريا' => [
-        'code' => 'SY',
-        'currency' => 'ل.س',
-        'currency_en' => 'SYP',
-        'flag' => '🇸🇾',
-        'default_cost' => 15000.00,
-        'govs' => [
-            'دمشق', 'ريف دمشق', 'حلب', 'حمص', 'حماة', 'اللاذقية', 'طرطوس', 'إدلب', 'درعا', 'السويداء',
-            'القنيطرة', 'دير الزور', 'الرقة', 'الحسكة'
-        ]
-    ],
-    'العراق' => [
-        'code' => 'IQ',
-        'currency' => 'د.ع',
-        'currency_en' => 'IQD',
-        'flag' => '🇮🇶',
-        'default_cost' => 5000.00,
-        'govs' => [
-            'بغداد', 'البصرة', 'أربيل', 'الموصل / نينوى', 'كركوك', 'السليمانية', 'دهوك', 'النجف الأشرف',
-            'كربلاء المقدسة', 'بابل / الحلة', 'الأنبار', 'ديالى', 'ذي قار / الناصرية', 'ميسان / العمارة',
-            'واسط / الكوت', 'المثنى / السماوة', 'القادسية / الديوانية', 'صلاح الدين'
-        ]
-    ],
-    'لبنان' => [
-        'code' => 'LB',
-        'currency' => 'ل.ل',
-        'currency_en' => 'LBP',
-        'flag' => '🇱🇧',
-        'default_cost' => 300000.00,
-        'govs' => [
-            'بيروت (العاصمة)', 'جبل لبنان', 'طرابلس / الشمال', 'صيدا / الجنوب', 'النبطية', 'البقاع / زحلة',
-            'بعلبك الهرمل', 'عكار', 'كسروان / جبيل'
-        ]
-    ],
-    'الأردن' => [
-        'code' => 'JO',
-        'currency' => 'د.أ',
-        'currency_en' => 'JOD',
-        'flag' => '🇯🇴',
-        'default_cost' => 3.00,
-        'govs' => [
-            'عمان (العاصمة)', 'إربد', 'الزرقاء', 'العقبة', 'السلط / البلقاء', 'مأدبا', 'الكرك', 'معان',
-            'الطفيلة', 'المفرق', 'جرش', 'عجلون'
-        ]
-    ],
-    'الكويت' => [
-        'code' => 'KW',
-        'currency' => 'د.ك',
-        'currency_en' => 'KWD',
-        'flag' => '🇰🇼',
-        'default_cost' => 2.00,
-        'govs' => [
-            'العاصمة (مدينة الكويت)', 'حولي', 'الأحمدي', 'الفروانية', 'الجهراء', 'مبارك الكبير'
-        ]
-    ],
-    'قطر' => [
-        'code' => 'QA',
-        'currency' => 'ر.ق',
-        'currency_en' => 'QAR',
-        'flag' => '🇶🇦',
-        'default_cost' => 20.00,
-        'govs' => [
-            'الدوحة', 'الريان', 'الوكرة', 'الخور', 'أم صلال', 'الظعاين', 'الشمال', 'الشحانية'
-        ]
-    ],
-    'سلطنة عمان' => [
-        'code' => 'OM',
-        'currency' => 'ر.ع',
-        'currency_en' => 'OMR',
-        'flag' => '🇴🇲',
-        'default_cost' => 2.00,
-        'govs' => [
-            'مسقط', 'ظفار (صلالة)', 'مسندم', 'البريمي', 'الداخلية (نزوى)', 'شمال الباطنة (صحار)',
-            'جنوب الباطنة', 'جنوب الشرقية (صور)', 'شمال الشرقية', 'الظاهرة', 'الوسطى'
-        ]
-    ],
-    'البحرين' => [
-        'code' => 'BH',
-        'currency' => 'د.ب',
-        'currency_en' => 'BHD',
-        'flag' => '🇧🇭',
-        'default_cost' => 2.00,
-        'govs' => [
-            'المنامة (العاصمة)', 'المحرق', 'المحافظة الشمالية', 'المحافظة الجنوبية'
         ]
     ]
 ];
@@ -323,6 +215,9 @@ try {
     try { $pdo->exec("ALTER TABLE products ADD COLUMN stock DECIMAL(10,2) DEFAULT 100"); } catch (Exception $e) {}
     try { $pdo->exec("ALTER TABLE products ADD COLUMN is_pos_visible TINYINT(1) DEFAULT 1"); } catch (Exception $e) {}
     try { $pdo->exec("ALTER TABLE products ADD COLUMN synced INT DEFAULT 1"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE products ADD COLUMN is_weight_based TINYINT(1) DEFAULT 0"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE products ADD COLUMN weight_unit VARCHAR(50) DEFAULT 'كيلو'"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE products ADD COLUMN weight_options TEXT DEFAULT NULL"); } catch (Exception $e) {}
 
     try { $pdo->exec("ALTER TABLE orders ADD COLUMN country VARCHAR(100) DEFAULT 'مصر'"); } catch (Exception $e) {}
     try { $pdo->exec("ALTER TABLE orders ADD COLUMN currency VARCHAR(50) DEFAULT 'ج.م'"); } catch (Exception $e) {}
@@ -602,6 +497,66 @@ try {
         }
     }
 
+    // ترقيات الأعمدة إن لم تكن موجودة (لمنع المشاكل في MySQL و SQLite)
+    try { $pdo->exec("ALTER TABLE products ADD COLUMN old_price DECIMAL(10,2) DEFAULT NULL"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE products ADD COLUMN barcode VARCHAR(100) DEFAULT NULL"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE products ADD COLUMN barcode2 VARCHAR(100) DEFAULT NULL"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE products ADD COLUMN barcode3 VARCHAR(100) DEFAULT NULL"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE products ADD COLUMN all_barcodes TEXT DEFAULT NULL"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE products ADD COLUMN local_code VARCHAR(50) DEFAULT NULL"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE products ADD COLUMN cost DECIMAL(10,2) DEFAULT 0"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE products ADD COLUMN stock DECIMAL(10,2) DEFAULT 100"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE products ADD COLUMN is_pos_visible TINYINT(1) DEFAULT 1"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE products ADD COLUMN synced INT DEFAULT 1"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE products ADD COLUMN is_weight_based TINYINT(1) DEFAULT 0"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE products ADD COLUMN weight_unit VARCHAR(50) DEFAULT 'كيلو'"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE products ADD COLUMN weight_options TEXT DEFAULT NULL"); } catch (Exception $e) {}
+
+    try { $pdo->exec("ALTER TABLE orders ADD COLUMN country VARCHAR(100) DEFAULT 'مصر'"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE orders ADD COLUMN currency VARCHAR(50) DEFAULT 'ج.م'"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE orders ADD COLUMN governorate VARCHAR(100) DEFAULT 'القاهرة'"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE orders ADD COLUMN coupon_code VARCHAR(50) DEFAULT NULL"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE orders ADD COLUMN discount_amount DECIMAL(10,2) DEFAULT 0"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE orders ADD COLUMN shipping_cost DECIMAL(10,2) DEFAULT 0"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE orders ADD COLUMN delivery_lat VARCHAR(50) DEFAULT NULL"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE orders ADD COLUMN delivery_lng VARCHAR(50) DEFAULT NULL"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE orders ADD COLUMN delivery_distance_km DECIMAL(10,2) DEFAULT NULL"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE orders ADD COLUMN shipping_type VARCHAR(50) DEFAULT 'flat'"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE orders ADD COLUMN source VARCHAR(50) DEFAULT 'web'"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE orders ADD COLUMN cashier_name VARCHAR(100) DEFAULT NULL"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE orders ADD COLUMN delivery_person VARCHAR(100) DEFAULT NULL"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE orders ADD COLUMN delivery_fee DECIMAL(10,2) DEFAULT 0"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE orders ADD COLUMN synced INT DEFAULT 1"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE users ADD COLUMN email VARCHAR(255) DEFAULT NULL"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE orders ADD COLUMN customer_email VARCHAR(255) DEFAULT NULL"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE orders ADD COLUMN user_id INT DEFAULT NULL"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE users ADD COLUMN phone VARCHAR(50) DEFAULT NULL"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE users ADD COLUMN country VARCHAR(100) DEFAULT 'مصر'"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE users ADD COLUMN street VARCHAR(255) DEFAULT NULL"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE users ADD COLUMN building VARCHAR(50) DEFAULT NULL"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE users ADD COLUMN floor VARCHAR(50) DEFAULT NULL"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE users ADD COLUMN apartment VARCHAR(50) DEFAULT NULL"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE users ADD COLUMN landmark VARCHAR(255) DEFAULT NULL"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE users ADD COLUMN gov_id INT DEFAULT NULL"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE categories ADD COLUMN parent_id INT DEFAULT NULL"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE products ADD COLUMN sub_category VARCHAR(100) DEFAULT NULL"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE shipping_zones ADD COLUMN country_name VARCHAR(100) DEFAULT 'مصر'"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE shipping_zones ADD COLUMN country_code VARCHAR(10) DEFAULT 'EG'"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE shipping_zones ADD COLUMN currency_symbol VARCHAR(50) DEFAULT 'ج.م'"); } catch (Exception $e) {}
+
+    // محاولة إنشاء جدول المفضلة بشكل منفصل للتأكد من الهجرة لقاعدة البيانات الحالية
+    try {
+        if ($db_type === 'sqlite') {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS wishlist (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, product_id INTEGER NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )");
+        } else {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS wishlist (
+                id INT AUTO_INCREMENT PRIMARY KEY, user_id INT NOT NULL, product_id INT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )");
+        }
+    } catch (Exception $e) {}
+
     // إدخال مستخدم المدير الافتراضي بأمان تام
     if ($pdo->query("SELECT COUNT(*) FROM users")->fetchColumn() == 0) {
         $hash = password_hash('admin123', PASSWORD_DEFAULT);
@@ -609,46 +564,45 @@ try {
         $stmt_admin_seed->execute(['admin', $hash, 'admin']);
     }
 
-    // إدخال وتحديث مناطق الشحن لجميع الدول المدعومة
+    // إدخال وتحديث مناطق الشحن لمحافظات جمهورية مصر العربية فقط
     try {
-        $existing_countries_count = $pdo->query("SELECT COUNT(DISTINCT country_name) FROM shipping_zones WHERE country_name IS NOT NULL AND country_name != ''")->fetchColumn();
-        if ($existing_countries_count < 2) {
-            $stmt_insert_zone = $pdo->prepare("INSERT INTO shipping_zones (country_name, country_code, currency_symbol, gov_name, cost, is_active) VALUES (?, ?, ?, ?, ?, 1)");
-            $check_exist = $pdo->prepare("SELECT COUNT(*) FROM shipping_zones WHERE country_name = ? AND gov_name = ?");
-            
-            foreach ($supported_countries_data as $c_name => $c_data) {
-                foreach ($c_data['govs'] as $gov) {
-                    $check_exist->execute([$c_name, $gov]);
-                    if ($check_exist->fetchColumn() == 0) {
-                        $stmt_insert_zone->execute([
-                            $c_name,
-                            $c_data['code'],
-                            $c_data['currency'],
-                            $gov,
-                            $c_data['default_cost']
-                        ]);
-                    }
-                }
+        $pdo->exec("DELETE FROM shipping_zones WHERE country_name != 'مصر' OR country_name IS NULL");
+        $stmt_insert_zone = $pdo->prepare("INSERT INTO shipping_zones (country_name, country_code, currency_symbol, gov_name, cost, is_active) VALUES ('مصر', 'EG', 'ج.م', ?, ?, 1)");
+        $check_exist = $pdo->prepare("SELECT COUNT(*) FROM shipping_zones WHERE country_name = 'مصر' AND gov_name = ?");
+        
+        foreach ($egypt_govs as $gov) {
+            $check_exist->execute([$gov]);
+            if ($check_exist->fetchColumn() == 0) {
+                $stmt_insert_zone->execute([$gov, 50.00]);
             }
-            $pdo->exec("UPDATE shipping_zones SET country_name = 'مصر', country_code = 'EG', currency_symbol = 'ج.م' WHERE country_name IS NULL OR country_name = ''");
         }
+        $pdo->exec("UPDATE shipping_zones SET country_name = 'مصر', country_code = 'EG', currency_symbol = 'ج.م'");
     } catch (Exception $e) {}
 
-    // إعدادات المتجر الافتراضية العامة مع لوحة الألوان المخصصة (Theme Colors) وخيارات الدول والعملات
+    // إعدادات المتجر الافتراضية العامة مع لوحة الألوان المخصصة (Theme Colors) - مصر فقط
     $default_settings = [
         'store_name' => 'سوبر ماركت المنزل السوري',
-        'store_tagline' => 'البيت بيتك لكل المنتجات الغذائية والمؤونة الشامية الأصيلة',
+        'store_tagline' => 'البيت بيتك لكل المنتجات الغذائية والمؤونة الشامية الأصيلة في مصر',
         'store_description' => 'سوبر ماركت المنزل السوري - تشكيلة شاملة من المواد التموينية، الأجبان والألبان الشامية، الزيوت والمكدوس، البهارات والمكسرات والحلويات بأعلى جودة.',
         'store_logo' => '',
         'store_favicon' => '',
         'store_currency' => 'ج.م',
         'api_secret_key' => 'syrian_home_pos_secret_token_2026',
         
-        // خيارات الدول والشحن متعدد العملات
+        // خيارات الدولة والعملة (مصر فقط)
         'default_country' => 'مصر',
-        'enable_multi_country' => '1',
-        'preferred_currency_mode' => 'local', // 'local' (عملة كل بلد) أو 'usd' (الدولار) أو 'fixed'
-        'active_countries' => json_encode(array_keys($supported_countries_data), JSON_UNESCAPED_UNICODE),
+        'enable_multi_country' => '0',
+        'preferred_currency_mode' => 'fixed',
+        'active_countries' => json_encode(['مصر'], JSON_UNESCAPED_UNICODE),
+        
+        // نظام الشحن الذكي بالكيلومتر (القاهرة، الجيزة، 6 أكتوبر)
+        'enable_km_shipping' => '1',
+        'km_shipping_govs' => json_encode(['القاهرة', 'الجيزة', '6 أكتوبر', 'الشيخ زايد', 'القليوبية'], JSON_UNESCAPED_UNICODE),
+        'store_lat' => '30.0444',
+        'store_lng' => '31.2357',
+        'store_address_name' => 'المحل الرئيسي / مركز الشحن والتوزيع',
+        'km_rate' => '2',
+        'km_base_min_price' => '25',
         
         // لوحة الألوان والتصميم (Theme Colors)
         'theme_primary_color' => '#15803d',
@@ -662,22 +616,22 @@ try {
         'theme_btn_text' => '#ffffff',
         
         'home_banner' => 'placeholder.php?w=1920&h=800',
-        'announcement_bar' => '🌟 أهلاً بكم في سوبر ماركت المنزل السوري - أجود المنتجات الشامية والمواد التموينية الطازجة يومياً!',
+        'announcement_bar' => '🌟 أهلاً بكم في سوبر ماركت المنزل السوري - توصيل سريع لجميع المحافظات المصرية!',
         'contact_phone' => '01012345678', 
         'contact_email' => 'info@almanzel-alsoury.com',
         'social_whatsapp' => '01012345678', 
         'social_facebook' => '', 
         'social_instagram' => '',
-        'policy_return' => "• يحق للعميل طلب الاستبدال أو الاسترجاع خلال 14 يوماً من تاريخ استلام الشحنة وفقاً لأحكام حماية المستهلك.
+        'policy_return' => "• يحق للعميل طلب الاستبدال أو الاسترجاع خلال 14 يوماً من تاريخ استلام الشحنة وفقاً لأحكام قانون حماية المستهلك المصري.
 • يشترط أن يكون المنتج في حالته الأصلية وبغلافه الأصلي غير المفتوح أو المستخدم مع كامل ملحقاته وفاتورة الشراء.
 • في حالة وجود عيب مصنعي أو خطأ في المنتج المستلم، يتحمل المتجر كافة تكاليف الشحن والإرجاع بالكامل دون أي رسوم على العميل.
 • لا تقبل المنتجات ذات الاستخدام الشخصي أو المخصصة بطلب خاص بعد فتح غلافها المغلق حفاظاً على الصحة العامة.
-• يتم فحص المنتج فور وصوله لمستودعاتنا ويتم استرداد المبلغ خلال 3 إلى 5 أيام عمل عبر نفس وسيلة الدفع أو التحويل البنكي / المحافظ الإلكترونية.",
-        'policy_shipping' => "• نوفر خدمات الشحن السريع والتوصيل المباشر لكافة المحافظات والمدن والدول العربية المعتمدة.
-• يستغرق التوصيل عادةً من 24 إلى 72 ساعة داخل المدن الرئيسية، ومن 3 إلى 5 أيام عمل لباقي المناطق أو الشحن الدولي.
+• يتم فحص المنتج فور وصوله لمستودعاتنا ويتم استرداد المبلغ خلال 3 إلى 5 أيام عمل عبر فودافون كاش أو إنستا باي أو التحويل البنكي.",
+        'policy_shipping' => "• نوفر خدمات الشحن السريع والتوصيل المباشر لكافة محافظات ومدن جمهورية مصر العربية.
+• يستغرق التوصيل عادةً من 24 إلى 48 ساعة داخل القاهرة والجيزة والإسكندرية، ومن يومين إلى 4 أيام عمل لباقي المحافظات.
 • يتم تزويد العميل برقم تتبع فور تجهيز الشحنة مع إمكانية متابعة خط سير الطلب لحظياً عبر صفحة 'تتبع طلبك'.
 • يرجى التأكد من كتابة العنوان بالتفصيل ورقم هاتف متاح لضمان سرعة وسهولة تواصل مندوب التوصيل.",
-        'policy_payment' => "• نوفر وسائل دفع متعددة وآمنة تناسب جميع الدول: الدفع نقداً عند الاستلام (كاش)، المحافظ الإلكترونية، إنستا باي، محفظة شام كاش، باي بال، وبطاقات الدفع الإلكتروني (فيزا / ماستركارد / مدى).
+        'policy_payment' => "• نوفر وسائل دفع محلية سهلة وآمنة: الدفع نقداً عند الاستلام (كاش)، المحافظ الإلكترونية (فودافون كاش / أورانج / اتصالات / وي)، تحويل إنستا باي (InstaPay)، وبطاقات الدفع الإلكتروني (فيزا / ماستركارد / ميزة).
 • جميع المعاملات البنكية والمدفوعات مشفرة ومحمية بأعلى بروتوكولات الأمان والحماية المصرفية والتشفير العالمي SSL.
 • لا نقوم بحفظ أو تخزين أي بيانات للبطاقات الائتمانية أو الحسابات البنكية على خوادمنا نهائياً.",
         'policy_privacy' => "• نلتزم التزاماً تاماً بحماية خصوصية وأمان بياناتك الشخصية والحفاظ على سريتها المطلقة.
@@ -696,10 +650,10 @@ try {
         'instapay_enabled' => '1',
         'instapay_address' => 'syrianhome@instapay',
         'instapay_name' => 'سوبر ماركت المنزل السوري',
-        'cham_cash_enabled' => '1',
-        'cham_cash_number' => '0987654321',
-        'cham_cash_name' => 'المنزل السوري',
-        'syriatel_cash_number' => '0987654321',
+        'cham_cash_enabled' => '0',
+        'cham_cash_number' => '',
+        'cham_cash_name' => '',
+        'syriatel_cash_number' => '',
         'paypal_enabled' => '0',
         'paypal_email' => '',
         'paypal_client_id' => '',
@@ -718,6 +672,16 @@ try {
             $pdo->prepare("UPDATE settings SET setting_value = ? WHERE key_name = 'store_name'")->execute([$val]);
         }
     }
+
+    // تطبيق وتثبيت إعدادات مصر فقط في قاعدة البيانات الحالية
+    try {
+        $pdo->exec("UPDATE settings SET setting_value = 'مصر' WHERE key_name = 'default_country'");
+        $pdo->exec("UPDATE settings SET setting_value = 'ج.م' WHERE key_name = 'store_currency'");
+        $pdo->exec("UPDATE settings SET setting_value = '0' WHERE key_name = 'enable_multi_country'");
+        $pdo->exec("UPDATE settings SET setting_value = 'fixed' WHERE key_name = 'preferred_currency_mode'");
+        $pdo->exec("UPDATE settings SET setting_value = '0' WHERE key_name = 'cham_cash_enabled'");
+        $pdo->exec("UPDATE settings SET setting_value = '0' WHERE key_name = 'paypal_enabled'");
+    } catch (Exception $e) {}
 
 } catch (PDOException $e) {
     $msg = "خطأ في تهيئة قاعدة البيانات: " . $e->getMessage();
@@ -842,6 +806,36 @@ function isAdmin() {
     return isset($_SESSION['role']) && $_SESSION['role'] === 'admin';
 }
 
+// دالة استخراج وتنسيق خيارات الوزن لمنتجات الأوزان (سوبر ماركت المنزل السوري)
+function getProductWeightOptions($product) {
+    if (!empty($product['weight_options'])) {
+        if (is_array($product['weight_options'])) {
+            return $product['weight_options'];
+        }
+        $decoded = json_decode($product['weight_options'], true);
+        if (is_array($decoded) && !empty($decoded)) {
+            return $decoded;
+        }
+        // في حال تم تخزينها كسلسلة نصية مفصولة بفواصل
+        $parts = explode(',', $product['weight_options']);
+        $opts = [];
+        foreach ($parts as $p) {
+            $kv = explode(':', trim($p));
+            if (count($kv) >= 2) {
+                $opts[] = ['weight' => (float)$kv[0], 'label' => trim($kv[1])];
+            }
+        }
+        if (!empty($opts)) return $opts;
+    }
+    // الخيارات القياسية الافتراضية لمنتجات الوزن (ربع، نصف، 3/4، كيلو)
+    return [
+        ['weight' => 0.25, 'label' => 'ربع كيلو (250 غرام)'],
+        ['weight' => 0.50, 'label' => 'نصف كيلو (500 غرام)'],
+        ['weight' => 0.75, 'label' => 'ثلاثة أرباع كيلو (750 غرام)'],
+        ['weight' => 1.00, 'label' => 'كيلو كامل (1000 غرام)']
+    ];
+}
+
 // ==========================================
 // 4. معالجة إضافة المنتجات للسلة (عامة)
 // ==========================================
@@ -852,10 +846,25 @@ if (isset($_POST['add_to_cart'])) {
     $prod_name = trim($_POST['product_name']);
     $prod_image = trim($_POST['product_image']);
     
+    // فحص خيار الوزن المختار (Weight-Based Products)
+    $selected_weight = isset($_POST['selected_weight']) && is_numeric($_POST['selected_weight']) ? (float)$_POST['selected_weight'] : null;
+    $weight_label = isset($_POST['weight_label']) ? trim($_POST['weight_label']) : '';
+    
     // معالجة الخيارات والمواصفات المختارة (Variants)
     $selected_variants = isset($_POST['selected_variants']) ? $_POST['selected_variants'] : [];
     $variant_text_parts = [];
     $total_price_mod = 0.0;
+    
+    if ($selected_weight !== null && $selected_weight > 0) {
+        $final_unit_price = round($base_price * $selected_weight, 2);
+        if (!empty($weight_label)) {
+            $variant_text_parts[] = 'الوزن: ' . $weight_label;
+        } else {
+            $variant_text_parts[] = 'الوزن: ' . $selected_weight . ' كجم';
+        }
+    } else {
+        $final_unit_price = $base_price;
+    }
     
     if (!empty($selected_variants) && is_array($selected_variants)) {
         foreach ($selected_variants as $v_type => $v_val) {
@@ -875,10 +884,10 @@ if (isset($_POST['add_to_cart'])) {
     }
     
     $variant_summary = !empty($variant_text_parts) ? implode(' | ', $variant_text_parts) : '';
-    $final_unit_price = $base_price + $total_price_mod;
+    $final_unit_price += $total_price_mod;
     $item_display_name = $prod_name . (!empty($variant_summary) ? ' (' . $variant_summary . ')' : '');
     
-    // مفتاح فريد للعنصر في السلة يجمع معرّف المنتج مع خياراته المحددة
+    // مفتاح فريد للعنصر في السلة يجمع معرّف المنتج مع خياراته والوزن
     $cart_key = !empty($variant_summary) ? ($id . '_' . substr(md5($variant_summary), 0, 8)) : (string)$id;
     
     if (!isset($_SESSION['cart'])) {
@@ -891,9 +900,12 @@ if (isset($_POST['add_to_cart'])) {
         $_SESSION['cart'][$cart_key] = [
             'product_id' => $id,
             'name' => $item_display_name,
+            'base_price' => $base_price,
             'price' => $final_unit_price,
             'image' => $prod_image,
             'qty' => $qty_to_add,
+            'weight' => $selected_weight,
+            'weight_label' => $weight_label,
             'variants' => $variant_summary
         ];
     }

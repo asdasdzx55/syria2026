@@ -163,7 +163,7 @@ if (isset($_POST['update_meta_pixel'])) {
     exit;
 }
 
-// 1.2. تحديث إعدادات بوابات الدفع الإلكتروني
+// 1.2. تحديث إعدادات بوابات الدفع الإلكتروني (مصر فقط)
 if (isset($_POST['update_payment_settings'])) {
     $pay_settings = [
         'cod_enabled' => isset($_POST['cod_enabled']) ? '1' : '0',
@@ -172,13 +172,13 @@ if (isset($_POST['update_payment_settings'])) {
         'instapay_enabled' => isset($_POST['instapay_enabled']) ? '1' : '0',
         'instapay_address' => trim($_POST['instapay_address'] ?? ''),
         'instapay_name' => trim($_POST['instapay_name'] ?? ''),
-        'cham_cash_enabled' => isset($_POST['cham_cash_enabled']) ? '1' : '0',
-        'cham_cash_number' => trim($_POST['cham_cash_number'] ?? ''),
-        'cham_cash_name' => trim($_POST['cham_cash_name'] ?? ''),
-        'syriatel_cash_number' => trim($_POST['syriatel_cash_number'] ?? ''),
-        'paypal_enabled' => isset($_POST['paypal_enabled']) ? '1' : '0',
-        'paypal_email' => trim($_POST['paypal_email'] ?? ''),
-        'paypal_client_id' => trim($_POST['paypal_client_id'] ?? ''),
+        'cham_cash_enabled' => '0',
+        'cham_cash_number' => '',
+        'cham_cash_name' => '',
+        'syriatel_cash_number' => '',
+        'paypal_enabled' => '0',
+        'paypal_email' => '',
+        'paypal_client_id' => '',
         'paymob_enabled' => isset($_POST['paymob_enabled']) ? '1' : '0',
         'paymob_api_key' => trim($_POST['paymob_api_key'] ?? ''),
         'paymob_integration_id_card' => trim($_POST['paymob_integration_id_card'] ?? ''),
@@ -200,22 +200,28 @@ if (isset($_POST['update_payment_settings'])) {
     exit;
 }
 
-// 1.3. تحديث إعدادات الدول العامة والعملات المفضلة
-if (isset($_POST['update_country_settings'])) {
-    $enable_multi = isset($_POST['enable_multi_country']) ? '1' : '0';
-    $def_country = trim($_POST['default_country'] ?? 'مصر');
-    $curr_mode = trim($_POST['preferred_currency_mode'] ?? 'local');
-    $selected_countries = isset($_POST['active_countries']) && is_array($_POST['active_countries']) ? $_POST['active_countries'] : ['مصر'];
-    $active_countries_json = json_encode(array_values($selected_countries), JSON_UNESCAPED_UNICODE);
+// 1.25 تحديث إعدادات الشحن الذكي بالكيلومتر لمناطق القاهرة الكبرى
+if (isset($_POST['update_km_shipping_settings'])) {
+    $enable_km = isset($_POST['enable_km_shipping']) ? '1' : '0';
+    $store_lat = trim($_POST['store_lat'] ?? '30.0444');
+    $store_lng = trim($_POST['store_lng'] ?? '31.2357');
+    $store_address = trim($_POST['store_address_name'] ?? '');
+    $km_rate = (float)($_POST['km_rate'] ?? 2.00);
+    $km_base_min_price = (float)($_POST['km_base_min_price'] ?? 25.00);
+    $selected_govs = isset($_POST['km_govs']) && is_array($_POST['km_govs']) ? array_values($_POST['km_govs']) : ['القاهرة', 'الجيزة', '6 أكتوبر', 'الشيخ زايد'];
+    $km_govs_json = json_encode($selected_govs, JSON_UNESCAPED_UNICODE);
 
-    $settings_to_update = [
-        'enable_multi_country' => $enable_multi,
-        'default_country' => $def_country,
-        'preferred_currency_mode' => $curr_mode,
-        'active_countries' => $active_countries_json
+    $km_settings = [
+        'enable_km_shipping' => $enable_km,
+        'store_lat' => $store_lat,
+        'store_lng' => $store_lng,
+        'store_address_name' => $store_address,
+        'km_rate' => $km_rate,
+        'km_base_min_price' => $km_base_min_price,
+        'km_shipping_govs' => $km_govs_json
     ];
 
-    foreach ($settings_to_update as $k => $v) {
+    foreach ($km_settings as $k => $v) {
         $stmt = $pdo->prepare("SELECT COUNT(*) FROM settings WHERE key_name = ?");
         $stmt->execute([$k]);
         if ($stmt->fetchColumn() > 0) {
@@ -225,74 +231,59 @@ if (isset($_POST['update_country_settings'])) {
         }
     }
 
-    header("Location: admin_settings.php?tab=shipping&country=" . urlencode($def_country) . "&msg=country_settings_updated");
+    header("Location: admin_settings.php?tab=shipping&msg=km_shipping_updated");
     exit;
 }
 
-// 1.4. تحديث أسعار وحالة مناطق الشحن لدولة معينة
+// 1.3. تحديث أسعار وحالة مناطق ومحافظات الشحن في مصر
 if (isset($_POST['update_shipping_zones'])) {
-    $current_country = trim($_POST['country_filter'] ?? 'مصر');
     $costs = isset($_POST['gov_cost']) && is_array($_POST['gov_cost']) ? $_POST['gov_cost'] : [];
     $active_status = isset($_POST['gov_active']) ? $_POST['gov_active'] : [];
-    $currencies = isset($_POST['gov_currency']) && is_array($_POST['gov_currency']) ? $_POST['gov_currency'] : [];
 
-    $stmt_update = $pdo->prepare("UPDATE shipping_zones SET cost = ?, is_active = ?, currency_symbol = ? WHERE id = ?");
+    $stmt_update = $pdo->prepare("UPDATE shipping_zones SET cost = ?, is_active = ?, currency_symbol = 'ج.م', country_name = 'مصر', country_code = 'EG' WHERE id = ?");
     foreach($costs as $id => $cost) {
         $is_active = isset($active_status[$id]) ? 1 : 0;
-        $curr = isset($currencies[$id]) ? trim($currencies[$id]) : ($supported_countries_data[$current_country]['currency'] ?? 'ج.م');
-        $stmt_update->execute([$cost, $is_active, $curr, $id]);
+        $stmt_update->execute([$cost, $is_active, $id]);
     }
-    header("Location: admin_settings.php?tab=shipping&country=" . urlencode($current_country) . "&msg=shipping_updated");
+    header("Location: admin_settings.php?tab=shipping&msg=shipping_updated");
     exit;
 }
 
-// 1.5. تطبيق سعر شحن موحد على جميع محافظات دولة
+// 1.4. تطبيق سعر شحن موحد على جميع محافظات مصر
 if (isset($_POST['mass_update_country_cost'])) {
-    $target_country = trim($_POST['country_filter'] ?? 'مصر');
     $mass_cost = (float)($_POST['mass_cost'] ?? 0);
-    $stmt_mass = $pdo->prepare("UPDATE shipping_zones SET cost = ? WHERE country_name = ?");
-    $stmt_mass->execute([$mass_cost, $target_country]);
-    header("Location: admin_settings.php?tab=shipping&country=" . urlencode($target_country) . "&msg=mass_updated");
+    $stmt_mass = $pdo->prepare("UPDATE shipping_zones SET cost = ? WHERE country_name = 'مصر' OR country_name IS NULL");
+    $stmt_mass->execute([$mass_cost]);
+    header("Location: admin_settings.php?tab=shipping&msg=mass_updated");
     exit;
 }
 
-// 1.6. إضافة محافظة أو مدينة جديدة لدولة
+// 1.5. إضافة محافظة أو مدينة مصرية جديدة
 if (isset($_POST['add_new_governorate'])) {
-    $target_country = trim($_POST['target_country'] ?? 'مصر');
     $new_gov_name = trim($_POST['new_gov_name'] ?? '');
     $new_gov_cost = (float)($_POST['new_gov_cost'] ?? 50.00);
-    $country_info = $supported_countries_data[$target_country] ?? ['code' => 'XX', 'currency' => 'ج.م'];
 
     if (!empty($new_gov_name)) {
-        $stmt_check = $pdo->prepare("SELECT COUNT(*) FROM shipping_zones WHERE country_name = ? AND gov_name = ?");
-        $stmt_check->execute([$target_country, $new_gov_name]);
+        $stmt_check = $pdo->prepare("SELECT COUNT(*) FROM shipping_zones WHERE gov_name = ?");
+        $stmt_check->execute([$new_gov_name]);
         if ($stmt_check->fetchColumn() == 0) {
-            $pdo->prepare("INSERT INTO shipping_zones (country_name, country_code, currency_symbol, gov_name, cost, is_active) VALUES (?, ?, ?, ?, ?, 1)")
-                ->execute([$target_country, $country_info['code'] ?? 'XX', $country_info['currency'] ?? 'ج.م', $new_gov_name, $new_gov_cost]);
+            $pdo->prepare("INSERT INTO shipping_zones (country_name, country_code, currency_symbol, gov_name, cost, is_active) VALUES ('مصر', 'EG', 'ج.م', ?, ?, 1)")
+                ->execute([$new_gov_name, $new_gov_cost]);
         }
     }
-    header("Location: admin_settings.php?tab=shipping&country=" . urlencode($target_country) . "&msg=gov_added");
+    header("Location: admin_settings.php?tab=shipping&msg=gov_added");
     exit;
 }
 
-// 1.7. حذف محافظة من دولة
+// 1.6. حذف محافظة
 if (isset($_GET['action']) && $_GET['action'] === 'delete_gov' && isset($_GET['gov_id'])) {
     $gov_id = (int)$_GET['gov_id'];
-    $c_return = trim($_GET['country'] ?? 'مصر');
     $pdo->prepare("DELETE FROM shipping_zones WHERE id = ?")->execute([$gov_id]);
-    header("Location: admin_settings.php?tab=shipping&country=" . urlencode($c_return) . "&msg=gov_deleted");
+    header("Location: admin_settings.php?tab=shipping&msg=gov_deleted");
     exit;
 }
 
-$selected_country_tab = isset($_GET['country']) && !empty($_GET['country']) ? trim($_GET['country']) : ($settings['default_country'] ?? 'مصر');
-$active_countries_list = !empty($settings['active_countries']) ? json_decode($settings['active_countries'], true) : array_keys($supported_countries_data);
-if (!is_array($active_countries_list) || empty($active_countries_list)) {
-    $active_countries_list = array_keys($supported_countries_data);
-}
-
-$shipping_zones = $pdo->prepare("SELECT * FROM shipping_zones WHERE country_name = ? ORDER BY id ASC");
-$shipping_zones->execute([$selected_country_tab]);
-$shipping_zones = $shipping_zones->fetchAll(PDO::FETCH_ASSOC);
+$shipping_zones = $pdo->query("SELECT * FROM shipping_zones WHERE country_name = 'مصر' OR country_name IS NULL ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC);
 
 // 2. إضافة صورة جديدة للسلايدر
 if (isset($_POST['add_slide'])) {
@@ -426,6 +417,7 @@ $active_tab = $_GET['tab'] ?? (isset($_GET['edit_cat_id']) ? 'categories' : 'gen
             elseif($_GET['msg'] == 'meta_updated') echo 'تم تحديث وتفعيل إعدادات Meta Pixel بنجاح!';
             elseif($_GET['msg'] == 'payments_updated') echo 'تم تحديث وتفعيل إعدادات بوابات ووسائل الدفع بنجاح!';
             elseif($_GET['msg'] == 'shipping_updated') echo 'تم تحديث أسعار وحالة مناطق الشحن بنجاح!';
+            elseif($_GET['msg'] == 'km_shipping_updated') echo 'تم حفظ وتحديث إعدادات الشحن الذكي بالكيلومتر وموقع المحل بنجاح!';
             elseif($_GET['msg'] == 'slide_added') echo 'تم إضافة شريحة البانر الجديد بنجاح!';
             elseif($_GET['msg'] == 'slide_deleted') echo 'تم حذف شريحة السلايدر بنجاح!';
             elseif($_GET['msg'] == 'cat_added') echo 'تم إضافة القسم الجديد بنجاح!';
@@ -877,15 +869,15 @@ $active_tab = $_GET['tab'] ?? (isset($_GET['edit_cat_id']) ? 'categories' : 'gen
     </script>
     <?php endif; ?>
 
-    <!-- TAB 1: 💳 وسائل وبوابات الدفع الإلكتروني -->
+    <!-- TAB 1: 💳 وسائل وبوابات الدفع الإلكتروني (مصر) -->
     <?php if ($active_tab === 'payments'): ?>
     <div class="bg-white p-6 border border-royal-gold/10 shadow-sm mb-8 rounded-2xl animate-fade-in">
         <div class="border-b pb-4 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
             <div>
                 <h3 class="font-serif font-bold text-base text-royal-dark flex items-center gap-2">
-                    <i class="fa-solid fa-wallet text-royal-darkgold"></i> إعدادات وتنشيط وسائل وبوابات الدفع (Payment Methods)
+                    <i class="fa-solid fa-wallet text-royal-darkgold"></i> إعدادات وتنشيط وسائل وبوابات الدفع المحلية (جمهورية مصر العربية 🇪🇬)
                 </h3>
-                <p class="text-xs text-gray-400 mt-1">تخصيص وسائل الدفع لتظهر تلقائياً للعملاء حسب الدولة المحددة (شام كاش لسوريا، باي بال للعالم والدول العربية، إنستا باي وفودافون كاش لمصر، وباي موب للدول المدعومة).</p>
+                <p class="text-xs text-gray-400 mt-1">تخصيص وسائل الدفع المعتمدة في مصر: الدفع عند الاستلام (كاش)، المحافظ الإلكترونية (فودافون كاش)، تحويل إنستا باي (InstaPay)، وبطاقات الدفع البنكية عبر Paymob.</p>
             </div>
             <span class="text-[10px] bg-royal-sand text-royal-darkgold px-3 py-1.5 rounded-xl font-bold">💡 تظهر الوسيلة للعميل فقط عند تفعيلها هنا</span>
         </div>
@@ -893,115 +885,64 @@ $active_tab = $_GET['tab'] ?? (isset($_GET['edit_cat_id']) ? 'categories' : 'gen
         <form method="POST" action="admin_settings.php?tab=payments" class="space-y-6">
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                 
-                <!-- 1. محفظة شام كاش وسيريتل كاش (خاصة بسوريا 🇸🇾) -->
-                <div class="bg-gradient-to-br from-emerald-50/50 to-teal-50/30 p-5 rounded-2xl border border-emerald-200/70 flex flex-col justify-between space-y-3 md:col-span-1 shadow-sm">
-                    <div>
-                        <div class="flex items-center justify-between border-b border-emerald-200/50 pb-2 mb-3">
-                            <span class="font-bold text-xs text-emerald-950 flex items-center gap-1.5">
-                                🇸🇾 محفظة شام كاش (سوريا)
-                            </span>
-                            <input type="checkbox" name="cham_cash_enabled" id="cham_active" value="1" <?php echo ($settings['cham_cash_enabled'] ?? '0') === '1' ? 'checked' : ''; ?> class="w-4 h-4 accent-emerald-600 cursor-pointer">
-                        </div>
-                        <div class="space-y-2">
-                            <div>
-                                <label class="block text-[10px] font-bold text-gray-600 mb-0.5">رقم حساب / محفظة شام كاش:</label>
-                                <input type="text" name="cham_cash_number" value="<?php echo htmlspecialchars($settings['cham_cash_number'] ?? ''); ?>" placeholder="مثال: 0987654321 أو معرف الحساب" class="w-full p-2 border border-gray-200 rounded-xl outline-none focus:border-emerald-600 text-xs font-mono bg-white">
-                            </div>
-                            <div>
-                                <label class="block text-[10px] font-bold text-gray-600 mb-0.5">اسم صاحب الحساب (المستفيد):</label>
-                                <input type="text" name="cham_cash_name" value="<?php echo htmlspecialchars($settings['cham_cash_name'] ?? ''); ?>" placeholder="اسم المستلم في شام كاش" class="w-full p-2 border border-gray-200 rounded-xl outline-none focus:border-emerald-600 text-xs bg-white">
-                            </div>
-                            <div>
-                                <label class="block text-[10px] font-bold text-gray-600 mb-0.5">رقم سيريتل كاش / MTN (اختياري):</label>
-                                <input type="text" name="syriatel_cash_number" value="<?php echo htmlspecialchars($settings['syriatel_cash_number'] ?? ''); ?>" placeholder="مثال: 0933123456" class="w-full p-2 border border-gray-200 rounded-xl outline-none focus:border-emerald-600 text-xs font-mono bg-white">
-                            </div>
-                        </div>
-                        <p class="text-[10px] text-emerald-700 mt-2 font-medium">✨ تظهر تلقائياً لعملاء <b>سوريا 🇸🇾</b> مع زر نسخ فوري ورفع إيصال التحويل.</p>
-                    </div>
-                </div>
-
-                <!-- 2. باي بال (PayPal - للدول العربية والدولية 🌐) -->
-                <div class="bg-gradient-to-br from-blue-50/50 to-indigo-50/30 p-5 rounded-2xl border border-blue-200/70 flex flex-col justify-between space-y-3 md:col-span-1 shadow-sm">
-                    <div>
-                        <div class="flex items-center justify-between border-b border-blue-200/50 pb-2 mb-3">
-                            <span class="font-bold text-xs text-blue-950 flex items-center gap-1.5">
-                                <i class="fa-brands fa-paypal text-blue-600 text-sm"></i> باي بال (PayPal)
-                            </span>
-                            <input type="checkbox" name="paypal_enabled" id="paypal_active" value="1" <?php echo ($settings['paypal_enabled'] ?? '0') === '1' ? 'checked' : ''; ?> class="w-4 h-4 accent-blue-600 cursor-pointer">
-                        </div>
-                        <div class="space-y-2">
-                            <div>
-                                <label class="block text-[10px] font-bold text-gray-600 mb-0.5">بريد PayPal أو رابط PayPal.Me:</label>
-                                <input type="text" name="paypal_email" value="<?php echo htmlspecialchars($settings['paypal_email'] ?? ''); ?>" placeholder="مثال: payment@store.com أو paypal.me/name" class="w-full p-2 border border-gray-200 rounded-xl outline-none focus:border-blue-600 text-xs font-mono bg-white">
-                            </div>
-                            <div>
-                                <label class="block text-[10px] font-bold text-gray-600 mb-0.5">PayPal Client ID (اختياري للربط الذكي):</label>
-                                <input type="text" name="paypal_client_id" value="<?php echo htmlspecialchars($settings['paypal_client_id'] ?? ''); ?>" placeholder="Client ID الخاص بتطبيق PayPal" class="w-full p-2 border border-gray-200 rounded-xl outline-none focus:border-blue-600 text-xs font-mono bg-white">
-                            </div>
-                        </div>
-                        <p class="text-[10px] text-blue-700 mt-2 font-medium">✨ تظهر للدول العربية (العراق، لبنان، الأردن، الكويت، إلخ) وللدفع بالدولار.</p>
-                    </div>
-                </div>
-
-                <!-- 3. الدفع عند الاستلام (COD) -->
+                <!-- 1. الدفع عند الاستلام (COD) -->
                 <div class="bg-royal-cream/40 p-5 rounded-2xl border border-royal-gold/15 flex flex-col justify-between space-y-3 md:col-span-1 shadow-sm">
                     <div>
                         <div class="flex items-center justify-between border-b pb-2 mb-3">
                             <span class="font-bold text-xs text-royal-dark flex items-center gap-1.5">
-                                <i class="fa-solid fa-hand-holding-dollar text-green-600"></i> الدفع عند الاستلام (COD)
+                                <i class="fa-solid fa-hand-holding-dollar text-green-600"></i> الدفع عند الاستلام (كاش)
                             </span>
                             <input type="checkbox" name="cod_enabled" id="cod_active" value="1" <?php echo ($settings['cod_enabled'] ?? '1') === '1' ? 'checked' : ''; ?> class="w-4 h-4 accent-royal-darkgold cursor-pointer">
                         </div>
-                        <p class="text-xs text-gray-500 font-medium">يتيح للعميل دفع قيمة الفاتورة كاش نقدياً للمندوب فور استلام الشحنة (متاح لكافة الدول).</p>
+                        <p class="text-xs text-gray-500 font-medium">يتيح للعميل دفع قيمة الفاتورة كاش نقدياً لمندوب التوصيل فور استلام الطلب داخل مصر.</p>
                     </div>
                 </div>
 
-                <!-- 4. فودافون كاش / المحافظ (خاص بمصر 🇪🇬) -->
-                <div class="bg-royal-cream/40 p-5 rounded-2xl border border-royal-gold/15 flex flex-col justify-between space-y-3">
+                <!-- 2. فودافون كاش / المحافظ الإلكترونية -->
+                <div class="bg-royal-cream/40 p-5 rounded-2xl border border-royal-gold/15 flex flex-col justify-between space-y-3 md:col-span-1 shadow-sm">
                     <div>
                         <div class="flex items-center justify-between border-b pb-2 mb-3">
                             <span class="font-bold text-xs text-royal-dark flex items-center gap-1.5">
-                                🇪🇬 فودافون كاش / المحافظ (مصر)
+                                🇪🇬 فودافون كاش / المحافظ الإلكترونية
                             </span>
                             <input type="checkbox" name="vodafone_cash_enabled" id="vc_active" value="1" <?php echo ($settings['vodafone_cash_enabled'] ?? '0') === '1' ? 'checked' : ''; ?> class="w-4 h-4 accent-royal-darkgold cursor-pointer">
                         </div>
                         <label class="block text-[11px] font-bold text-gray-600 mb-1">رقم محفظة استقبال التحويلات:</label>
                         <input type="text" name="vodafone_cash_number" value="<?php echo htmlspecialchars($settings['vodafone_cash_number'] ?? ''); ?>" placeholder="مثال: 01012345678" class="w-full p-2.5 border border-gray-200 rounded-xl outline-none focus:border-royal-gold text-xs font-mono bg-white">
-                        <p class="text-[10px] text-gray-400 mt-2">📌 يظهر عند اختيار مصر مع إلزام رفع صورة إيصال التحويل.</p>
+                        <p class="text-[10px] text-gray-400 mt-2">📌 يتيح للعميل التحويل مع إلزامه برفع صورة إيصال التحويل.</p>
                     </div>
                 </div>
 
-                <!-- 5. انستا باي (InstaPay - مصر 🇪🇬) -->
-                <div class="bg-royal-cream/40 p-5 rounded-2xl border border-royal-gold/15 flex flex-col justify-between space-y-3 md:col-span-2">
+                <!-- 3. انستا باي (InstaPay) -->
+                <div class="bg-royal-cream/40 p-5 rounded-2xl border border-royal-gold/15 flex flex-col justify-between space-y-3 md:col-span-1 shadow-sm">
                     <div>
                         <div class="flex items-center justify-between border-b pb-2 mb-3">
                             <span class="font-bold text-xs text-royal-dark flex items-center gap-1.5">
-                                🇪🇬 تحويل انستا باي InstaPay (مصر)
+                                🇪🇬 تحويل انستا باي InstaPay
                             </span>
                             <input type="checkbox" name="instapay_enabled" id="insta_active" value="1" <?php echo ($settings['instapay_enabled'] ?? '0') === '1' ? 'checked' : ''; ?> class="w-4 h-4 accent-royal-darkgold cursor-pointer">
                         </div>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div class="space-y-2">
                             <div>
                                 <label class="block text-[10px] font-bold text-gray-600 mb-0.5">عنوان InstaPay IPA أو رقم الحساب:</label>
-                                <input type="text" name="instapay_address" value="<?php echo htmlspecialchars($settings['instapay_address'] ?? ''); ?>" placeholder="مثال: name@instapay" class="w-full p-2 border border-gray-200 rounded-xl outline-none focus:border-royal-gold text-xs font-mono bg-white">
+                                <input type="text" name="instapay_address" value="<?php echo htmlspecialchars($settings['instapay_address'] ?? ''); ?>" placeholder="مثال: username@instapay" class="w-full p-2 border border-gray-200 rounded-xl outline-none focus:border-royal-gold text-xs font-mono bg-white">
                             </div>
                             <div>
-                                <label class="block text-[10px] font-bold text-gray-600 mb-0.5">اسم المستفيد (الحساب):</label>
-                                <input type="text" name="instapay_name" value="<?php echo htmlspecialchars($settings['instapay_name'] ?? ''); ?>" placeholder="اسم صاحب الحساب بالبنك" class="w-full p-2 border border-gray-200 rounded-xl outline-none focus:border-royal-gold text-xs bg-white">
+                                <label class="block text-[10px] font-bold text-gray-600 mb-0.5">اسم صاحب الحساب بالبنك:</label>
+                                <input type="text" name="instapay_name" value="<?php echo htmlspecialchars($settings['instapay_name'] ?? ''); ?>" placeholder="اسم المستفيد" class="w-full p-2 border border-gray-200 rounded-xl outline-none focus:border-royal-gold text-xs bg-white">
                             </div>
                         </div>
-                        <p class="text-[10px] text-gray-400 mt-2">📌 يظهر عند اختيار مصر مع إلزام رفع صورة إيصال التحويل ورقم المرجع.</p>
                     </div>
                 </div>
 
             </div>
 
-            <!-- 6. إعدادات بوابة Paymob التلقائية (مصر، السعودية، الإمارات، سلطنة عمان) -->
+            <!-- 4. إعدادات بوابة Paymob التلقائية (مصر) -->
             <div class="bg-blue-50/50 p-5 rounded-2xl border border-blue-100 space-y-4">
                 <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-blue-200/60 pb-3 gap-2">
                     <span class="font-bold text-xs text-royal-dark flex items-center gap-2">
-                        <i class="fa-solid fa-credit-card text-blue-600"></i> بوابة باي موب التلقائية (Paymob Gateway API)
-                        <span class="bg-blue-100 text-blue-800 text-[10px] px-2 py-0.5 rounded-md font-bold">🇪🇬 مصر | 🇸🇦 السعودية | 🇦🇪 الإمارات | 🇴🇲 عمان</span>
+                        <i class="fa-solid fa-credit-card text-blue-600"></i> بوابة باي موب للدفع الإلكتروني بالفيزا والماستركارد وميزة (Paymob Gateway)
+                        <span class="bg-blue-100 text-blue-800 text-[10px] px-2 py-0.5 rounded-md font-bold">🇪🇬 جمهورية مصر العربية</span>
                     </span>
                     <div class="flex items-center gap-2">
                         <input type="checkbox" name="paymob_enabled" id="pm_active" value="1" <?php echo ($settings['paymob_enabled'] ?? '0') === '1' ? 'checked' : ''; ?> class="w-4 h-4 accent-blue-600 cursor-pointer">
@@ -1015,11 +956,11 @@ $active_tab = $_GET['tab'] ?? (isset($_GET['edit_cat_id']) ? 'categories' : 'gen
                         <input type="password" name="paymob_api_key" value="<?php echo htmlspecialchars($settings['paymob_api_key'] ?? ''); ?>" placeholder="مفتاح API الخاص بحسابك" class="w-full p-2 border border-gray-200 rounded-xl text-xs font-mono bg-white">
                     </div>
                     <div>
-                        <label class="block text-[10px] font-bold text-gray-600 mb-1">Card Integration ID (كروت):</label>
+                        <label class="block text-[10px] font-bold text-gray-600 mb-1">Card Integration ID (كروت وميزة):</label>
                         <input type="text" name="paymob_integration_id_card" value="<?php echo htmlspecialchars($settings['paymob_integration_id_card'] ?? ''); ?>" placeholder="مثال: 123456" class="w-full p-2 border border-gray-200 rounded-xl text-xs font-mono bg-white">
                     </div>
                     <div>
-                        <label class="block text-[10px] font-bold text-gray-600 mb-1">Wallet Integration ID (محافظ):</label>
+                        <label class="block text-[10px] font-bold text-gray-600 mb-1">Wallet Integration ID (محافظ إلكترونية):</label>
                         <input type="text" name="paymob_integration_id_wallet" value="<?php echo htmlspecialchars($settings['paymob_integration_id_wallet'] ?? ''); ?>" placeholder="مثال: 654321" class="w-full p-2 border border-gray-200 rounded-xl text-xs font-mono bg-white">
                     </div>
                     <div>
@@ -1036,139 +977,194 @@ $active_tab = $_GET['tab'] ?? (isset($_GET['edit_cat_id']) ? 'categories' : 'gen
     </div>
     <?php endif; ?>
 
-    <!-- TAB 2: 🚚 مناطق ومصاريف الشحن والتوصيل ومتعدد الدول والعملات -->
+    <!-- TAB 2: 🚚 مناطق ومصاريف الشحن والتوصيل في مصر + نظام الشحن الذكي بالكيلومتر -->
     <?php if ($active_tab === 'shipping'): 
-        $current_country_meta = $supported_countries_data[$selected_country_tab] ?? [
-            'code' => 'XX', 'currency' => ($settings['store_currency'] ?? 'ج.م'), 'flag' => '🌐', 'default_cost' => 50.00
-        ];
+        $enable_km_val = $settings['enable_km_shipping'] ?? '1';
+        $store_lat_val = $settings['store_lat'] ?? '30.0444';
+        $store_lng_val = $settings['store_lng'] ?? '31.2357';
+        $store_addr_val = $settings['store_address_name'] ?? 'الفرع الرئيسي / مركز الشحن والتوزيع';
+        $km_rate_val = $settings['km_rate'] ?? '2';
+        $km_base_min_val = $settings['km_base_min_price'] ?? '25';
+        $km_govs_saved = !empty($settings['km_shipping_govs']) ? json_decode($settings['km_shipping_govs'], true) : ['القاهرة', 'الجيزة', '6 أكتوبر', 'الشيخ زايد'];
+        if (!is_array($km_govs_saved)) $km_govs_saved = ['القاهرة', 'الجيزة', '6 أكتوبر', 'الشيخ زايد'];
     ?>
+    <!-- تضمين مكتبة Leaflet للخرائط التفاعلية -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
     <div class="space-y-8 animate-fade-in">
         
-        <!-- 1. كارت إعدادات الدول والعملات العامة -->
-        <div class="bg-white p-6 border border-royal-gold/10 shadow-sm rounded-2xl">
-            <div class="flex items-center justify-between border-b pb-4 mb-6">
+        <!-- كارت 1: 📍 نظام الشحن الذكي بالكيلومتر لمناطق القاهرة الكبرى (القاهرة، الجيزة، 6 أكتوبر، زايد) -->
+        <div class="bg-white p-6 border border-royal-gold/15 shadow-sm rounded-2xl">
+            <div class="border-b pb-4 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                 <div>
                     <h3 class="font-serif font-bold text-base text-royal-dark flex items-center gap-2">
-                        <i class="fa-solid fa-globe text-royal-darkgold"></i> إعدادات الشحن الدولي والدول المعتمدة
+                        <i class="fa-solid fa-route text-royal-darkgold text-lg"></i>
+                        نظام الشحن الذكي بالكيلومتر (القاهرة، الجيزة، 6 أكتوبر، الشيخ زايد)
                     </h3>
-                    <p class="text-xs text-gray-400 mt-1">تحديد الدول المتاح الشحن إليها، وتعيين نظام العملات وتفعيل المحافظات التابعة لكل دولة.</p>
+                    <p class="text-xs text-gray-400 mt-1">حساب تكلفة الشحن: أول كيلومتر بسعر ثابت (<?php echo $km_base_min_val; ?> ج.م)، وكل كيلومتر إضافي بعد الأول يُضاف له (<?php echo $km_rate_val; ?> ج.م).</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-[10px] bg-royal-sand text-royal-darkgold px-3 py-1.5 rounded-full font-bold">
+                        📍 نقطة البداية: موقع المحل
+                    </span>
                 </div>
             </div>
 
             <form method="POST" action="admin_settings.php?tab=shipping" class="space-y-6">
-                <input type="hidden" name="update_country_settings" value="1">
+                <input type="hidden" name="update_km_shipping_settings" value="1">
                 
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 bg-royal-sand/30 p-5 rounded-2xl border border-royal-gold/10">
-                    <!-- خيار تفعيل تعدد الدول -->
-                    <div class="space-y-2">
-                        <label class="block text-xs font-bold text-royal-dark flex items-center gap-2">
-                            <i class="fa-solid fa-earth-americas text-royal-darkgold"></i> تفعيل الشحن لعدة دول
+                <!-- سويتش التفعيل الرئيسي -->
+                <div class="bg-royal-sand/30 p-4 rounded-xl border border-royal-gold/20 flex items-center justify-between">
+                    <div>
+                        <label for="enable_km_switch" class="text-xs font-bold text-royal-dark cursor-pointer flex items-center gap-2">
+                            <i class="fa-solid fa-calculator text-royal-darkgold"></i> تفعيل نظام حساب التوصيل بالمسافة والكيلومتر
                         </label>
-                        <div class="flex items-center gap-2 pt-1">
-                            <input type="checkbox" name="enable_multi_country" id="multi_country_active" value="1" <?php echo ($settings['enable_multi_country'] ?? '1') === '1' ? 'checked' : ''; ?> class="w-4 h-4 accent-royal-darkgold cursor-pointer">
-                            <label for="multi_country_active" class="text-xs text-gray-600 font-medium cursor-pointer">إتاحة اختيار الدولة للعميل في صفحة الدفع</label>
+                        <p class="text-[10px] text-gray-500 mt-0.5">عند تفعيله، سيتم حساب تكلفة التوصيل بمجرد تحديد العميل لموقعه على الخريطة في المناطق المحددة بالأسفل.</p>
+                    </div>
+                    <input type="checkbox" name="enable_km_shipping" id="enable_km_switch" value="1" <?php echo $enable_km_val === '1' ? 'checked' : ''; ?> class="w-5 h-5 accent-royal-darkgold cursor-pointer">
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <!-- العمود الأيمن: إعدادات التسعير والمناطق -->
+                    <div class="space-y-4">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <!-- سعر أقل من 1 كم -->
+                            <div class="bg-royal-cream/30 p-3.5 rounded-xl border border-royal-gold/10">
+                                <label class="block text-xs font-bold text-royal-dark mb-1">
+                                    سعر أول كيلومتر (سعر فتح المسافة / الحد الأدنى) *
+                                </label>
+                                <div class="relative">
+                                    <input type="number" step="0.5" name="km_base_min_price" id="admin_km_base_min" value="<?php echo htmlspecialchars($km_base_min_val); ?>" required class="w-full p-2.5 bg-white border border-gray-200 rounded-lg text-xs font-bold font-serif text-royal-dark outline-none focus:border-royal-gold">
+                                    <span class="absolute left-3 top-2 text-[10px] text-gray-500 font-bold">ج.م</span>
+                                </div>
+                                <p class="text-[10px] text-gray-400 mt-1">يُطبق كقيمة ثابتة لأول كيلومتر من المسافة.</p>
+                            </div>
+
+                            <!-- سعر الكيلومتر الواحد -->
+                            <div class="bg-royal-cream/30 p-3.5 rounded-xl border border-royal-gold/10">
+                                <label class="block text-xs font-bold text-royal-dark mb-1">
+                                    سعر الكيلومتر الإضافي (بعد الكيلو الأول) *
+                                </label>
+                                <div class="relative">
+                                    <input type="number" step="0.25" name="km_rate" id="admin_km_rate" value="<?php echo htmlspecialchars($km_rate_val); ?>" required class="w-full p-2.5 bg-white border border-gray-200 rounded-lg text-xs font-bold font-serif text-royal-dark outline-none focus:border-royal-gold">
+                                    <span class="absolute left-3 top-2 text-[10px] text-gray-500 font-bold">ج.م / كم</span>
+                                </div>
+                                <p class="text-[10px] text-gray-400 mt-1">مثال: لو 2 كم => 25 + 2 = 27 ج.م (لو 10 كم => 25 + 9×2 = 43 ج.م).</p>
+                            </div>
+                        </div>
+
+                        <!-- اسم / عنوان المحل ومركز الشحن -->
+                        <div>
+                            <label class="block text-xs font-bold text-royal-dark mb-1">
+                                اسم وعنوان مركز الشحن / المحل (نقطة الصفر للمسافة) *
+                            </label>
+                            <input type="text" name="store_address_name" id="store_address_name" value="<?php echo htmlspecialchars($store_addr_val); ?>" placeholder="مثال: الفرع الرئيسي - شارع النصر، المعادي" class="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-xs outline-none focus:border-royal-gold font-medium">
+                        </div>
+
+                        <!-- إحداثيات المحل GPS -->
+                        <div class="grid grid-cols-2 gap-3 bg-gray-50 p-3.5 rounded-xl border">
+                            <div>
+                                <label class="block text-[10px] font-bold text-gray-500 mb-0.5">خط العرض (Latitude):</label>
+                                <input type="text" name="store_lat" id="store_lat" value="<?php echo htmlspecialchars($store_lat_val); ?>" class="w-full p-2 bg-white border border-gray-200 rounded-lg text-xs font-mono font-bold text-royal-dark text-left" dir="ltr" readonly>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-gray-500 mb-0.5">خط الطول (Longitude):</label>
+                                <input type="text" name="store_lng" id="store_lng" value="<?php echo htmlspecialchars($store_lng_val); ?>" class="w-full p-2 bg-white border border-gray-200 rounded-lg text-xs font-mono font-bold text-royal-dark text-left" dir="ltr" readonly>
+                            </div>
+                            <div class="col-span-2 pt-1 flex justify-between items-center">
+                                <button type="button" id="btn-get-admin-gps" class="bg-royal-sand hover:bg-royal-gold text-royal-dark hover:text-white px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-sm">
+                                    <i class="fa-solid fa-location-crosshairs text-royal-darkgold"></i> تحديد موقعي الحالي كمركز للمحل
+                                </button>
+                                <span class="text-[10px] text-gray-400">أو اسحب الدبوس على الخريطة</span>
+                            </div>
+                        </div>
+
+                        <!-- المناطق والمحافظات المشمولة في نظام الكيلومتر -->
+                        <div>
+                            <label class="block text-xs font-bold text-royal-dark mb-2">
+                                المناطق والمحافظات المشمولة في حساب الكيلومتر:
+                            </label>
+                            <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                <?php 
+                                $local_cairo_zones = ['القاهرة', 'الجيزة', '6 أكتوبر', 'الشيخ زايد', 'القليوبية'];
+                                foreach ($local_cairo_zones as $zone): 
+                                    $is_checked = in_array($zone, $km_govs_saved);
+                                ?>
+                                    <label class="border p-2 rounded-xl flex items-center gap-2 cursor-pointer transition text-xs <?php echo $is_checked ? 'bg-royal-sand/40 border-royal-gold/40 font-bold text-royal-dark' : 'bg-gray-50 border-gray-200 text-gray-500'; ?>">
+                                        <input type="checkbox" name="km_govs[]" value="<?php echo $zone; ?>" <?php echo $is_checked ? 'checked' : ''; ?> class="w-4 h-4 accent-royal-darkgold cursor-pointer rounded">
+                                        <span><?php echo $zone; ?></span>
+                                    </label>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+
+                        <!-- حاسبة تجريبية للمعاينة الحية -->
+                        <div class="bg-gradient-to-r from-emerald-50 to-teal-50/40 p-3.5 rounded-xl border border-emerald-200/60">
+                            <h5 class="text-xs font-bold text-emerald-950 flex items-center gap-1.5 mb-1.5">
+                                <i class="fa-solid fa-calculator text-emerald-600"></i> حاسبة تجريبية سريعة للمعاينة:
+                            </h5>
+                            <div class="flex items-center gap-2 text-xs">
+                                <span>مسافة تجريبية:</span>
+                                <input type="number" step="0.5" id="test-distance-input" value="12.5" class="w-20 p-1.5 border border-emerald-300 rounded-lg text-center font-bold font-serif bg-white">
+                                <span>كم =</span>
+                                <span id="test-calc-result" class="font-bold text-emerald-800 bg-white px-3 py-1 rounded-lg border border-emerald-300 font-serif">25 ج.م</span>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- الدولة الافتراضية للمتجر -->
-                    <div class="space-y-2">
-                        <label class="block text-xs font-bold text-royal-dark flex items-center gap-2">
-                            <i class="fa-solid fa-flag text-royal-darkgold"></i> الدولة الافتراضية للزوار
+                    <!-- العمود الأيسر: الخريطة التفاعلية لتحديد موقع المحل -->
+                    <div class="flex flex-col space-y-2">
+                        <label class="block text-xs font-bold text-royal-dark flex items-center justify-between">
+                            <span><i class="fa-solid fa-map-location-dot text-royal-darkgold"></i> خريطة موقع المحل (مركز الشحن الرئيسي)</span>
+                            <span class="text-[10px] text-gray-400 font-normal">انقر أو اسحب الدبوس لتغيير موقع المحل</span>
                         </label>
-                        <select name="default_country" class="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-xs outline-none focus:border-royal-gold font-medium">
-                            <?php foreach($supported_countries_data as $c_name => $c_info): ?>
-                                <option value="<?php echo $c_name; ?>" <?php echo ($settings['default_country'] ?? 'مصر') === $c_name ? 'selected' : ''; ?>>
-                                    <?php echo $c_info['flag'] . ' ' . $c_name . ' (' . $c_info['currency'] . ')'; ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-
-                    <!-- نظام تسعير العملات -->
-                    <div class="space-y-2">
-                        <label class="block text-xs font-bold text-royal-dark flex items-center gap-2">
-                            <i class="fa-solid fa-coins text-royal-darkgold"></i> نظام العملات في المتجر
-                        </label>
-                        <select name="preferred_currency_mode" class="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-xs outline-none focus:border-royal-gold font-medium">
-                            <option value="local" <?php echo ($settings['preferred_currency_mode'] ?? 'local') === 'local' ? 'selected' : ''; ?>>عملة كل بلد تلقائياً (ج.م، ر.س، د.إ، ل.س، د.ع، ل.ل...)</option>
-                            <option value="usd" <?php echo ($settings['preferred_currency_mode'] ?? '') === 'usd' ? 'selected' : ''; ?>>الدولار الأمريكي ($ - USD)</option>
-                            <option value="store" <?php echo ($settings['preferred_currency_mode'] ?? '') === 'store' ? 'selected' : ''; ?>>العملة الثابتة للمتجر (<?php echo htmlspecialchars($settings['store_currency'] ?? 'ج.م'); ?>)</option>
-                        </select>
+                        <!-- شريط البحث بالخريطة -->
+                        <div class="flex gap-2">
+                            <input type="text" id="admin-map-search-input" placeholder="ابحث عن منطقة المحل / الشارع بالاسم..." class="flex-grow p-2.5 border border-gray-200 rounded-xl text-xs outline-none focus:border-royal-gold bg-white">
+                            <button type="button" id="btn-admin-map-search" class="bg-royal-charcoal text-white hover:bg-royal-gold hover:text-royal-charcoal px-4 py-2 rounded-xl text-xs font-bold transition">بحث</button>
+                        </div>
+                        <div id="admin-store-map" class="h-80 w-full rounded-2xl border border-royal-gold/20 overflow-hidden shadow-inner z-10"></div>
+                        <div class="bg-royal-sand/30 p-2.5 rounded-xl text-[10px] text-royal-dark text-center font-bold border border-royal-gold/15">
+                            💡 سيتم احتساب المسافة بين هذا الدبوس وموقع العميل عند إتمام الطلب في صفحة الدفع.
+                        </div>
                     </div>
                 </div>
 
-                <!-- الدول المتاحة للتفعيل السريع -->
-                <div>
-                    <label class="block text-xs font-bold text-royal-dark mb-3 flex items-center gap-2">
-                        <i class="fa-solid fa-list-check text-royal-darkgold"></i> الدول المفعلة للشحن والاستلام (اختر الدول المتاحة لعملائك):
-                    </label>
-                    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                        <?php foreach($supported_countries_data as $c_name => $c_info): 
-                            $is_c_active = in_array($c_name, $active_countries_list);
-                        ?>
-                            <label class="border p-3 rounded-xl flex items-center gap-2.5 cursor-pointer transition-all duration-200 <?php echo $is_c_active ? 'bg-royal-cream/40 border-royal-gold/30 shadow-sm' : 'bg-gray-50 border-gray-200 opacity-60'; ?>">
-                                <input type="checkbox" name="active_countries[]" value="<?php echo $c_name; ?>" <?php echo $is_c_active ? 'checked' : ''; ?> class="w-4 h-4 accent-royal-gold cursor-pointer rounded">
-                                <span class="text-base"><?php echo $c_info['flag']; ?></span>
-                                <div class="leading-tight">
-                                    <div class="font-bold text-xs text-royal-dark"><?php echo $c_name; ?></div>
-                                    <div class="text-[10px] text-gray-400 font-mono"><?php echo $c_info['currency']; ?></div>
-                                </div>
-                            </label>
-                        <?php endforeach; ?>
-                    </div>
-                </div>
-
-                <div class="flex justify-end pt-2">
-                    <button type="submit" class="bg-royal-charcoal text-white hover:bg-royal-gold hover:text-royal-charcoal px-8 py-3 rounded-xl text-xs font-bold transition shadow-md btn-shine">
-                        حفظ إعدادات الدول والعملات
+                <div class="pt-4 flex justify-end border-t">
+                    <button type="submit" class="bg-royal-charcoal text-white hover:bg-royal-gold hover:text-royal-charcoal px-10 py-3.5 rounded-xl text-xs font-bold shadow-md transition-all btn-shine">
+                        <i class="fa-solid fa-floppy-disk mr-1"></i> حفظ إعدادات الشحن بالكيلومتر وموقع المحل
                     </button>
                 </div>
             </form>
         </div>
-
-        <!-- 2. إدارة محافظات ومناطق الدولة المختارة -->
+        
+        <!-- كارت 2: إدارة محافظات ومناطق جمهورية مصر العربية (التسعير الثابت كبديل) -->
         <div class="bg-white p-6 border border-royal-gold/10 shadow-sm rounded-2xl">
-            <!-- شريط التبديل بين الدول -->
-            <div class="border-b pb-4 mb-6">
-                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
-                    <div>
-                        <h3 class="font-serif font-bold text-base text-royal-dark flex items-center gap-2">
-                            <span><?php echo $current_country_meta['flag']; ?></span>
-                            تسعير محافظات ومناطق: <span class="text-royal-darkgold"><?php echo htmlspecialchars($selected_country_tab); ?></span>
-                        </h3>
-                        <p class="text-xs text-gray-400 mt-1">العملة الافتراضية: <strong class="text-royal-dark font-bold"><?php echo $current_country_meta['currency']; ?></strong> | عدد المحافظات المسجلة: <strong class="text-royal-dark font-bold"><?php echo count($shipping_zones); ?></strong></p>
-                    </div>
-                </div>
-
-                <!-- أزرار اختيار الدولة للتعديل -->
-                <div class="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-thin">
-                    <?php foreach($supported_countries_data as $c_name => $c_info): 
-                        $is_sel = ($selected_country_tab === $c_name);
-                    ?>
-                        <a href="admin_settings.php?tab=shipping&country=<?php echo urlencode($c_name); ?>" class="shrink-0 px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border <?php echo $is_sel ? 'bg-royal-charcoal text-royal-gold border-royal-gold shadow-md scale-105' : 'bg-white hover:bg-royal-cream/50 text-gray-600 border-gray-200'; ?>">
-                            <span><?php echo $c_info['flag']; ?></span>
-                            <span><?php echo $c_name; ?></span>
-                        </a>
-                    <?php endforeach; ?>
+            <div class="border-b pb-4 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                    <h3 class="font-serif font-bold text-base text-royal-dark flex items-center gap-2">
+                        <span>🇪🇬</span>
+                        تسعير محافظات ومناطق جمهورية مصر العربية (التسعير المباشر)
+                    </h3>
+                    <p class="text-xs text-gray-400 mt-1">العملة: <strong class="text-royal-dark font-bold">ج.م (الجنيه المصري)</strong> | عدد المحافظات المسجلة: <strong class="text-royal-dark font-bold"><?php echo count($shipping_zones); ?></strong></p>
                 </div>
             </div>
 
-            <!-- شريط الأدوات السريعة للدولة (تطبيق سعر موحد + إضافة محافظة) -->
+            <!-- شريط الأدوات السريعة (تطبيق سعر موحد + إضافة محافظة) -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 bg-royal-cream/20 p-4 rounded-xl border border-royal-gold/10">
                 <!-- أداة السعر الموحد -->
                 <form method="POST" action="admin_settings.php?tab=shipping" class="flex items-center gap-2">
-                    <input type="hidden" name="country_filter" value="<?php echo htmlspecialchars($selected_country_tab); ?>">
                     <input type="number" step="0.5" name="mass_cost" placeholder="سعر موحد لكل المحافظات..." required class="w-48 p-2.5 border border-gray-200 rounded-xl text-xs bg-white outline-none focus:border-royal-gold font-bold">
                     <button type="submit" name="mass_update_country_cost" class="bg-royal-sand hover:bg-royal-gold text-royal-dark hover:text-white px-4 py-2.5 rounded-xl text-xs font-bold transition shadow-sm whitespace-nowrap">
-                        تطبيق على كل <?php echo htmlspecialchars($selected_country_tab); ?>
+                        تطبيق على كل المحافظات
                     </button>
                 </form>
 
                 <!-- أداة إضافة محافظة / مدينة جديدة -->
                 <form method="POST" action="admin_settings.php?tab=shipping" class="flex items-center gap-2 justify-end">
-                    <input type="hidden" name="target_country" value="<?php echo htmlspecialchars($selected_country_tab); ?>">
-                    <input type="text" name="new_gov_name" placeholder="اسم محافظة/مدينة جديدة..." required class="flex-grow p-2.5 border border-gray-200 rounded-xl text-xs bg-white outline-none focus:border-royal-gold">
-                    <input type="number" step="0.5" name="new_gov_cost" value="<?php echo $current_country_meta['default_cost']; ?>" class="w-24 p-2.5 border border-gray-200 rounded-xl text-xs bg-white outline-none focus:border-royal-gold font-bold" title="سعر الشحن">
+                    <input type="text" name="new_gov_name" placeholder="اسم محافظة/مدينة مصرية جديدة..." required class="flex-grow p-2.5 border border-gray-200 rounded-xl text-xs bg-white outline-none focus:border-royal-gold">
+                    <input type="number" step="0.5" name="new_gov_cost" value="50.00" class="w-24 p-2.5 border border-gray-200 rounded-xl text-xs bg-white outline-none focus:border-royal-gold font-bold" title="سعر الشحن">
                     <button type="submit" name="add_new_governorate" class="bg-gold-gradient text-white hover:bg-gold-gradient-hover px-4 py-2.5 rounded-xl text-xs font-bold transition shadow-sm whitespace-nowrap btn-shine">
                         إضافة +
                     </button>
@@ -1178,11 +1174,10 @@ $active_tab = $_GET['tab'] ?? (isset($_GET['edit_cat_id']) ? 'categories' : 'gen
             <!-- نموذج تعديل وحفظ أسعار المحافظات -->
             <form id="shipping-settings-form" method="POST" action="admin_settings.php?tab=shipping" class="space-y-6">
                 <input type="hidden" name="update_shipping_zones" value="1">
-                <input type="hidden" name="country_filter" value="<?php echo htmlspecialchars($selected_country_tab); ?>">
                 
                 <?php if(empty($shipping_zones)): ?>
                     <div class="text-center py-12 bg-gray-50 border border-dashed rounded-xl">
-                        <p class="text-xs text-gray-400 font-medium">لا توجد محافظات مضافة لهذه الدولة حتى الآن. يمكنك إضافة مدن جديدة من النموذج بالأعلى.</p>
+                        <p class="text-xs text-gray-400 font-medium">لا توجد محافظات مضافة حتى الآن. يمكنك إضافة مدن جديدة من النموذج بالأعلى.</p>
                     </div>
                 <?php else: ?>
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1197,7 +1192,7 @@ $active_tab = $_GET['tab'] ?? (isset($_GET['edit_cat_id']) ? 'categories' : 'gen
                                         <span class="text-[9px] px-2 py-0.5 rounded font-bold <?php echo $z['is_active'] ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'; ?>">
                                             <?php echo $z['is_active'] ? 'شحن متاح' : 'موقف'; ?>
                                         </span>
-                                        <a href="admin_settings.php?tab=shipping&country=<?php echo urlencode($selected_country_tab); ?>&action=delete_gov&gov_id=<?php echo $z['id']; ?>" onclick="return confirm('هل تريد بالتأكيد حذف هذه المحافظة؟')" class="text-gray-300 hover:text-red-600 p-1 text-xs transition-colors" title="حذف المحافظة">
+                                        <a href="admin_settings.php?tab=shipping&action=delete_gov&gov_id=<?php echo $z['id']; ?>" onclick="return confirm('هل تريد بالتأكيد حذف هذه المحافظة؟')" class="text-gray-300 hover:text-red-600 p-1 text-xs transition-colors" title="حذف المحافظة">
                                             <i class="fa-solid fa-trash-can"></i>
                                         </a>
                                     </div>
@@ -1207,8 +1202,7 @@ $active_tab = $_GET['tab'] ?? (isset($_GET['edit_cat_id']) ? 'categories' : 'gen
                                     <span class="text-xs text-gray-400 font-medium whitespace-nowrap">سعر الشحن:</span>
                                     <div class="relative flex-grow">
                                         <input type="number" step="0.5" name="gov_cost[<?php echo $z['id']; ?>]" value="<?php echo $z['cost']; ?>" class="w-full p-2.5 text-xs border border-gray-200 rounded-lg outline-none focus:border-royal-gold font-serif font-bold text-royal-dark text-left bg-royal-cream/20 focus:bg-white" dir="ltr">
-                                        <input type="hidden" name="gov_currency[<?php echo $z['id']; ?>]" value="<?php echo htmlspecialchars($z['currency_symbol'] ?: $current_country_meta['currency']); ?>">
-                                        <span class="absolute left-3 top-2.5 text-[10px] text-gray-500 font-bold"><?php echo htmlspecialchars($z['currency_symbol'] ?: $current_country_meta['currency']); ?></span>
+                                        <span class="absolute left-3 top-2.5 text-[10px] text-gray-500 font-bold">ج.م</span>
                                     </div>
                                 </div>
                             </div>
@@ -1217,10 +1211,10 @@ $active_tab = $_GET['tab'] ?? (isset($_GET['edit_cat_id']) ? 'categories' : 'gen
 
                     <div class="pt-4 flex justify-between items-center border-t">
                         <div class="text-xs text-gray-400">
-                            تم تحديد <span class="font-bold text-royal-darkgold"><?php echo count($shipping_zones); ?></span> منطقة لدولة <strong class="text-royal-dark"><?php echo htmlspecialchars($selected_country_tab); ?></strong>
+                            تم تحديد <span class="font-bold text-royal-darkgold"><?php echo count($shipping_zones); ?></span> منطقة ومحافظة
                         </div>
                         <button type="submit" class="bg-royal-charcoal text-white hover:bg-royal-gold hover:text-royal-charcoal px-10 py-3.5 rounded-xl text-xs font-bold shadow-md transition-all btn-shine">
-                            حفظ أسعار شحن <?php echo htmlspecialchars($selected_country_tab); ?>
+                            حفظ أسعار شحن المحافظات
                         </button>
                     </div>
                 <?php endif; ?>
@@ -1228,6 +1222,147 @@ $active_tab = $_GET['tab'] ?? (isset($_GET['edit_cat_id']) ? 'categories' : 'gen
         </div>
 
     </div>
+
+    <!-- كود جافاسكريبت الخاص بخريطة تحديد مركز المحل وحاسبة المعاينة -->
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const storeLatEl = document.getElementById('store_lat');
+        const storeLngEl = document.getElementById('store_lng');
+        const storeAddrEl = document.getElementById('store_address_name');
+        
+        const defaultLat = parseFloat(storeLatEl.value) || 30.0444;
+        const defaultLng = parseFloat(storeLngEl.value) || 31.2357;
+
+        if (document.getElementById('admin-store-map')) {
+            const adminMap = L.map('admin-store-map').setView([defaultLat, defaultLng], 14);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '© OpenStreetMap'
+            }).addTo(adminMap);
+
+            const redIcon = new L.Icon({
+                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                iconSize: [25, 41],
+                iconAnchor: [12, 41],
+                popupAnchor: [1, -34],
+                shadowSize: [41, 41]
+            });
+
+            let storeMarker = L.marker([defaultLat, defaultLng], {
+                draggable: true,
+                icon: redIcon
+            }).addTo(adminMap);
+
+            storeMarker.bindPopup("<b>📍 موقع المحل / مركز الشحن</b>").openPopup();
+
+            function updateAdminCoords(lat, lng) {
+                storeLatEl.value = lat.toFixed(6);
+                storeLngEl.value = lng.toFixed(6);
+                
+                // جلب اسم المنطقة
+                fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=ar`)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data && data.display_name && (!storeAddrEl.value || storeAddrEl.value === 'الفرع الرئيسي / مركز الشحن والتوزيع')) {
+                            const road = data.address.road || data.address.suburb || data.address.neighbourhood || '';
+                            const city = data.address.city || data.address.town || data.address.state || '';
+                            storeAddrEl.value = [road, city].filter(Boolean).join('، ') || data.display_name.split('،')[0];
+                        }
+                    }).catch(e => console.log(e));
+            }
+
+            storeMarker.on('dragend', function(e) {
+                const pos = e.target.getLatLng();
+                updateAdminCoords(pos.lat, pos.lng);
+            });
+
+            adminMap.on('click', function(e) {
+                storeMarker.setLatLng(e.latlng);
+                updateAdminCoords(e.latlng.lat, e.latlng.lng);
+            });
+
+            // زر GPS للمدير
+            document.getElementById('btn-get-admin-gps').addEventListener('click', function() {
+                if (navigator.geolocation) {
+                    this.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري جلب الموقع...';
+                    navigator.geolocation.getCurrentPosition((pos) => {
+                        this.innerHTML = '<i class="fa-solid fa-location-crosshairs text-royal-darkgold"></i> تم التحديد بنجاح!';
+                        const lat = pos.coords.latitude;
+                        const lng = pos.coords.longitude;
+                        adminMap.setView([lat, lng], 16);
+                        storeMarker.setLatLng([lat, lng]);
+                        updateAdminCoords(lat, lng);
+                    }, () => {
+                        alert('تعذر الوصول لموقعك الحالي. يمكنك سحب الدبوس على الخريطة يدوياً.');
+                        this.innerHTML = '<i class="fa-solid fa-location-crosshairs text-royal-darkgold"></i> تحديد موقعي الحالي';
+                    });
+                }
+            });
+
+            // بحث الخريطة في لوحة التحكم
+            function performAdminSearch() {
+                const q = document.getElementById('admin-map-search-input').value.trim();
+                if (!q) return;
+                const btn = document.getElementById('btn-admin-map-search');
+                btn.innerText = "جاري...";
+                btn.disabled = true;
+                
+                fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&accept-language=ar&limit=1`)
+                    .then(res => res.json())
+                    .then(data => {
+                        btn.innerText = "بحث";
+                        btn.disabled = false;
+                        if (data && data.length > 0) {
+                            const lat = parseFloat(data[0].lat);
+                            const lng = parseFloat(data[0].lon);
+                            adminMap.setView([lat, lng], 16);
+                            storeMarker.setLatLng([lat, lng]);
+                            updateAdminCoords(lat, lng);
+                        } else {
+                            alert("لم يتم العثور على نتائج، يرجى كتابة اسم المنطقة بشكل أوضح.");
+                        }
+                    }).catch(() => {
+                        btn.innerText = "بحث";
+                        btn.disabled = false;
+                    });
+            }
+
+            document.getElementById('btn-admin-map-search').addEventListener('click', performAdminSearch);
+            document.getElementById('admin-map-search-input').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') { e.preventDefault(); performAdminSearch(); }
+            });
+        }
+
+        // حاسبة المعاينة التفاعلية
+        const testDistInput = document.getElementById('test-distance-input');
+        const kmRateInput = document.getElementById('admin_km_rate');
+        const kmBaseMinInput = document.getElementById('admin_km_base_min');
+        const testResultSpan = document.getElementById('test-calc-result');
+
+        function updateTestCalc() {
+            const dist = parseFloat(testDistInput.value) || 0;
+            const rate = parseFloat(kmRateInput.value) || 2;
+            const baseMin = parseFloat(kmBaseMinInput.value) || 25;
+            
+            let cost = 0;
+            if (dist <= 1.0) {
+                cost = baseMin;
+            } else {
+                const extraDist = dist - 1.0;
+                cost = baseMin + Math.round(extraDist * rate);
+            }
+            testResultSpan.innerText = cost + ' ج.م';
+        }
+
+        if (testDistInput) {
+            testDistInput.addEventListener('input', updateTestCalc);
+            kmRateInput.addEventListener('input', updateTestCalc);
+            kmBaseMinInput.addEventListener('input', updateTestCalc);
+            updateTestCalc();
+        }
+    });
+    </script>
     <?php endif; ?>
 
     <!-- TAB 3: 🎨 الواجهة والسلايدر -->

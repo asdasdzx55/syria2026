@@ -75,7 +75,14 @@ include 'admin_nav.php';
                             <td class="p-5 w-24">
                                 <img src="<?php echo htmlspecialchars($p['image_url'] ?: 'placeholder.php?w=800&h=1000'); ?>" class="w-12 h-16 object-cover bg-gray-50 border border-royal-gold/10 rounded-lg shadow-sm" alt="Product Image" loading="lazy" decoding="async">
                             </td>
-                            <td class="p-5 font-bold text-royal-dark text-sm"><?php echo htmlspecialchars($p['name']); ?></td>
+                            <td class="p-5 font-bold text-royal-dark text-sm">
+                                <?php echo htmlspecialchars($p['name']); ?>
+                                <?php if(!empty($p['is_weight_based'])): ?>
+                                    <span class="ms-2 bg-amber-100 text-amber-800 text-[10px] px-2 py-0.5 rounded-full font-bold inline-flex items-center gap-1 border border-amber-300/50">
+                                        <i class="fa-solid fa-scale-balanced text-[9px]"></i> بيع بالوزن
+                                    </span>
+                                <?php endif; ?>
+                            </td>
                             <td class="p-5 text-gray-500">
                                 <?php echo htmlspecialchars($p['category']); ?>
                                 <?php if(!empty($p['sub_category'])): ?>
@@ -83,7 +90,12 @@ include 'admin_nav.php';
                                     <span class="text-xs text-gray-400 font-semibold bg-gray-50 px-2 py-0.5 rounded-md"><?php echo htmlspecialchars($p['sub_category']); ?></span>
                                 <?php endif; ?>
                             </td>
-                            <td class="p-5 font-serif text-royal-darkgold font-bold text-sm"><?php echo htmlspecialchars($p['price']); ?> <?php echo htmlspecialchars($settings['store_currency'] ?? 'ج.م'); ?></td>
+                            <td class="p-5 font-serif text-royal-darkgold font-bold text-sm">
+                                <?php echo htmlspecialchars($p['price']); ?> <?php echo htmlspecialchars($settings['store_currency'] ?? 'ج.م'); ?>
+                                <?php if(!empty($p['is_weight_based'])): ?>
+                                    <span class="text-[10px] text-gray-400 font-normal">/ كجم</span>
+                                <?php endif; ?>
+                            </td>
                             <td class="p-5 font-serif text-gray-400 font-semibold">
                                 <?php echo $p['old_price'] ? htmlspecialchars($p['old_price']) . ' ' . htmlspecialchars($settings['store_currency'] ?? 'ج.م') : '-'; ?>
                             </td>
@@ -111,12 +123,22 @@ include 'admin_nav.php';
                 <div class="flex items-center gap-3.5">
                     <img src="<?php echo htmlspecialchars($p['image_url'] ?: 'placeholder.php?w=800&h=1000'); ?>" class="w-12 h-16 object-cover bg-gray-50 border border-royal-gold/10 rounded-lg shadow-sm shrink-0" alt="Product Image" loading="lazy" decoding="async">
                     <div class="space-y-1">
-                        <h4 class="text-xs font-bold text-royal-dark leading-tight"><?php echo htmlspecialchars($p['name']); ?></h4>
+                        <h4 class="text-xs font-bold text-royal-dark leading-tight">
+                            <?php echo htmlspecialchars($p['name']); ?>
+                            <?php if(!empty($p['is_weight_based'])): ?>
+                                <span class="ms-1 bg-amber-100 text-amber-800 text-[8px] px-1.5 py-0.2 rounded font-bold inline-block">⚖️ بالوزن</span>
+                            <?php endif; ?>
+                        </h4>
                         <span class="text-[9px] bg-royal-gold/15 text-royal-darkgold px-2 py-0.5 rounded-full inline-block font-semibold">
                             <?php echo htmlspecialchars($p['category']) . ($p['sub_category'] ? ' / ' . htmlspecialchars($p['sub_category']) : ''); ?>
                         </span>
                         <div class="flex items-center gap-2 mt-1">
-                            <span class="text-xs text-royal-darkgold font-bold font-serif"><?php echo htmlspecialchars($p['price']); ?> <?php echo htmlspecialchars($settings['store_currency'] ?? 'ج.م'); ?></span>
+                            <span class="text-xs text-royal-darkgold font-bold font-serif">
+                                <?php echo htmlspecialchars($p['price']); ?> <?php echo htmlspecialchars($settings['store_currency'] ?? 'ج.م'); ?>
+                                <?php if(!empty($p['is_weight_based'])): ?>
+                                    <span class="text-[9px] text-gray-400 font-normal">/ كجم</span>
+                                <?php endif; ?>
+                            </span>
                             <?php if($p['old_price']): ?>
                                 <span class="text-[9px] text-gray-400 line-through font-serif"><?php echo htmlspecialchars($p['old_price']); ?> <?php echo htmlspecialchars($settings['store_currency'] ?? 'ج.م'); ?></span>
                             <?php endif; ?>

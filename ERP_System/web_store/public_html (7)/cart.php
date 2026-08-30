@@ -89,12 +89,30 @@ include 'header.php';
                             <!-- تفاصيل المنتج والكمية -->
                             <div class="flex flex-col justify-between flex-grow w-full h-32 py-1">
                                 <div>
-                                    <div class="flex justify-between items-start mb-2">
+                                    <div class="flex justify-between items-start mb-1.5">
                                         <?php $real_pid = $item['product_id'] ?? (is_numeric($id) ? $id : explode('_', $id)[0]); ?>
                                         <a href="product.php?id=<?php echo $real_pid; ?>" class="font-bold text-base text-royal-dark hover:text-royal-gold transition-colors block w-full sm:w-auto leading-tight"><?php echo htmlspecialchars($item['name']); ?></a>
                                         <a href="cart.php?action=remove_cart&id=<?php echo $id; ?>" class="hidden sm:block text-gray-300 hover:text-red-500 transition-colors text-lg" title="حذف المنتج"><i class="fa-solid fa-xmark"></i></a>
                                     </div>
-                                    <div class="font-serif text-gray-400 text-xs mb-3 font-semibold">سعر القطعة: <?php echo $item['price']; ?> <?php echo htmlspecialchars($settings['store_currency'] ?? 'ج.م'); ?></div>
+                                    
+                                    <!-- شارات الوزن والمواصفات -->
+                                    <div class="flex flex-wrap items-center gap-1.5 mb-2 justify-center sm:justify-start">
+                                        <?php if (!empty($item['weight_label'])): ?>
+                                            <span class="bg-amber-100 text-amber-800 font-bold text-[10px] px-2 py-0.5 rounded-md border border-amber-200/80 inline-flex items-center gap-1">
+                                                <i class="fa-solid fa-scale-balanced text-[9px]"></i> <?php echo htmlspecialchars($item['weight_label']); ?>
+                                            </span>
+                                        <?php endif; ?>
+                                        <?php if (!empty($item['variant_summary'])): ?>
+                                            <span class="bg-royal-gold/15 text-royal-darkgold font-bold text-[10px] px-2 py-0.5 rounded-md border border-royal-gold/20 inline-flex items-center gap-1">
+                                                <i class="fa-solid fa-sliders text-[9px]"></i> <?php echo htmlspecialchars($item['variant_summary']); ?>
+                                            </span>
+                                        <?php endif; ?>
+                                    </div>
+
+                                    <div class="font-serif text-gray-400 text-xs mb-3 font-semibold">
+                                        <?php echo !empty($item['weight_label']) ? 'سعر الوزن المحدد:' : 'سعر القطعة:'; ?> 
+                                        <span class="text-royal-darkgold font-bold"><?php echo $item['price']; ?></span> <?php echo htmlspecialchars($settings['store_currency'] ?? 'ج.م'); ?>
+                                    </div>
                                 </div>
                                 <!-- التحكم بالكمية -->
                                 <div class="flex justify-between items-end mt-auto">

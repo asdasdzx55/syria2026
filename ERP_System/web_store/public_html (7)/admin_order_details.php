@@ -81,6 +81,22 @@ include 'admin_nav.php';
                     <?php endif; ?>
                     <li class="flex gap-2"><span class="font-bold w-20 text-gray-400">المحافظة:</span> <span><span class="bg-yellow-100/50 text-yellow-800 px-2.5 py-0.5 rounded-lg border border-yellow-200 font-bold"><?php echo htmlspecialchars($o['governorate']); ?></span></span></li>
                     <li class="flex gap-2"><span class="font-bold w-20 text-gray-400">العنوان:</span> <span class="text-royal-dark leading-relaxed font-light"><?php echo htmlspecialchars($o['customer_address']); ?></span></li>
+                    <?php if(!empty($o['delivery_distance_km'])): ?>
+                        <li class="flex gap-2 items-center">
+                            <span class="font-bold w-20 text-gray-400">المسافة:</span>
+                            <span class="bg-emerald-50 text-emerald-800 px-2.5 py-0.5 rounded-lg border border-emerald-200 font-bold flex items-center gap-1">
+                                <i class="fa-solid fa-route text-emerald-600"></i> <?php echo $o['delivery_distance_km']; ?> كم من المتجر (شحن بالمسافة)
+                            </span>
+                        </li>
+                    <?php endif; ?>
+                    <?php if(!empty($o['delivery_lat']) && !empty($o['delivery_lng'])): ?>
+                        <li class="flex gap-2 items-center">
+                            <span class="font-bold w-20 text-gray-400">موقع GPS:</span>
+                            <a href="https://www.google.com/maps?q=<?php echo $o['delivery_lat']; ?>,<?php echo $o['delivery_lng']; ?>" target="_blank" class="bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-1 rounded-lg border border-blue-200 font-bold flex items-center gap-1.5 transition text-xs shadow-sm">
+                                <i class="fa-solid fa-map-location-dot text-blue-600"></i> فتح موقع العميل في Google Maps 🗺️
+                            </a>
+                        </li>
+                    <?php endif; ?>
                 </ul>
                 
                 <!-- زر تحديث الشحن عبر الواتساب للمسؤول -->

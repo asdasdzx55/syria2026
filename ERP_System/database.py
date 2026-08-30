@@ -106,7 +106,10 @@ def setup_database():
         ("employees", "deductions REAL DEFAULT 0"),
         ("temp_invoices", "payment_method TEXT DEFAULT 'كاش (0.0%)'"),
         ("temp_invoices", "address TEXT"),
-        ("temp_invoices", "delivery_fee REAL DEFAULT 0")
+        ("temp_invoices", "delivery_fee REAL DEFAULT 0"),
+        ("products", "category TEXT DEFAULT 'عام'"),
+        ("products", "main_category TEXT DEFAULT 'عام'"),
+        ("products", "sub_category TEXT DEFAULT 'عام'")
     ]
 
     for table, col_def in migrations:
@@ -115,6 +118,14 @@ def setup_database():
             cursor.execute(f"ALTER TABLE {table} ADD COLUMN {col_def}")
         except sqlite3.OperationalError:
             pass # العمود موجود بالفعل
+
+    # 16. جداول التصنيفات الأساسية والفرعية (Categories & Sub-Categories)
+    cursor.execute('''CREATE TABLE IF NOT EXISTS categories 
+                      (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL)''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS sub_categories 
+                      (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, main_category_id INTEGER, 
+                       UNIQUE(name, main_category_id),
+                       FOREIGN KEY(main_category_id) REFERENCES categories(id) ON DELETE CASCADE)''')
 
     # الترقيم التلقائي بالباركود المحلي (5 أرقام) للمنتجات القديمة التي لا تملك باركود محلي
     cursor.execute("SELECT id, barcode, all_barcodes FROM products WHERE local_code IS NULL OR local_code = ''")
@@ -153,6 +164,27 @@ def setup_database():
     if cursor.fetchone()[0] == 0:
         p_defaults = [("المالك / المدير العام",), ("الشريك الأول",), ("الشريك الثاني",)]
         cursor.executemany("INSERT OR IGNORE INTO partners (name) VALUES (?)", p_defaults)
+
+    # تهيئة التصنيفات الأساسية والفرعية الافتراضية
+    cursor.execute("SELECT COUNT(*) FROM categories")
+    if cursor.fetchone()[0] == 0:
+        default_categories = {
+            "حلويات وشوكولاتة": ["نوكا ومكسرات", "بقلاوة ومعمول", "ملبن وراحة", "شوكولاتة وتوفي", "حلويات شرقية"],
+            "عطارة وبهارات": ["بهارات وتوابل", "أعشاب طبيعية", "حبوب وبقوليات", "مكسرات وتسالي"],
+            "ألبان وأجبان": ["أجبان سورية ومحلية", "ألبان وزبادي", "قشطة وزبدة"],
+            "زيوت وسمن": ["زيت زيتون", "سمن بلدي وسوري", "زيوت نباتية"],
+            "معلبات ومواد غذائية": ["بقوليات ومعلبات", "صلصات ودبس", "مربيات وعسل", "أرز ومكرونة"],
+            "مشروبات وعصائر": ["شاي وقهوة ومته", "مشروبات باردة", "مياه غازية ومعدنية"],
+            "منظفات وعناية منزلية": ["منظفات أطباق وملابس", "معقمات ومطهرات", "عناية شخصية"],
+            "عام": ["منتجات عامة"]
+        }
+        for cat_name, sub_list in default_categories.items():
+            cursor.execute("INSERT OR IGNORE INTO categories (name) VALUES (?)", (cat_name,))
+            cursor.execute("SELECT id FROM categories WHERE name=?", (cat_name,))
+            cat_id = cursor.fetchone()[0]
+            for sub_name in sub_list:
+                cursor.execute("INSERT OR IGNORE INTO sub_categories (name, main_category_id) VALUES (?, ?)", (sub_name, cat_id))
+        conn.commit()
 
     cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('admin_password', '1234')")
     cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('cloud_api_url', 'https://supermarkrt.almagd555.com/api_sync.php')")

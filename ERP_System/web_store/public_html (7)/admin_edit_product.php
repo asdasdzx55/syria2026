@@ -107,6 +107,7 @@ if (isset($_GET['action']) && $_GET['action'] == 'delete_gallery_image' && $is_e
 }
 
 // 3. إضافة منتج جديد
+// 3. إضافة منتج جديد
 if (isset($_POST['add_product'])) {
     $name = trim($_POST['name']);
     $category = trim($_POST['category']);
@@ -115,8 +116,30 @@ if (isset($_POST['add_product'])) {
     $price = (float)$_POST['price'];
     $old_price = !empty($_POST['old_price']) ? (float)$_POST['old_price'] : null;
 
-    $pdo->prepare("INSERT INTO products (name, category, sub_category, description, price, old_price, image_url) VALUES (?, ?, ?, ?, ?, ?, '')")
-        ->execute([$name, $category, $sub_category, $description, $price, $old_price]);
+    $is_weight_based = isset($_POST['is_weight_based']) ? 1 : 0;
+    $weight_unit = trim($_POST['weight_unit'] ?? 'كيلو');
+    $weight_options_arr = [];
+    if (!empty($_POST['weight_val']) && is_array($_POST['weight_val'])) {
+        foreach ($_POST['weight_val'] as $w_idx => $w_val) {
+            $w_num = (float)$w_val;
+            $w_lbl = trim($_POST['weight_lbl'][$w_idx] ?? '');
+            if ($w_num > 0 && !empty($w_lbl)) {
+                $weight_options_arr[] = ['weight' => $w_num, 'label' => $w_lbl];
+            }
+        }
+    }
+    if (empty($weight_options_arr) && $is_weight_based) {
+        $weight_options_arr = [
+            ['weight' => 0.25, 'label' => 'ربع كيلو (250 غرام)'],
+            ['weight' => 0.50, 'label' => 'نصف كيلو (500 غرام)'],
+            ['weight' => 0.75, 'label' => '3/4 كيلو (750 غرام)'],
+            ['weight' => 1.00, 'label' => 'كيلو كامل (1000 غرام)']
+        ];
+    }
+    $weight_options_json = !empty($weight_options_arr) ? json_encode($weight_options_arr, JSON_UNESCAPED_UNICODE) : null;
+
+    $pdo->prepare("INSERT INTO products (name, category, sub_category, description, price, old_price, is_weight_based, weight_unit, weight_options, image_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '')")
+        ->execute([$name, $category, $sub_category, $description, $price, $old_price, $is_weight_based, $weight_unit, $weight_options_json]);
     $new_prod_id = $pdo->lastInsertId();
 
     // حفظ خيارات ومواصفات المنتج
@@ -151,8 +174,30 @@ if (isset($_POST['edit_product'])) {
     $price = (float)$_POST['price'];
     $old_price = !empty($_POST['old_price']) ? (float)$_POST['old_price'] : null;
 
-    $pdo->prepare("UPDATE products SET name=?, category=?, sub_category=?, description=?, price=?, old_price=? WHERE id=?")
-        ->execute([$name, $category, $sub_category, $description, $price, $old_price, $prod_id]);
+    $is_weight_based = isset($_POST['is_weight_based']) ? 1 : 0;
+    $weight_unit = trim($_POST['weight_unit'] ?? 'كيلو');
+    $weight_options_arr = [];
+    if (!empty($_POST['weight_val']) && is_array($_POST['weight_val'])) {
+        foreach ($_POST['weight_val'] as $w_idx => $w_val) {
+            $w_num = (float)$w_val;
+            $w_lbl = trim($_POST['weight_lbl'][$w_idx] ?? '');
+            if ($w_num > 0 && !empty($w_lbl)) {
+                $weight_options_arr[] = ['weight' => $w_num, 'label' => $w_lbl];
+            }
+        }
+    }
+    if (empty($weight_options_arr) && $is_weight_based) {
+        $weight_options_arr = [
+            ['weight' => 0.25, 'label' => 'ربع كيلو (250 غرام)'],
+            ['weight' => 0.50, 'label' => 'نصف كيلو (500 غرام)'],
+            ['weight' => 0.75, 'label' => '3/4 كيلو (750 غرام)'],
+            ['weight' => 1.00, 'label' => 'كيلو كامل (1000 غرام)']
+        ];
+    }
+    $weight_options_json = !empty($weight_options_arr) ? json_encode($weight_options_arr, JSON_UNESCAPED_UNICODE) : null;
+
+    $pdo->prepare("UPDATE products SET name=?, category=?, sub_category=?, description=?, price=?, old_price=?, is_weight_based=?, weight_unit=?, weight_options=? WHERE id=?")
+        ->execute([$name, $category, $sub_category, $description, $price, $old_price, $is_weight_based, $weight_unit, $weight_options_json, $prod_id]);
 
     // حفظ خيارات ومواصفات المنتج
     saveProductVariantsHelper($pdo, $prod_id);
@@ -248,12 +293,70 @@ include 'admin_nav.php';
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6 bg-royal-sand/35 p-5 border border-royal-gold/10 rounded-2xl">
                     <div>
-                        <label class="block text-xs font-bold mb-2 text-royal-darkgold">سعر البيع الحالي *</label>
-                        <input type="number" step="0.01" name="price" value="<?php echo htmlspecialchars($product['price']); ?>" required class="w-full p-3 border border-gray-200 outline-none focus:border-royal-gold bg-white transition rounded-xl font-serif font-bold text-sm">
+                        <label class="block text-xs font-bold mb-2 text-royal-darkgold">سعر البيع الحالي (للكيلو أو للقطعة) *</label>
+                        <input type="number" step="0.01" name="price" id="prod-price-input" value="<?php echo htmlspecialchars($product['price']); ?>" required class="w-full p-3 border border-gray-200 outline-none focus:border-royal-gold bg-white transition rounded-xl font-serif font-bold text-sm" oninput="updateWeightPricesPreview()">
                     </div>
                     <div>
                         <label class="block text-xs font-bold mb-2 text-gray-500">السعر القديم (لإظهار شارة الخصم - اختياري)</label>
                         <input type="number" step="0.01" name="old_price" value="<?php echo htmlspecialchars($product['old_price'] ?? ''); ?>" class="w-full p-3 border border-gray-200 outline-none focus:border-royal-gold bg-white transition rounded-xl font-serif font-bold text-sm">
+                    </div>
+                </div>
+
+                <!-- قسم منتجات الوزن التفاعلي (Weight-Based Supermarket Selling) -->
+                <div class="bg-gradient-to-br from-amber-500/10 via-amber-100/30 to-royal-sand/40 p-6 border-2 border-dashed border-amber-500/30 rounded-2xl space-y-4 shadow-xs">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-amber-300/40 pb-3.5">
+                        <div>
+                            <h4 class="text-sm font-bold text-royal-dark flex items-center gap-2">
+                                <span class="w-7 h-7 bg-amber-600 text-white rounded-lg flex items-center justify-center text-xs shadow-sm"><i class="fa-solid fa-scale-balanced"></i></span>
+                                نظام بيع المنتج بالوزن (أجبان، مخللات، بهارات، مكسرات، بن، لحوم...)
+                            </h4>
+                            <p class="text-[11px] text-gray-500 mt-1">عند التفعيل، سيظهر للزبائن في المتجر زر "⚖️ اختر الوزن" بدلاً من "اشتري الآن"، مع خيارات الأوزان (ربع، نصف، 3/4، كيلو) وحساب الأسعار تلقائياً.</p>
+                        </div>
+                        
+                        <!-- Toggle Switch -->
+                        <label class="relative inline-flex items-center cursor-pointer select-none shrink-0">
+                            <input type="checkbox" name="is_weight_based" id="toggle-weight-based" value="1" <?php echo !empty($product['is_weight_based']) ? 'checked' : ''; ?> class="sr-only peer" onchange="toggleWeightSection(this.checked)">
+                            <div class="w-13 h-7 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-amber-600 shadow-inner"></div>
+                            <span class="ms-3 text-xs font-bold text-royal-dark">تفعيل البيع بالوزن</span>
+                        </label>
+                    </div>
+
+                    <!-- إعدادات الأوزان وتخصيص الخيارات -->
+                    <div id="weight-settings-container" class="<?php echo empty($product['is_weight_based']) ? 'hidden' : ''; ?> space-y-4 pt-1">
+                        <div class="bg-white/90 p-4 rounded-xl border border-amber-200 shadow-xs flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                            <div>
+                                <span class="text-xs font-bold text-gray-800 block">سعر الكيلو المدخل: <span id="weight-base-price-disp" class="text-amber-700 font-bold font-serif text-sm"><?php echo htmlspecialchars($product['price'] ?: '0'); ?></span> <?php echo htmlspecialchars($settings['store_currency'] ?? 'ج.م'); ?></span>
+                                <span class="text-[10px] text-gray-400">يتم حساب أسعار الكسور (ربع، نصف، إلخ) آلياً كنسبة من سعر الكيلو.</span>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-1.5">
+                                <button type="button" onclick="loadDefaultSupermarketWeights()" class="bg-amber-100 text-amber-900 hover:bg-amber-200 text-[10px] font-bold px-3 py-1.5 rounded-lg transition border border-amber-300 shadow-2xs">
+                                    <i class="fa-solid fa-rotate-left mr-1"></i> الأوزان القياسية (ربع/نصف/3-4/كيلو)
+                                </button>
+                                <button type="button" onclick="addWeightOptionRow(0.125, 'ثمن كيلو (125 غرام)')" class="bg-white hover:bg-amber-50 text-gray-700 text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition border border-gray-200">+ ثمن كيلو</button>
+                                <button type="button" onclick="addWeightOptionRow(1.5, 'كيلو ونصف (1500 غرام)')" class="bg-white hover:bg-amber-50 text-gray-700 text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition border border-gray-200">+ 1.5 كجم</button>
+                                <button type="button" onclick="addWeightOptionRow(2.0, '2 كيلو (2000 غرام)')" class="bg-white hover:bg-amber-50 text-gray-700 text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition border border-gray-200">+ 2 كجم</button>
+                                <button type="button" onclick="addWeightOptionRow('', '')" class="bg-royal-charcoal text-white hover:bg-amber-600 text-[10px] font-bold px-3 py-1.5 rounded-lg transition shadow-xs flex items-center gap-1">
+                                    <i class="fa-solid fa-plus"></i> وزن مخصص
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- جدول خيارات الأوزان -->
+                        <div class="overflow-x-auto bg-white rounded-xl border border-amber-200 shadow-xs">
+                            <table class="w-full text-right text-xs">
+                                <thead class="bg-amber-500/10 text-gray-700 text-[10px] border-b border-amber-200">
+                                    <tr>
+                                        <th class="p-3 font-bold w-1/4">قيمة الوزن (بالكيلوغرام)</th>
+                                        <th class="p-3 font-bold w-2/5">اسم الخيار الظاهر للعميل في المتجر</th>
+                                        <th class="p-3 font-bold w-1/4 text-center">السعر المحسوب للعميل</th>
+                                        <th class="p-3 font-bold w-12 text-center">حذف</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="weight-options-tbody" class="divide-y divide-amber-100">
+                                    <!-- سيتم توليد الصفوف عبر JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
 
@@ -356,6 +459,87 @@ include 'admin_nav.php';
 
 <script>
 const existingVariants = <?php echo json_encode($product_variants, JSON_UNESCAPED_UNICODE); ?>;
+const existingWeightOptions = <?php echo json_encode(!empty($product['weight_options']) ? getProductWeightOptions($product) : [], JSON_UNESCAPED_UNICODE); ?>;
+const isWeightBasedInitial = <?php echo !empty($product['is_weight_based']) ? 'true' : 'false'; ?>;
+
+function toggleWeightSection(isChecked) {
+    const container = document.getElementById('weight-settings-container');
+    if (container) {
+        if (isChecked) {
+            container.classList.remove('hidden');
+            const tbody = document.getElementById('weight-options-tbody');
+            if (tbody && tbody.children.length === 0) {
+                loadDefaultSupermarketWeights();
+            }
+        } else {
+            container.classList.add('hidden');
+        }
+    }
+}
+
+function updateWeightPricesPreview() {
+    const priceInput = document.getElementById('prod-price-input');
+    const basePrice = parseFloat(priceInput ? priceInput.value : 0) || 0;
+    const baseDisp = document.getElementById('weight-base-price-disp');
+    if (baseDisp) baseDisp.textContent = basePrice.toFixed(2);
+
+    const rows = document.querySelectorAll('#weight-options-tbody tr');
+    rows.forEach(tr => {
+        const valInput = tr.querySelector('input[name="weight_val[]"]');
+        const priceSpan = tr.querySelector('.calc-weight-price');
+        if (valInput && priceSpan) {
+            const wVal = parseFloat(valInput.value) || 0;
+            priceSpan.textContent = (basePrice * wVal).toFixed(2);
+        }
+    });
+}
+
+function addWeightOptionRow(weightVal = 0.25, label = 'ربع كيلو (250 غرام)') {
+    const tbody = document.getElementById('weight-options-tbody');
+    if (!tbody) return;
+
+    const priceInput = document.getElementById('prod-price-input');
+    const basePrice = parseFloat(priceInput ? priceInput.value : 0) || 0;
+    const calcPrice = (basePrice * (parseFloat(weightVal) || 0)).toFixed(2);
+
+    const tr = document.createElement('tr');
+    tr.className = 'hover:bg-amber-50/60 transition-colors';
+    tr.innerHTML = `
+        <td class="p-2.5">
+            <div class="flex items-center gap-1.5">
+                <input type="number" step="0.001" min="0.01" name="weight_val[]" value="${weightVal}" required class="w-24 p-2 border border-gray-200 bg-white rounded-lg text-xs outline-none focus:border-amber-500 font-mono font-bold text-center" oninput="updateWeightPricesPreview()">
+                <span class="text-[10px] text-gray-500 font-bold">كجم</span>
+            </div>
+        </td>
+        <td class="p-2.5">
+            <input type="text" name="weight_lbl[]" value="${escapeHtml(label)}" required placeholder="مثال: ربع كيلو (250 غرام)" class="w-full p-2 border border-gray-200 bg-white rounded-lg text-xs outline-none focus:border-amber-500 font-bold text-gray-800">
+        </td>
+        <td class="p-2.5 text-center font-serif">
+            <span class="bg-amber-100/70 text-amber-900 px-2.5 py-1 rounded-md font-bold text-xs border border-amber-200/80 inline-block">
+                <span class="calc-weight-price">${calcPrice}</span> <?php echo htmlspecialchars($settings['store_currency'] ?? 'ج.م'); ?>
+            </span>
+        </td>
+        <td class="p-2.5 text-center">
+            <button type="button" onclick="this.closest('tr').remove()" class="text-red-500 hover:text-red-700 transition p-1 rounded-lg hover:bg-red-50" title="حذف هذا الوزن">
+                <i class="fa-solid fa-trash-can text-xs"></i>
+            </button>
+        </td>
+    `;
+    tbody.appendChild(tr);
+}
+
+function loadDefaultSupermarketWeights() {
+    const tbody = document.getElementById('weight-options-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    const defaults = [
+        { weight: 0.25, label: 'ربع كيلو (250 غرام)' },
+        { weight: 0.50, label: 'نصف كيلو (500 غرام)' },
+        { weight: 0.75, label: '3/4 كيلو (750 غرام)' },
+        { weight: 1.00, label: 'كيلو كامل (1000 غرام)' }
+    ];
+    defaults.forEach(d => addWeightOptionRow(d.weight, d.label));
+}
 
 function checkVariantsEmpty() {
     const tbody = document.getElementById('variants-tbody');
@@ -498,6 +682,17 @@ function escapeHtml(str) {
 }
 
 document.addEventListener("DOMContentLoaded", function() {
+    // تعبئة خيارات الوزن إن وجدت
+    if (isWeightBasedInitial) {
+        if (existingWeightOptions && existingWeightOptions.length > 0) {
+            existingWeightOptions.forEach(w => {
+                addWeightOptionRow(w.weight, w.label);
+            });
+        } else {
+            loadDefaultSupermarketWeights();
+        }
+    }
+
     // تعبئة الخيارات الحالية
     if (existingVariants && existingVariants.length > 0) {
         existingVariants.forEach(v => {

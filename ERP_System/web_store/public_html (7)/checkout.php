@@ -33,26 +33,8 @@ if (isset($_SESSION['user_id'])) {
     }
 }
 
-$active_countries = !empty($settings['active_countries']) ? json_decode($settings['active_countries'], true) : array_keys($supported_countries_data);
-if (!is_array($active_countries) || empty($active_countries)) {
-    $active_countries = array_keys($supported_countries_data);
-}
-$default_country = $settings['default_country'] ?? 'مصر';
-$currency_mode = $settings['preferred_currency_mode'] ?? 'local';
-
-// جلب مناطق الشحن مجمعة لكل دولة
-$all_zones_raw = $pdo->query("SELECT * FROM shipping_zones ORDER BY country_name ASC, id ASC")->fetchAll(PDO::FETCH_ASSOC);
-$country_zones_map = [];
-foreach ($all_zones_raw as $z) {
-    $c = $z['country_name'] ?: 'مصر';
-    $country_zones_map[$c][] = [
-        'id' => (int)$z['id'],
-        'name' => $z['gov_name'],
-        'cost' => (float)$z['cost'],
-        'is_active' => (int)$z['is_active'],
-        'currency' => $z['currency_symbol'] ?: ($supported_countries_data[$c]['currency'] ?? 'ج.م')
-    ];
-}
+// جلب مناطق الشحن لمحافظات مصر
+$egypt_zones = $pdo->query("SELECT * FROM shipping_zones WHERE country_name = 'مصر' OR country_name IS NULL ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC);
 
 $subtotal_cart = 0;
 foreach($_SESSION['cart'] as $id => $item) {
@@ -66,15 +48,8 @@ if (isset($_POST['submit_order'])) {
     $name = trim($_POST['c_name']);
     $phone = trim($_POST['c_phone']);
     $email = isset($_POST['c_email']) ? trim($_POST['c_email']) : '';
-    $country = trim($_POST['c_country'] ?? $default_country);
-    
-    // تحديد العملة المطلوبة
-    $selected_curr = trim($_POST['c_currency'] ?? 'local');
-    if ($selected_curr === '$' || $selected_curr === 'USD') {
-        $currency = '$';
-    } else {
-        $currency = $supported_countries_data[$country]['currency'] ?? ($settings['store_currency'] ?? 'ج.م');
-    }
+    $country = 'مصر';
+    $currency = 'ج.م';
     
     // بناء العنوان بالتفصيل من الخانات المنفصلة
     $street = trim($_POST['addr_street']);
@@ -104,12 +79,52 @@ if (isset($_POST['submit_order'])) {
     }
 
     $gov_name = $gov_data['gov_name'];
-    $shipping_cost = $gov_data['cost'];
+    $shipping_cost = (float)$gov_data['cost'];
+    $shipping_type = isset($_POST['shipping_type']) ? trim($_POST['shipping_type']) : 'flat';
+    $delivery_lat = isset($_POST['delivery_lat']) && !empty($_POST['delivery_lat']) ? trim($_POST['delivery_lat']) : null;
+    $delivery_lng = isset($_POST['delivery_lng']) && !empty($_POST['delivery_lng']) ? trim($_POST['delivery_lng']) : null;
+    $delivery_distance_km = isset($_POST['delivery_distance_km']) && !empty($_POST['delivery_distance_km']) ? (float)$_POST['delivery_distance_km'] : null;
+
+    // حساب الشحن الذكي بالكيلومتر لمناطق القاهرة والجيزة وأكتوبر أو عند تحديد الموقع بالخريطة
+    $enable_km = ($settings['enable_km_shipping'] ?? '1') === '1';
+    $store_lat = (float)($settings['store_lat'] ?? 30.0444);
+    $store_lng = (float)($settings['store_lng'] ?? 31.2357);
+    $km_rate = (float)($settings['km_rate'] ?? 2.00);
+    $km_base_min = (float)($settings['km_base_min_price'] ?? 25.00);
+    $km_govs = !empty($settings['km_shipping_govs']) ? json_decode($settings['km_shipping_govs'], true) : ['القاهرة', 'الجيزة', '6 أكتوبر', 'الشيخ زايد'];
+    if (!is_array($km_govs)) $km_govs = ['القاهرة', 'الجيزة', '6 أكتوبر', 'الشيخ زايد'];
+
+    if ($enable_km && $delivery_lat && $delivery_lng && (in_array($gov_name, $km_govs) || $shipping_type === 'km')) {
+        // معادلة هافرسين لحساب المسافة الدقيقة بين المحل والعميل
+        $earthRadius = 6371; // km
+        $dLat = deg2rad((float)$delivery_lat - $store_lat);
+        $dLng = deg2rad((float)$delivery_lng - $store_lng);
+        $a = sin($dLat/2) * sin($dLat/2) + cos(deg2rad($store_lat)) * cos(deg2rad((float)$delivery_lat)) * sin($dLng/2) * sin($dLng/2);
+        $c = 2 * atan2(sqrt($a), sqrt(1-$a));
+        $dist_calc = round($earthRadius * $c, 1);
+        $delivery_distance_km = $dist_calc;
+
+        if ($dist_calc <= 1.0) {
+            $shipping_cost = $km_base_min;
+        } else {
+            $extra_dist = $dist_calc - 1.0;
+            $shipping_cost = $km_base_min + round($extra_dist * $km_rate);
+        }
+        $shipping_type = 'km';
+    }
 
     // تفاصيل المنتجات في الطلب بالفاتورة
     $details = "";
     foreach ($_SESSION['cart'] as $item) {
-        $details .= "• " . $item['name'] . " | الكمية: " . $item['qty'] . " | السعر: " . $item['price'] . " " . $currency . "\n";
+        $extra_info = [];
+        if (!empty($item['weight_label'])) {
+            $extra_info[] = "الوزن: " . $item['weight_label'];
+        }
+        if (!empty($item['variant_summary'])) {
+            $extra_info[] = "المواصفات: " . $item['variant_summary'];
+        }
+        $extra_str = !empty($extra_info) ? " (" . implode(' - ', $extra_info) . ")" : "";
+        $details .= "• " . $item['name'] . $extra_str . " | الكمية: " . $item['qty'] . " | السعر: " . $item['price'] . " " . $currency . "\n";
     }
 
     $coupon_code = $_SESSION['coupon'] ? $_SESSION['coupon']['code'] : null;
@@ -122,7 +137,7 @@ if (isset($_POST['submit_order'])) {
     $transaction_ref = isset($_POST['transaction_ref']) ? trim($_POST['transaction_ref']) : null;
     $receipt_image = null;
 
-    if (in_array($payment_method, ['فودافون كاش / المحافظ', 'تحويل انستا باي (InstaPay)', 'محفظة شام كاش (Cham Cash)'])) {
+    if (in_array($payment_method, ['فودافون كاش / المحافظ', 'تحويل انستا باي (InstaPay)'])) {
         $payment_status = 'قيد التحقق والمراجعة';
         if (isset($_FILES['receipt_file']) && $_FILES['receipt_file']['error'] === 0) {
             $receipt_image = uploadImage($_FILES['receipt_file']);
@@ -130,15 +145,10 @@ if (isset($_POST['submit_order'])) {
         if (empty($receipt_image)) {
             die("<div style='direction:rtl; text-align:center; padding:50px; font-family:tahoma;'><h2>عذراً، يجب رفع صورة إيصال التحويل لإتمام الطلب بهذه الوسيلة.</h2><a href='javascript:history.back()'>العودة وتعديل الطلب</a></div>");
         }
-    } elseif ($payment_method === 'باي بال (PayPal)') {
-        $payment_status = 'قيد التحقق والمراجعة';
-        if (isset($_FILES['receipt_file']) && $_FILES['receipt_file']['error'] === 0) {
-            $receipt_image = uploadImage($_FILES['receipt_file']);
-        }
     }
 
-    $pdo->prepare("INSERT INTO orders (customer_name, customer_phone, customer_email, country, governorate, currency, customer_address, order_details, total_price, discount_amount, shipping_cost, coupon_code, user_id, payment_method, payment_status, receipt_image, transaction_ref) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-        ->execute([$name, $phone, $email, $country, $gov_name, $currency, $address, $details, $total_price, $discount_val, $shipping_cost, $coupon_code, $user_id, $payment_method, $payment_status, $receipt_image, $transaction_ref]);
+    $pdo->prepare("INSERT INTO orders (customer_name, customer_phone, customer_email, country, governorate, currency, customer_address, order_details, total_price, discount_amount, shipping_cost, coupon_code, user_id, payment_method, payment_status, receipt_image, transaction_ref, delivery_lat, delivery_lng, delivery_distance_km, shipping_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+        ->execute([$name, $phone, $email, $country, $gov_name, $currency, $address, $details, $total_price, $discount_val, $shipping_cost, $coupon_code, $user_id, $payment_method, $payment_status, $receipt_image, $transaction_ref, $delivery_lat, $delivery_lng, $delivery_distance_km, $shipping_type]);
 
     $order_id = $pdo->lastInsertId();
 
@@ -168,6 +178,12 @@ if (isset($_POST['submit_order'])) {
     $message .= "🛍️ <b>تفاصيل المنتجات:</b>\n" . htmlspecialchars($details) . "\n";
     if ($coupon_code) {
         $message .= "🏷️ <b>كوبون الخصم:</b> " . htmlspecialchars($coupon_code) . " (خصم: " . $discount_val . " " . $curr_s . ")\n";
+    }
+    if ($delivery_distance_km) {
+        $message .= "📍 <b>المسافة من المحل:</b> " . $delivery_distance_km . " كم\n";
+    }
+    if ($delivery_lat && $delivery_lng) {
+        $message .= "🗺️ <b>لوكيشن العميل:</b> https://www.google.com/maps?q=" . $delivery_lat . "," . $delivery_lng . "\n";
     }
     $message .= "🚚 <b>تكلفة الشحن:</b> " . $shipping_cost . " " . $curr_s . "\n";
     $message .= "💰 <b>الإجمالي النهائي:</b> " . $total_price . " " . $curr_s . "\n\n";
@@ -260,47 +276,37 @@ include 'header.php';
                     <input type="email" name="c_email" required placeholder="البريد الإلكتروني لتلقي الفاتورة *" value="<?php echo htmlspecialchars($logged_email); ?>" class="w-full p-4 border border-gray-200 bg-royal-cream/35 outline-none focus:bg-white focus:border-royal-gold transition rounded-xl text-sm">
                 </div>
 
-                <!-- اختيار الدولة والعملة -->
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-xs font-bold mb-1.5 text-royal-dark flex items-center gap-1.5">
-                            <i class="fa-solid fa-earth-americas text-royal-darkgold"></i> الدولة للتوصيل *
-                        </label>
-                        <select name="c_country" id="country-select" required class="w-full p-4 border border-gray-200 bg-royal-cream/35 outline-none focus:bg-white focus:border-royal-gold transition rounded-xl text-sm font-bold text-royal-dark">
-                            <?php foreach($active_countries as $ac): 
-                                $c_meta = $supported_countries_data[$ac] ?? ['flag'=>'🌐', 'currency'=>'ج.م'];
-                            ?>
-                                <option value="<?php echo htmlspecialchars($ac); ?>" data-currency="<?php echo htmlspecialchars($c_meta['currency']); ?>" <?php echo ($default_country === $ac) ? 'selected' : ''; ?>>
-                                    <?php echo $c_meta['flag'] . ' ' . htmlspecialchars($ac); ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
+                <!-- الدولة والعملة (مصر - ج.م) -->
+                <input type="hidden" name="c_country" value="مصر">
+                <input type="hidden" name="c_currency" value="ج.م">
+                
+                <!-- حقول إحداثيات ونوع الشحن والمسافة بالكيلومتر -->
+                <input type="hidden" name="delivery_lat" id="delivery_lat" value="">
+                <input type="hidden" name="delivery_lng" id="delivery_lng" value="">
+                <input type="hidden" name="delivery_distance_km" id="delivery_distance_km" value="">
+                <input type="hidden" name="shipping_type" id="shipping_type" value="flat">
 
-                    <div>
-                        <label class="block text-xs font-bold mb-1.5 text-royal-dark flex items-center gap-1.5">
-                            <i class="fa-solid fa-money-bill-wave text-royal-darkgold"></i> عملة الفاتورة والدفع
-                        </label>
-                        <select name="c_currency" id="currency-select" class="w-full p-4 border border-gray-200 bg-royal-cream/35 outline-none focus:bg-white focus:border-royal-gold transition rounded-xl text-sm font-bold text-royal-dark">
-                            <option value="local" id="opt-local-currency">عملة البلد المحددة (<?php echo htmlspecialchars($supported_countries_data[$default_country]['currency'] ?? 'ج.م'); ?>)</option>
-                            <option value="$" <?php echo ($currency_mode === 'usd') ? 'selected' : ''; ?>>الدولار الأمريكي ($ - USD)</option>
-                        </select>
-                    </div>
-                </div>
-
-                <!-- اختيار المحافظة / المنطقة التابعة للدولة -->
+                <!-- اختيار المحافظة / المدينة داخل مصر -->
                 <div>
                     <label class="block text-xs font-bold mb-1.5 text-royal-dark flex items-center gap-1.5">
-                        <i class="fa-solid fa-map-pin text-royal-darkgold"></i> المحافظة / المدينة *
+                        <i class="fa-solid fa-map-pin text-royal-darkgold"></i> المحافظة / المدينة (مصر) *
                     </label>
                     <select name="c_gov" id="gov-select" required class="w-full p-4 border border-gray-200 bg-royal-cream/35 outline-none focus:bg-white focus:border-royal-gold transition text-gray-700 rounded-xl text-sm font-medium">
-                        <option value="" disabled selected>اختر المحافظة / المدينة للتسليم *</option>
+                        <option value="" disabled <?php echo empty($logged_gov_id) ? 'selected' : ''; ?>>اختر المحافظة للتوصيل *</option>
+                        <?php foreach($egypt_zones as $z): 
+                            $is_sel = ($logged_gov_id && (int)$logged_gov_id === (int)$z['id']);
+                        ?>
+                            <option value="<?php echo $z['id']; ?>" data-name="<?php echo htmlspecialchars($z['gov_name']); ?>" data-cost="<?php echo $z['cost']; ?>" data-active="<?php echo $z['is_active']; ?>" data-currency="ج.م" <?php echo $is_sel ? 'selected' : ''; ?>>
+                                <?php echo htmlspecialchars($z['gov_name']) . ($z['is_active'] ? ' (' . $z['cost'] . ' ج.م)' : ' (غير متاح حالياً)'); ?>
+                            </option>
+                        <?php endforeach; ?>
                     </select>
 
                     <div id="gov-error" class="hidden text-red-600 text-xs mt-3.5 p-3.5 bg-red-50 border border-red-200 rounded-xl font-bold">
-                        <i class="fa-solid fa-circle-exclamation mr-1 text-sm"></i> عذراً، التوصيل والشحن لهذه المنطقة غير متاح حالياً.
+                        <i class="fa-solid fa-circle-exclamation mr-1 text-sm"></i> عذراً، التوصيل والشحن لهذه المحافظة غير متاح حالياً.
                     </div>
                 </div>
+
                 <!-- زر تحديد الموقع عبر الخريطة المدمجة -->
                 <div class="mb-4">
                     <button type="button" id="btn-open-map" class="w-full bg-royal-sand/60 hover:bg-royal-gold/15 text-royal-darkgold border border-royal-gold/20 py-3.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-sm">
@@ -346,9 +352,9 @@ include 'header.php';
                     <label class="block text-xs font-bold mb-1 text-royal-dark">اختيار طريقة الدفع المتاحة *</label>
                     <div class="grid grid-cols-1 gap-3.5">
                         
-                        <!-- 1. الدفع عند الاستلام (كاش - لجميع الدول) -->
+                        <!-- 1. الدفع عند الاستلام (كاش) -->
                         <?php if (($settings['cod_enabled'] ?? '1') === '1'): ?>
-                        <label data-payment-country="all" class="payment-option-card border-2 border-royal-gold bg-royal-cream/20 p-4 rounded-xl flex items-center justify-between cursor-pointer transition shadow-sm">
+                        <label class="payment-option-card border-2 border-royal-gold bg-royal-cream/20 p-4 rounded-xl flex items-center justify-between cursor-pointer transition shadow-sm">
                             <div class="flex items-center gap-3">
                                 <input type="radio" name="payment_method" value="الدفع عند الاستلام" checked onchange="togglePaymentBox('cod')" class="text-royal-darkgold focus:ring-royal-gold w-4 h-4">
                                 <div class="text-right">
@@ -359,64 +365,15 @@ include 'header.php';
                             <i class="fa-solid fa-money-bill-wave text-royal-gold text-lg"></i>
                         </label>
                         <?php endif; ?>
-
-                        <!-- 2. محفظة شام كاش / سيريتل كاش (خاصة بسوريا 🇸🇾) -->
-                        <?php if (($settings['cham_cash_enabled'] ?? '0') === '1' && (!empty($settings['cham_cash_number']) || !empty($settings['syriatel_cash_number']))): ?>
-                        <div data-payment-country="سوريا" class="payment-option-card border border-emerald-300 bg-emerald-50/30 hover:border-emerald-500 p-4 rounded-xl flex items-center justify-between transition">
-                            <label class="flex items-center gap-3 cursor-pointer flex-grow">
-                                <input type="radio" name="payment_method" value="محفظة شام كاش (Cham Cash)" onchange="togglePaymentBox('cham')" class="text-emerald-600 focus:ring-emerald-500 w-4 h-4">
-                                <div class="text-right">
-                                    <h4 class="text-xs font-bold text-emerald-950 flex items-center gap-2">
-                                        🇸🇾 محفظة شام كاش / سيريتل
-                                        <span class="bg-emerald-100 text-emerald-800 text-[9px] px-2 py-0.5 rounded-full font-bold">إجباري رفع إيصال</span>
-                                    </h4>
-                                    <p class="text-[10px] text-emerald-700 font-light mt-0.5">
-                                        حساب شام كاش: <strong class="font-mono font-bold text-emerald-900" dir="ltr"><?php echo htmlspecialchars($settings['cham_cash_number'] ?: $settings['syriatel_cash_number']); ?></strong>
-                                        <?php if (!empty($settings['cham_cash_name'])): ?> (<?php echo htmlspecialchars($settings['cham_cash_name']); ?>)<?php endif; ?>
-                                    </p>
-                                </div>
-                            </label>
-                            <div class="flex items-center gap-2">
-                                <button type="button" onclick="copyToClipboard('<?php echo htmlspecialchars($settings['cham_cash_number'] ?: $settings['syriatel_cash_number']); ?>', this)" class="bg-white border border-emerald-300 hover:border-emerald-500 text-emerald-900 text-[10px] font-bold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 shadow-sm active:scale-95">
-                                    <i class="fa-regular fa-copy text-emerald-700"></i> نسخ
-                                </button>
-                                <span class="text-xl">🇸🇾</span>
-                            </div>
-                        </div>
-                        <?php endif; ?>
-
-                        <!-- 3. باي بال (PayPal - للدول العربية والدولية 🌐) -->
-                        <?php if (($settings['paypal_enabled'] ?? '0') === '1' && !empty($settings['paypal_email'])): ?>
-                        <div data-payment-country="all" class="payment-option-card border border-blue-200 bg-blue-50/20 hover:border-blue-500 p-4 rounded-xl flex items-center justify-between transition">
-                            <label class="flex items-center gap-3 cursor-pointer flex-grow">
-                                <input type="radio" name="payment_method" value="باي بال (PayPal)" onchange="togglePaymentBox('paypal')" class="text-blue-600 focus:ring-blue-500 w-4 h-4">
-                                <div class="text-right">
-                                    <h4 class="text-xs font-bold text-blue-950 flex items-center gap-2">
-                                        <i class="fa-brands fa-paypal text-blue-600"></i> باي بال (PayPal)
-                                        <span class="bg-blue-100 text-blue-800 text-[9px] px-2 py-0.5 rounded-full font-bold">دفع دولي وآمن</span>
-                                    </h4>
-                                    <p class="text-[10px] text-blue-700 font-light mt-0.5">
-                                        حساب باي بال: <strong class="font-mono font-bold text-blue-900" dir="ltr"><?php echo htmlspecialchars($settings['paypal_email']); ?></strong>
-                                    </p>
-                                </div>
-                            </label>
-                            <div class="flex items-center gap-2">
-                                <button type="button" onclick="copyToClipboard('<?php echo htmlspecialchars($settings['paypal_email']); ?>', this)" class="bg-white border border-blue-300 hover:border-blue-500 text-blue-900 text-[10px] font-bold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 shadow-sm active:scale-95">
-                                    <i class="fa-regular fa-copy text-blue-600"></i> نسخ
-                                </button>
-                                <i class="fa-brands fa-paypal text-blue-600 text-xl"></i>
-                            </div>
-                        </div>
-                        <?php endif; ?>
                         
-                        <!-- 4. فودافون كاش / المحافظ الإلكترونية (خاص بمصر 🇪🇬) -->
+                        <!-- 2. فودافون كاش / المحافظ الإلكترونية -->
                         <?php if (($settings['vodafone_cash_enabled'] ?? '0') === '1' && !empty($settings['vodafone_cash_number'])): ?>
-                        <div data-payment-country="مصر" class="payment-option-card border border-gray-200 hover:border-royal-gold p-4 rounded-xl flex items-center justify-between transition">
+                        <div class="payment-option-card border border-gray-200 hover:border-royal-gold p-4 rounded-xl flex items-center justify-between transition">
                             <label class="flex items-center gap-3 cursor-pointer flex-grow">
                                 <input type="radio" name="payment_method" value="فودافون كاش / المحافظ" onchange="togglePaymentBox('vcash')" class="text-royal-darkgold focus:ring-royal-gold w-4 h-4">
                                 <div class="text-right">
                                     <h4 class="text-xs font-bold text-royal-dark flex items-center gap-2">
-                                        تحويل فودافون كاش / المحافظ
+                                        تحويل فودافون كاش / المحافظ الإلكترونية
                                         <span class="bg-red-100 text-red-700 text-[9px] px-2 py-0.5 rounded-full font-bold">إجباري رفع إيصال</span>
                                     </h4>
                                     <p class="text-[10px] text-gray-400 font-light mt-0.5">التحويل على محفظة: <strong id="val-vcash" class="font-mono text-royal-dark font-bold" dir="ltr"><?php echo htmlspecialchars($settings['vodafone_cash_number']); ?></strong></p>
@@ -431,9 +388,9 @@ include 'header.php';
                         </div>
                         <?php endif; ?>
 
-                        <!-- 5. تحويل انستا باي (InstaPay - خاص بمصر 🇪🇬) -->
+                        <!-- 3. تحويل انستا باي (InstaPay) -->
                         <?php if (($settings['instapay_enabled'] ?? '0') === '1' && !empty($settings['instapay_address'])): ?>
-                        <div data-payment-country="مصر" class="payment-option-card border border-gray-200 hover:border-royal-gold p-4 rounded-xl flex items-center justify-between transition">
+                        <div class="payment-option-card border border-gray-200 hover:border-royal-gold p-4 rounded-xl flex items-center justify-between transition">
                             <label class="flex items-center gap-3 cursor-pointer flex-grow">
                                 <input type="radio" name="payment_method" value="تحويل انستا باي (InstaPay)" onchange="togglePaymentBox('instapay')" class="text-royal-darkgold focus:ring-royal-gold w-4 h-4">
                                 <div class="text-right">
@@ -453,14 +410,14 @@ include 'header.php';
                         </div>
                         <?php endif; ?>
 
-                        <!-- 6. الدفع عبر Paymob (مصر، السعودية، الإمارات، سلطنة عمان) -->
+                        <!-- 4. الدفع عبر Paymob (فيزا / ماستركارد / ميزة) -->
                         <?php if (($settings['paymob_enabled'] ?? '0') === '1' && !empty($settings['paymob_api_key'])): ?>
-                        <label data-payment-country="مصر,السعودية,الإمارات,سلطنة عمان" class="payment-option-card border border-gray-200 hover:border-royal-gold p-4 rounded-xl flex items-center justify-between cursor-pointer transition">
+                        <label class="payment-option-card border border-gray-200 hover:border-royal-gold p-4 rounded-xl flex items-center justify-between cursor-pointer transition">
                             <div class="flex items-center gap-3">
                                 <input type="radio" name="payment_method" value="فيزا / ماستركارد (Paymob)" onchange="togglePaymentBox('paymob')" class="text-royal-darkgold focus:ring-royal-gold w-4 h-4">
                                 <div class="text-right">
                                     <h4 class="text-xs font-bold text-royal-dark flex items-center gap-2">
-                                        دفع إلكتروني (فيزا / ماستركارد / مدى)
+                                        دفع إلكتروني (فيزا / ماستركارد / ميزة)
                                         <span class="bg-blue-100 text-blue-700 text-[9px] px-2 py-0.5 rounded-full font-bold">تلقائي 100%</span>
                                     </h4>
                                     <p class="text-[10px] text-gray-400 font-light mt-0.5">الدفع الآمن الفوري باستخدام الكروت والبطاقات البنكية.</p>
@@ -472,7 +429,7 @@ include 'header.php';
 
                     </div>
 
-                    <!-- صندوق رفع صورة الإيصال ورقم العملية (يظهر لشام كاش وفودافون كاش وانستا باي وباي بال) -->
+                    <!-- صندوق رفع صورة الإيصال ورقم العملية -->
                     <div id="receipt-upload-box" class="hidden bg-royal-cream/60 p-5 rounded-2xl border border-royal-gold/30 space-y-4 animate-fade-in">
                         <div class="bg-yellow-50 text-yellow-800 p-3 rounded-xl border border-yellow-200 text-xs font-bold flex items-center justify-between">
                             <div class="flex items-center gap-2">
@@ -501,8 +458,6 @@ include 'header.php';
                     <script>
                         const vcashNum = '<?php echo htmlspecialchars($settings['vodafone_cash_number'] ?? ''); ?>';
                         const instaAddr = '<?php echo htmlspecialchars($settings['instapay_address'] ?? ''); ?>';
-                        const chamNum = '<?php echo htmlspecialchars($settings['cham_cash_number'] ?: ($settings['syriatel_cash_number'] ?? '')); ?>';
-                        const paypalEmail = '<?php echo htmlspecialchars($settings['paypal_email'] ?? ''); ?>';
 
                         function togglePaymentBox(type) {
                             const box = document.getElementById('receipt-upload-box');
@@ -510,12 +465,7 @@ include 'header.php';
                             const infoSpan = document.getElementById('target-transfer-info');
                             const copyBoxBtn = document.getElementById('btn-copy-box');
 
-                            if (type === 'cham') {
-                                box.classList.remove('hidden');
-                                fileInput.required = true;
-                                infoSpan.innerHTML = 'رقم شام كاش / سيريتل: <strong dir="ltr" class="font-mono text-royal-dark">' + chamNum + '</strong>';
-                                copyBoxBtn.setAttribute('onclick', "copyToClipboard('" + chamNum + "', this)");
-                            } else if (type === 'vcash') {
+                            if (type === 'vcash') {
                                 box.classList.remove('hidden');
                                 fileInput.required = true;
                                 infoSpan.innerHTML = 'رقم فودافون كاش: <strong dir="ltr" class="font-mono text-royal-dark">' + vcashNum + '</strong>';
@@ -525,53 +475,9 @@ include 'header.php';
                                 fileInput.required = true;
                                 infoSpan.innerHTML = 'حساب انستا باي: <strong dir="ltr" class="font-mono text-royal-dark">' + instaAddr + '</strong>';
                                 copyBoxBtn.setAttribute('onclick', "copyToClipboard('" + instaAddr + "', this)");
-                            } else if (type === 'paypal') {
-                                box.classList.remove('hidden');
-                                fileInput.required = false;
-                                infoSpan.innerHTML = 'حساب باي بال: <strong dir="ltr" class="font-mono text-royal-dark">' + paypalEmail + '</strong>';
-                                copyBoxBtn.setAttribute('onclick', "copyToClipboard('" + paypalEmail + "', this)");
                             } else {
                                 box.classList.add('hidden');
                                 fileInput.required = false;
-                            }
-                        }
-
-                        function updatePaymentMethodsForCountry(country) {
-                            const cards = document.querySelectorAll('.payment-option-card');
-                            let hasSelectedVisible = false;
-                            let firstVisibleRadio = null;
-
-                            cards.forEach(card => {
-                                const allowedCountries = card.getAttribute('data-payment-country');
-                                let isVisible = false;
-
-                                if (allowedCountries === 'all') {
-                                    isVisible = true;
-                                } else {
-                                    const list = allowedCountries.split(',').map(s => s.trim());
-                                    isVisible = list.includes(country);
-                                }
-
-                                if (isVisible) {
-                                    card.classList.remove('hidden');
-                                    const radio = card.querySelector('input[type="radio"]');
-                                    if (radio) {
-                                        if (!firstVisibleRadio) firstVisibleRadio = radio;
-                                        if (radio.checked) hasSelectedVisible = true;
-                                    }
-                                } else {
-                                    card.classList.add('hidden');
-                                    const radio = card.querySelector('input[type="radio"]');
-                                    if (radio && radio.checked) {
-                                        radio.checked = false;
-                                    }
-                                }
-                            });
-
-                            // إذا كانت الطريقة المختارة أصبحت مخفية، نحدد أول خيار متاح
-                            if (!hasSelectedVisible && firstVisibleRadio) {
-                                firstVisibleRadio.checked = true;
-                                firstVisibleRadio.dispatchEvent(new Event('change'));
                             }
                         }
 
@@ -620,7 +526,31 @@ include 'header.php';
             <div class="bg-white p-6 border border-royal-gold/10 shadow-sm rounded-2xl sticky top-28">
                 <h3 class="font-serif font-bold text-base mb-4 text-royal-dark border-b pb-2">تفاصيل الفاتورة</h3>
                 
-                <div class="flex justify-between mb-3 text-xs text-gray-500 font-medium">
+                <!-- قائمة المنتجات المشتراة مع الأوزان -->
+                <div class="space-y-3 mb-4 max-h-48 overflow-y-auto divide-y divide-gray-100 pr-1">
+                    <?php foreach($_SESSION['cart'] as $c_item): ?>
+                        <div class="flex items-center justify-between text-xs pt-2">
+                            <div class="flex items-center gap-2">
+                                <img src="<?php echo htmlspecialchars($c_item['image']); ?>" class="w-9 h-11 object-cover rounded-lg border border-gray-100 shrink-0">
+                                <div>
+                                    <span class="font-semibold text-royal-dark block leading-tight"><?php echo htmlspecialchars($c_item['name']); ?></span>
+                                    <div class="flex flex-wrap items-center gap-1 mt-1 text-[10px] text-gray-400">
+                                        <span>الكمية: <?php echo $c_item['qty']; ?></span>
+                                        <?php if(!empty($c_item['weight_label'])): ?>
+                                            <span class="bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded font-bold">⚖️ <?php echo htmlspecialchars($c_item['weight_label']); ?></span>
+                                        <?php endif; ?>
+                                        <?php if(!empty($c_item['variant_summary'])): ?>
+                                            <span class="bg-gray-100 text-gray-700 px-1.5 py-0.2 rounded font-bold"><?php echo htmlspecialchars($c_item['variant_summary']); ?></span>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                            </div>
+                            <span class="font-serif font-bold text-royal-darkgold"><?php echo ($c_item['price'] * $c_item['qty']); ?></span>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+
+                <div class="flex justify-between mb-3 text-xs text-gray-500 font-medium border-t pt-3">
                     <span>مجموع المشتريات</span> 
                     <span class="font-serif"><?php echo $subtotal_cart; ?> <span class="checkout-curr-display"><?php echo htmlspecialchars($settings['store_currency'] ?? 'ج.م'); ?></span></span>
                 </div>
@@ -632,6 +562,15 @@ include 'header.php';
                 </div>
                 <?php endif; ?>
                 
+                <!-- إشعار حساب المسافة بالكيلومتر -->
+                <div id="km-distance-badge" class="hidden my-3 p-3 bg-emerald-50/70 border border-emerald-200/80 rounded-xl text-xs text-emerald-950 font-medium text-center animate-fade-in shadow-sm">
+                    <div class="flex items-center justify-center gap-1.5 font-bold text-emerald-800">
+                        <i class="fa-solid fa-route text-emerald-600"></i>
+                        <span id="km-distance-text">المسافة: - كم</span>
+                    </div>
+                    <p class="text-[10px] text-gray-500 mt-1 font-normal" id="km-distance-note">يتم احتساب التوصيل بناءً على بُعدك عن المحل.</p>
+                </div>
+
                 <div class="flex justify-between mb-5 text-xs text-gray-500 border-b pb-4 items-center">
                     <span>مصاريف الشحن والتوصيل</span> 
                     <span id="shipping-val" class="font-bold text-royal-dark bg-royal-sand px-2 py-0.5 rounded text-[10px]">يُحدد بعد اختيار المحافظة</span>
@@ -647,80 +586,49 @@ include 'header.php';
 </div>
 
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const countryZonesMap = <?php echo json_encode($country_zones_map, JSON_UNESCAPED_UNICODE); ?>;
-        const supportedCountries = <?php echo json_encode($supported_countries_data, JSON_UNESCAPED_UNICODE); ?>;
-        const baseSubtotal = <?php echo $final_total_before_shipping; ?>;
-        const loggedGovId = <?php echo json_encode($logged_gov_id); ?>;
+    // إعدادات الشحن الذكي بالكيلومتر من لوحة التحكم
+    const kmConfig = {
+        enabled: <?php echo (($settings['enable_km_shipping'] ?? '1') === '1') ? 'true' : 'false'; ?>,
+        storeLat: <?php echo (float)($settings['store_lat'] ?? 30.0444); ?>,
+        storeLng: <?php echo (float)($settings['store_lng'] ?? 31.2357); ?>,
+        storeName: '<?php echo addslashes($settings['store_address_name'] ?? 'الفرع الرئيسي'); ?>',
+        rate: <?php echo (float)($settings['km_rate'] ?? 2.00); ?>,
+        baseMin: <?php echo (float)($settings['km_base_min_price'] ?? 25.00); ?>,
+        kmGovs: <?php echo json_encode(!empty($settings['km_shipping_govs']) ? json_decode($settings['km_shipping_govs'], true) : ['القاهرة', 'الجيزة', '6 أكتوبر', 'الشيخ زايد'], JSON_UNESCAPED_UNICODE); ?>
+    };
 
-        const countrySelect = document.getElementById('country-select');
-        const currencySelect = document.getElementById('currency-select');
+    // حساب المسافة الدقيقة بين نقطتين إحداثيات (Haversine Formula)
+    function calculateDistanceKm(lat1, lon1, lat2, lon2) {
+        const R = 6371; // نصف قطر الأرض بالكيلومتر
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = 
+            Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+            Math.sin(dLon/2) * Math.sin(dLon/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        const d = R * c;
+        return Math.round(d * 10) / 10;
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const baseSubtotal = <?php echo $final_total_before_shipping; ?>;
         const govSelect = document.getElementById('gov-select');
-        const optLocalCurr = document.getElementById('opt-local-currency');
         const shippingValEl = document.getElementById('shipping-val');
         const totalValEl = document.getElementById('total-val');
         const submitBtn = document.getElementById('submit-order-btn');
         const govErrorEl = document.getElementById('gov-error');
-        const currencyDisplays = document.querySelectorAll('.checkout-curr-display');
+        const kmBadge = document.getElementById('km-distance-badge');
+        const kmText = document.getElementById('km-distance-text');
+        const kmNote = document.getElementById('km-distance-note');
+        
+        const latInput = document.getElementById('delivery_lat');
+        const lngInput = document.getElementById('delivery_lng');
+        const distInput = document.getElementById('delivery_distance_km');
+        const typeInput = document.getElementById('shipping_type');
 
-        function getCurrentCurrency() {
-            const country = countrySelect.value;
-            const countryMeta = supportedCountries[country] || { currency: 'ج.م' };
-            if (currencySelect && currencySelect.value === '$') {
-                return '$';
-            }
-            return countryMeta.currency || 'ج.م';
-        }
-
-        function updateCurrencyLabels() {
-            const curr = getCurrentCurrency();
-            const country = countrySelect.value;
-            const countryMeta = supportedCountries[country] || { currency: 'ج.م' };
-            
-            if (optLocalCurr) {
-                optLocalCurr.textContent = 'عملة ' + country + ' (' + (countryMeta.currency || 'ج.م') + ')';
-            }
-            
-            currencyDisplays.forEach(el => {
-                el.textContent = curr;
-            });
-            
-            // إعادة حساب الشحن إذا كانت المحافظة مختارة
-            handleGovChange();
-        }
-
-        function populateGovernorates(country, selectedId = null) {
-            govSelect.innerHTML = '<option value="" disabled selected>اختر المحافظة / المدينة للتسليم *</option>';
-            const zones = countryZonesMap[country] || [];
-            
-            if (zones.length === 0) {
-                const opt = document.createElement('option');
-                opt.value = "";
-                opt.textContent = "لا توجد مناطق شحن مسجلة لهذه الدولة";
-                opt.disabled = true;
-                govSelect.appendChild(opt);
-                return;
-            }
-
-            zones.forEach(z => {
-                const opt = document.createElement('option');
-                opt.value = z.id;
-                opt.textContent = z.name + (z.is_active ? ' (' + z.cost + ' ' + (z.currency || getCurrentCurrency()) + ')' : ' (غير متاح حالياً)');
-                opt.setAttribute('data-cost', z.cost);
-                opt.setAttribute('data-active', z.is_active);
-                opt.setAttribute('data-currency', z.currency || getCurrentCurrency());
-                if (selectedId && parseInt(selectedId) === parseInt(z.id)) {
-                    opt.selected = true;
-                }
-                govSelect.appendChild(opt);
-            });
-
-            handleGovChange();
-        }
-
-        function handleGovChange() {
+        function updateShippingDisplay() {
             const opt = govSelect.options[govSelect.selectedIndex];
-            const curr = getCurrentCurrency();
             
             if (!opt || opt.disabled || !opt.value) {
                 govErrorEl.classList.add('hidden');
@@ -728,10 +636,12 @@ include 'header.php';
                 shippingValEl.innerText = 'يُحدد بعد اختيار المحافظة';
                 shippingValEl.className = 'font-bold text-royal-dark bg-royal-sand px-2 py-0.5 rounded text-[10px]';
                 totalValEl.innerText = baseSubtotal;
+                kmBadge.classList.add('hidden');
                 return;
             }
 
-            const cost = parseFloat(opt.getAttribute('data-cost')) || 0;
+            const govName = opt.getAttribute('data-name') || opt.text.split('(')[0].trim();
+            const flatCost = parseFloat(opt.getAttribute('data-cost')) || 0;
             const isActive = opt.getAttribute('data-active') === '1';
 
             if (!isActive) {
@@ -740,212 +650,250 @@ include 'header.php';
                 shippingValEl.innerText = 'غير متاح حالياً';
                 shippingValEl.className = 'font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded text-[10px]';
                 totalValEl.innerText = baseSubtotal;
-            } else {
-                govErrorEl.classList.add('hidden');
-                submitBtn.disabled = false;
-                shippingValEl.innerText = cost + ' ' + curr;
+                kmBadge.classList.add('hidden');
+                return;
+            }
+
+            govErrorEl.classList.add('hidden');
+            submitBtn.disabled = false;
+
+            const lat = parseFloat(latInput.value);
+            const lng = parseFloat(lngInput.value);
+            const isKmEligible = kmConfig.enabled && kmConfig.kmGovs.some(g => govName.includes(g) || g.includes(govName));
+
+            if (isKmEligible && !isNaN(lat) && !isNaN(lng)) {
+                const dist = calculateDistanceKm(kmConfig.storeLat, kmConfig.storeLng, lat, lng);
+                distInput.value = dist;
+                typeInput.value = 'km';
+
+                let finalCost = 0;
+                let extraDist = 0;
+                if (dist <= 1.0) {
+                    finalCost = kmConfig.baseMin;
+                } else {
+                    extraDist = dist - 1.0;
+                    finalCost = kmConfig.baseMin + Math.round(extraDist * kmConfig.rate);
+                }
+
+                shippingValEl.innerText = finalCost + ' ج.م';
                 shippingValEl.className = 'font-bold text-royal-darkgold bg-royal-sand px-2 py-0.5 rounded text-[10px]';
-                totalValEl.innerText = (baseSubtotal + cost);
+                totalValEl.innerText = (baseSubtotal + finalCost);
+
+                kmBadge.classList.remove('hidden');
+                kmText.innerHTML = `المسافة من متجرنا: <strong>${dist} كم</strong>`;
+                if (dist <= 1.0) {
+                    kmNote.innerHTML = `تكلفة التوصيل: <strong>${finalCost} ج.م</strong> (سعر فتح المسافة لأول 1 كم: ${kmConfig.baseMin} ج.م)`;
+                } else {
+                    kmNote.innerHTML = `تكلفة التوصيل: <strong>${finalCost} ج.م</strong> (أول 1 كم: ${kmConfig.baseMin} ج.م + ${extraDist.toFixed(1)} كم إضافي × ${kmConfig.rate} ج.م)`;
+                }
+            } else {
+                typeInput.value = 'flat';
+                shippingValEl.innerText = flatCost + ' ج.م';
+                shippingValEl.className = 'font-bold text-royal-darkgold bg-royal-sand px-2 py-0.5 rounded text-[10px]';
+                totalValEl.innerText = (baseSubtotal + flatCost);
+                kmBadge.classList.add('hidden');
             }
         }
 
-        // مستمعات الأحداث
-        if (countrySelect) {
-            countrySelect.addEventListener('change', function() {
-                updateCurrencyLabels();
-                populateGovernorates(this.value);
-                if (typeof updatePaymentMethodsForCountry === 'function') {
-                    updatePaymentMethodsForCountry(this.value);
-                }
-            });
-        }
-
-        if (currencySelect) {
-            currencySelect.addEventListener('change', function() {
-                updateCurrencyLabels();
-            });
-        }
+        window.recalcShipping = updateShippingDisplay;
 
         if (govSelect) {
-            govSelect.addEventListener('change', handleGovChange);
-        }
-
-        // التهيئة الأولية
-        if (countrySelect) {
-            updateCurrencyLabels();
-            populateGovernorates(countrySelect.value, loggedGovId);
-            if (typeof updatePaymentMethodsForCountry === 'function') {
-                updatePaymentMethodsForCountry(countrySelect.value);
+            govSelect.addEventListener('change', updateShippingDisplay);
+            if (govSelect.selectedIndex > 0) {
+                updateShippingDisplay();
             }
         }
     });
         
-        // ================= برمجة الخريطة وجلب الإحداثيات =================
-        let map = null;
-        let marker = null;
+    // ================= برمجة الخريطة وجلب الإحداثيات وحساب الكيلومتر =================
+    let map = null;
+    let marker = null;
+    
+    document.getElementById('btn-open-map').addEventListener('click', function() {
+        const container = document.getElementById('map-container');
+        container.classList.toggle('hidden');
         
-        document.getElementById('btn-open-map').addEventListener('click', function() {
-            const container = document.getElementById('map-container');
-            container.classList.toggle('hidden');
+        if (container.classList.contains('hidden')) return;
+        
+        if (!map) {
+            const defaultLat = kmConfig.storeLat || 30.0444;
+            const defaultLng = kmConfig.storeLng || 31.2357;
             
-            if (container.classList.contains('hidden')) return;
+            map = L.map('checkout-map').setView([defaultLat, defaultLng], 13);
             
-            if (!map) {
-                // الإحداثيات الافتراضية: وسط القاهرة
-                const defaultLat = 30.0444;
-                const defaultLng = 31.2357;
-                
-                map = L.map('checkout-map').setView([defaultLat, defaultLng], 13);
-                
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    maxZoom: 19,
-                    attribution: '© OpenStreetMap'
-                }).addTo(map);
-                
-                marker = L.marker([defaultLat, defaultLng], { draggable: true }).addTo(map);
-                
-                marker.on('dragend', function() {
-                    const position = marker.getLatLng();
-                    updateFieldsFromCoords(position.lat, position.lng);
-                });
-                
-                map.on('click', function(e) {
-                    marker.setLatLng(e.latlng);
-                    updateFieldsFromCoords(e.latlng.lat, e.latlng.lng);
-                });
-                
-                // جلب الموقع التلقائي للمستخدم
-                if (navigator.geolocation) {
-                    navigator.geolocation.getCurrentPosition(function(pos) {
-                        const lat = pos.coords.latitude;
-                        const lng = pos.coords.longitude;
-                        map.setView([lat, lng], 16);
-                        marker.setLatLng([lat, lng]);
-                        updateFieldsFromCoords(lat, lng);
-                    }, function() {
-                        updateFieldsFromCoords(defaultLat, defaultLng);
-                    });
-                } else {
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '© OpenStreetMap'
+            }).addTo(map);
+
+            // إضافة نقطة متجرنا على الخريطة
+            const storeIcon = new L.Icon({
+                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-gold.png',
+                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                iconSize: [25, 41],
+                iconAnchor: [12, 41],
+                popupAnchor: [1, -34],
+                shadowSize: [41, 41]
+            });
+            L.marker([kmConfig.storeLat, kmConfig.storeLng], { icon: storeIcon })
+                .addTo(map)
+                .bindPopup("<b>🏬 " + kmConfig.storeName + "</b><br>نقطة انطلاق الشحن");
+            
+            marker = L.marker([defaultLat, defaultLng], { draggable: true }).addTo(map);
+            marker.bindPopup("<b>📍 موقع التوصيل الخاص بك</b>").openPopup();
+            
+            marker.on('dragend', function() {
+                const position = marker.getLatLng();
+                updateFieldsFromCoords(position.lat, position.lng);
+            });
+            
+            map.on('click', function(e) {
+                marker.setLatLng(e.latlng);
+                updateFieldsFromCoords(e.latlng.lat, e.latlng.lng);
+            });
+            
+            // جلب الموقع التلقائي للمستخدم عبر GPS
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(function(pos) {
+                    const lat = pos.coords.latitude;
+                    const lng = pos.coords.longitude;
+                    map.setView([lat, lng], 16);
+                    marker.setLatLng([lat, lng]);
+                    updateFieldsFromCoords(lat, lng);
+                }, function() {
                     updateFieldsFromCoords(defaultLat, defaultLng);
-                }
-            } else {
-                setTimeout(() => {
-                    map.invalidateSize();
-                }, 100);
-            }
-        });
-        
-        // إعداد البحث في الخريطة
-        document.getElementById('btn-map-search').addEventListener('click', function() {
-            performMapSearch();
-        });
-        document.getElementById('map-search-input').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                performMapSearch();
-            }
-        });
-        
-        function performMapSearch() {
-            const query = document.getElementById('map-search-input').value.trim();
-            if (!query) return;
-            
-            const btn = document.getElementById('btn-map-search');
-            btn.innerText = "جاري...";
-            btn.disabled = true;
-            
-            fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&accept-language=ar&limit=1`)
-                .then(res => res.json())
-                .then(data => {
-                    btn.innerText = "بحث";
-                    btn.disabled = false;
-                    if (data && data.length > 0) {
-                        const lat = parseFloat(data[0].lat);
-                        const lng = parseFloat(data[0].lon);
-                        map.setView([lat, lng], 16);
-                        marker.setLatLng([lat, lng]);
-                        updateFieldsFromCoords(lat, lng);
-                    } else {
-                        alert("عذراً، لم نجد نتائج لهذا البحث. جربي كتابة اسم الشارع أو المنطقة بشكل أوضح.");
-                    }
-                })
-                .catch(err => {
-                    console.error('Search error:', err);
-                    btn.innerText = "بحث";
-                    btn.disabled = false;
                 });
+            } else {
+                updateFieldsFromCoords(defaultLat, defaultLng);
+            }
+        } else {
+            setTimeout(() => {
+                map.invalidateSize();
+            }, 100);
         }
+    });
+    
+    // إعداد البحث في الخريطة
+    document.getElementById('btn-map-search').addEventListener('click', function() {
+        performMapSearch();
+    });
+    document.getElementById('map-search-input').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            performMapSearch();
+        }
+    });
+    
+    function performMapSearch() {
+        const query = document.getElementById('map-search-input').value.trim();
+        if (!query) return;
         
-        function updateFieldsFromCoords(lat, lng) {
-            const streetField = document.getElementById('addr_street');
-            streetField.placeholder = "جاري جلب اسم الشارع والمنطقة من الخريطة... 📍";
-            
-            fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=ar`)
-                .then(res => res.json())
-                .then(data => {
-                    streetField.placeholder = "اسم الشارع / المنطقة / الميدان *";
-                    if (data && data.address) {
-                        const road = data.address.road || data.address.suburb || data.address.neighbourhood || '';
-                        const city = data.address.city || data.address.town || data.address.village || '';
-                        const county = data.address.county || '';
-                        
-                        streetField.value = [road, city, county].filter(Boolean).join('، ');
-                        
-                        // محاولة مطابقة المحافظة تلقائياً
-                        const state = data.address.state || data.address.governorate || '';
-                        if (state) {
-                            const select = document.getElementById('gov-select');
-                            const cleanState = state.replace('محافظة', '').trim();
-                            for (let i = 0; i < select.options.length; i++) {
-                                const optText = select.options[i].text;
-                                if (cleanState.includes(optText) || optText.includes(cleanState)) {
-                                    select.selectedIndex = i;
-                                    select.dispatchEvent(new Event('change'));
-                                    break;
-                                }
+        const btn = document.getElementById('btn-map-search');
+        btn.innerText = "جاري...";
+        btn.disabled = true;
+        
+        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&accept-language=ar&limit=1`)
+            .then(res => res.json())
+            .then(data => {
+                btn.innerText = "بحث";
+                btn.disabled = false;
+                if (data && data.length > 0) {
+                    const lat = parseFloat(data[0].lat);
+                    const lng = parseFloat(data[0].lon);
+                    map.setView([lat, lng], 16);
+                    marker.setLatLng([lat, lng]);
+                    updateFieldsFromCoords(lat, lng);
+                } else {
+                    alert("عذراً، لم نجد نتائج لهذا البحث. جرب كتابة اسم الشارع أو المنطقة بشكل أوضح.");
+                }
+            })
+            .catch(err => {
+                console.error('Search error:', err);
+                btn.innerText = "بحث";
+                btn.disabled = false;
+            });
+    }
+    
+    function updateFieldsFromCoords(lat, lng) {
+        document.getElementById('delivery_lat').value = lat;
+        document.getElementById('delivery_lng').value = lng;
+
+        const streetField = document.getElementById('addr_street');
+        streetField.placeholder = "جاري جلب اسم الشارع والمنطقة من الخريطة... 📍";
+        
+        fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=ar`)
+            .then(res => res.json())
+            .then(data => {
+                streetField.placeholder = "اسم الشارع / المنطقة / الميدان *";
+                if (data && data.address) {
+                    const road = data.address.road || data.address.suburb || data.address.neighbourhood || '';
+                    const city = data.address.city || data.address.town || data.address.village || '';
+                    const county = data.address.county || '';
+                    
+                    streetField.value = [road, city, county].filter(Boolean).join('، ');
+                    
+                    // محاولة مطابقة المحافظة تلقائياً
+                    const state = data.address.state || data.address.governorate || '';
+                    if (state) {
+                        const select = document.getElementById('gov-select');
+                        const cleanState = state.replace('محافظة', '').trim();
+                        for (let i = 0; i < select.options.length; i++) {
+                            const optText = select.options[i].text;
+                            if (cleanState.includes(optText) || optText.includes(cleanState)) {
+                                select.selectedIndex = i;
+                                break;
                             }
                         }
                     }
-                })
-                .catch(err => {
-                    console.error('Geocoding error:', err);
-                    streetField.placeholder = "اسم الشارع / المنطقة / الميدان *";
-        // مزامنة السلة المتروكة في الخلفية عند كتابة العميل لبياناته
-        let syncTimeout = null;
-        function syncAbandonedCartData() {
-            clearTimeout(syncTimeout);
-            syncTimeout = setTimeout(() => {
-                const nameInput = document.querySelector('input[name="name"]');
-                const phoneInput = document.querySelector('input[name="phone"]');
-                const emailInput = document.querySelector('input[name="email"]');
-                const govSelect = document.getElementById('gov-select');
-
-                const name = nameInput ? nameInput.value.trim() : '';
-                const phone = phoneInput ? phoneInput.value.trim() : '';
-                const email = emailInput ? emailInput.value.trim() : '';
-                const gov = (govSelect && govSelect.selectedIndex > 0) ? govSelect.options[govSelect.selectedIndex].text : '';
-
-                if (name || phone || email) {
-                    const fd = new FormData();
-                    fd.append('customer_name', name);
-                    fd.append('customer_phone', phone);
-                    fd.append('customer_email', email);
-                    fd.append('governorate', gov);
-
-                    fetch('ajax_save_cart.php', {
-                        method: 'POST',
-                        body: fd
-                    }).catch(err => console.log('Cart sync error:', err));
                 }
-            }, 800);
-        }
+                if (window.recalcShipping) {
+                    window.recalcShipping();
+                }
+            })
+            .catch(err => {
+                console.error('Geocoding error:', err);
+                streetField.placeholder = "اسم الشارع / المنطقة / الميدان *";
+                if (window.recalcShipping) {
+                    window.recalcShipping();
+                }
+            });
+    }
 
-        const trackInputs = document.querySelectorAll('input[name="name"], input[name="phone"], input[name="email"], #gov-select');
-        trackInputs.forEach(el => {
-            el.addEventListener('input', syncAbandonedCartData);
-            el.addEventListener('change', syncAbandonedCartData);
-            el.addEventListener('blur', syncAbandonedCartData);
-        });
+    // مزامنة السلة المتروكة في الخلفية عند كتابة العميل لبياناته
+    let syncTimeout = null;
+    function syncAbandonedCartData() {
+        clearTimeout(syncTimeout);
+        syncTimeout = setTimeout(() => {
+            const nameInput = document.querySelector('input[name="c_name"]');
+            const phoneInput = document.querySelector('input[name="c_phone"]');
+            const emailInput = document.querySelector('input[name="c_email"]');
+            const govSelect = document.getElementById('gov-select');
+
+            const name = nameInput ? nameInput.value.trim() : '';
+            const phone = phoneInput ? phoneInput.value.trim() : '';
+            const email = emailInput ? emailInput.value.trim() : '';
+            const gov = (govSelect && govSelect.selectedIndex > 0) ? govSelect.options[govSelect.selectedIndex].text : '';
+
+            if (name || phone || email) {
+                const fd = new FormData();
+                fd.append('customer_name', name);
+                fd.append('customer_phone', phone);
+                fd.append('customer_email', email);
+                fd.append('governorate', gov);
+
+                fetch('ajax_save_cart.php', {
+                    method: 'POST',
+                    body: fd
+                }).catch(err => console.log('Cart sync error:', err));
+            }
+        }, 800);
+    }
+
+    const trackInputs = document.querySelectorAll('input[name="c_name"], input[name="c_phone"], input[name="c_email"], #gov-select');
+    trackInputs.forEach(el => {
+        el.addEventListener('input', syncAbandonedCartData);
+        el.addEventListener('change', syncAbandonedCartData);
+        el.addEventListener('blur', syncAbandonedCartData);
     });
 </script>
 

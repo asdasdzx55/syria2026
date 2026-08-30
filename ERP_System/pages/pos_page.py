@@ -399,17 +399,54 @@ class POSPage(ctk.CTkFrame):
         self.pos_barcode.focus() 
         self.after(20, lambda: self.pos_barcode.select_range(0, 'end'))
 
+    def _parse_scale_barcode(self, raw_code):
+        """
+        قواعد تحليل الباركود:
+        1. إذا كان الباركود مكوناً من 13 رقماً ويبدأ بـ "20":
+           - نوع الباركود: باركود ميزان ذو وزن متغير.
+           - كود الصنف (Item Code): الأرقام من الخانة 3 إلى الخانة 7 (5 أرقام: [2:7]).
+           - الوزن (Weight): الأرقام من الخانة 8 إلى الخانة 12 (5 أرقام: [7:12]) مقسوم على 1000 ليصبح بالكيلوغرام.
+           - رقم التحقق (Check Digit): الخانة 13 الأخيرة (تُتجاهل في الحسابات).
+           - الكمية المعاملة: استخدام الوزن المستخرج كقيمة (quantity/weight).
+        2. إذا كان الباركود لا يبدأ بـ "20" أو لا يتبع معيار الميزان (طوله ليس 13):
+           - كود الصنف (Item Code): كامل الرقم.
+           - الكمية الافتراضية: استخدام الكمية المدخلة أو 1.
+        """
+        code = str(raw_code).strip()
+        if len(code) == 13 and code.startswith("20") and code.isdigit():
+            item_code = code[2:7]
+            try:
+                raw_weight = int(code[7:12])
+                weight = round(raw_weight / 1000.0, 3)
+            except ValueError:
+                weight = 1.0
+            return item_code, weight, True
+        return code, None, False
+
     def _on_barcode_key_release(self, event=None):
         if event and event.keysym in ("Return", "Tab", "Up", "Down", "Left", "Right", "Escape"):
             return
         code = self.pos_barcode.get().strip()
         if not code: return
+
+        search_code, scale_weight, is_scale = self._parse_scale_barcode(code)
+
         query = "SELECT name, price, stock FROM products WHERE barcode=? OR local_code=? OR barcode2=? OR barcode3=? OR ',' || COALESCE(all_barcodes, '') || ',' LIKE ?"
-        bc_s = f'%,{code},%'
-        self.cursor.execute(query, (code, code, code, code, bc_s))
+        bc_s = f'%,{search_code},%'
+        self.cursor.execute(query, (search_code, search_code, search_code, search_code, bc_s))
         prod = self.cursor.fetchone()
         if prod:
-            self.status_label.configure(text=f"📦 {prod[0]} - السعر: {prod[1]:g} ج.م | المخزن: {prod[2]:g}", text_color="#2ecc71")
+            if is_scale:
+                total_val = prod[1] * scale_weight
+                self.status_label.configure(
+                    text=f"⚖️ {prod[0]} | وزن: {scale_weight:g} كجم | السعر: {prod[1]:g} ج.م | الإجمالي: {total_val:.2f} ج.م",
+                    text_color="#2ecc71"
+                )
+            else:
+                self.status_label.configure(
+                    text=f"📦 {prod[0]} - السعر: {prod[1]:g} ج.م | المخزن: {prod[2]:g}",
+                    text_color="#2ecc71"
+                )
 
     def _on_barcode_return(self, event=None):
         scanned_code = self.pos_barcode.get().strip()
@@ -448,27 +485,26 @@ class POSPage(ctk.CTkFrame):
         if not scanned_code: return
         self.pos_barcode.delete(0, 'end')
         
-        qty = self._get_qty_input() 
-        barcode_to_search = scanned_code
-        if len(scanned_code) == 13 and scanned_code.startswith(("20", "21", "22", "23", "24", "25", "26", "27", "28", "29")):
-            barcode_to_search = scanned_code[2:7] 
-            qty = int(scanned_code[7:12]) / 1000.0 
+        search_code, scale_weight, is_scale = self._parse_scale_barcode(scanned_code)
+
+        if is_scale:
+            qty = scale_weight
+        else:
+            qty = self._get_qty_input()
             
         query = "SELECT id, name, price, stock FROM products WHERE barcode=? OR local_code=? OR barcode2=? OR barcode3=? OR ',' || COALESCE(all_barcodes, '') || ',' LIKE ?"
-        exact_bc_search = f'%,{barcode_to_search},%'
-        self.cursor.execute(query, (barcode_to_search, barcode_to_search, barcode_to_search, barcode_to_search, exact_bc_search))
+        exact_bc_search = f'%,{search_code},%'
+        self.cursor.execute(query, (search_code, search_code, search_code, search_code, exact_bc_search))
         prod = self.cursor.fetchone()
 
-
-        
         if prod:
             if qty <= 0: 
-                self.show_status("❌ الكمية خطأ!", "#e74c3c")
+                self.show_status("❌ الكمية أو الوزن غير صحيح!", "#e74c3c")
                 self.pos_barcode.focus()
                 return
             self._add_to_cart_logic(prod, qty)
         else: 
-            self.show_status(f"❌ باركود غير مسجل: {barcode_to_search}", "#e74c3c")
+            self.show_status(f"❌ باركود / كود صنف غير مسجل: {search_code}", "#e74c3c")
             self.pos_barcode.focus()
 
     def pos_add_from_tree(self, event):

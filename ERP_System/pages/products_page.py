@@ -79,6 +79,22 @@ class ProductsPage(ctk.CTkFrame):
         self.ent_p_stock.pack(side="right", padx=5)
 
         # ==================================
+        # 2.1 التصنيف الأساسي والفرعي
+        # ==================================
+        row_cat = ctk.CTkFrame(form_frame, fg_color="#1a252f", corner_radius=8)
+        row_cat.pack(fill="x", pady=6, padx=10)
+
+        ctk.CTkLabel(row_cat, text="🏷️ التصنيف الأساسي:", font=ctk.CTkFont(weight="bold"), text_color="#2ecc71").pack(side="right", padx=(10, 4), pady=6)
+        self.combo_main_cat = ctk.CTkComboBox(row_cat, width=170, command=self._on_main_category_selected)
+        self.combo_main_cat.pack(side="right", padx=4, pady=6)
+
+        ctk.CTkLabel(row_cat, text="📂 التصنيف الفرعي:", font=ctk.CTkFont(weight="bold"), text_color="#3498db").pack(side="right", padx=(10, 4), pady=6)
+        self.combo_sub_cat = ctk.CTkComboBox(row_cat, width=170)
+        self.combo_sub_cat.pack(side="right", padx=4, pady=6)
+
+        ctk.CTkButton(row_cat, text="➕ إضافة / إدارة التصنيفات", width=160, fg_color="#16a085", hover_color="#117864", font=ctk.CTkFont(weight="bold"), command=self.open_categories_manager).pack(side="left", padx=10, pady=6)
+
+        # ==================================
         # 3. نظام الباركود الدولي والفرعي
         # ==================================
         bc_frame = ctk.CTkFrame(form_frame, fg_color="#2b2b2b", corner_radius=10)
@@ -138,9 +154,205 @@ class ProductsPage(ctk.CTkFrame):
 
     def on_show(self):
         self.setup_shortcuts()
+        self.load_categories_to_combos()
         self.refresh_nav_ids()
         self.prod_clear_form()
         self.ent_p_name.focus() 
+
+    # ==================================
+    # دوال إدارة التصنيفات الأساسية والفرعية
+    # ==================================
+    def load_categories_to_combos(self):
+        try:
+            self.cursor.execute("SELECT name FROM categories ORDER BY id ASC")
+            main_cats = [r[0] for r in self.cursor.fetchall() if r[0]]
+            if not main_cats:
+                main_cats = ["عام"]
+            
+            self.combo_main_cat.configure(values=main_cats)
+            curr = self.combo_main_cat.get()
+            if not curr or curr not in main_cats:
+                self.combo_main_cat.set(main_cats[0])
+            
+            self._on_main_category_selected()
+        except Exception as e:
+            print(f"Error loading categories: {e}")
+
+    def _on_main_category_selected(self, choice=None):
+        main_cat = self.combo_main_cat.get().strip()
+        if not main_cat:
+            self.combo_sub_cat.configure(values=["عام"])
+            self.combo_sub_cat.set("عام")
+            return
+            
+        try:
+            self.cursor.execute("""
+                SELECT sc.name 
+                FROM sub_categories sc 
+                JOIN categories c ON sc.main_category_id = c.id 
+                WHERE c.name = ? 
+                ORDER BY sc.id ASC
+            """, (main_cat,))
+            sub_cats = [r[0] for r in self.cursor.fetchall() if r[0]]
+            if not sub_cats:
+                sub_cats = ["عام"]
+            
+            self.combo_sub_cat.configure(values=sub_cats)
+            self.combo_sub_cat.set(sub_cats[0])
+        except Exception as e:
+            print(f"Error loading sub-categories: {e}")
+
+    def open_categories_manager(self):
+        win = ctk.CTkToplevel(self)
+        win.title("إدارة التصنيفات الأساسية والفرعية")
+        win.geometry("680x560")
+        win.attributes("-topmost", True)
+        win.resizable(False, False)
+
+        header = ctk.CTkFrame(win, fg_color="#1f538d", corner_radius=10)
+        header.pack(fill="x", padx=15, pady=10)
+        ctk.CTkLabel(header, text="🏷️ إدارة وتعديل التصنيفات الأساسية والفرعية", font=ctk.CTkFont(size=18, weight="bold"), text_color="white").pack(pady=8)
+
+        # بطاقة إضافة تصنيف أساسي
+        card_main = ctk.CTkFrame(win, fg_color="#2c3e50", corner_radius=8)
+        card_main.pack(fill="x", padx=15, pady=5)
+        
+        ctk.CTkLabel(card_main, text="1. إضافة تصنيف أساسي جديد:", font=ctk.CTkFont(weight="bold"), text_color="#2ecc71").pack(side="right", padx=10, pady=8)
+        ent_new_main = ctk.CTkEntry(card_main, placeholder_text="اسم التصنيف الأساسي...", width=200, font=("Arial", 13))
+        ent_new_main.pack(side="right", padx=5, pady=8)
+        
+        def add_main_cat():
+            name = ent_new_main.get().strip()
+            if not name:
+                messagebox.showwarning("تنبيه", "برجاء كتابة اسم التصنيف الأساسي!", parent=win)
+                return
+            try:
+                self.cursor.execute("INSERT INTO categories (name) VALUES (?)", (name,))
+                cat_id = self.cursor.lastrowid
+                self.cursor.execute("INSERT OR IGNORE INTO sub_categories (name, main_category_id) VALUES ('عام', ?)", (cat_id,))
+                self.db.commit()
+                ent_new_main.delete(0, 'end')
+                refresh_mgr_data()
+                self.load_categories_to_combos()
+                self.combo_main_cat.set(name)
+                self._on_main_category_selected()
+                messagebox.showinfo("نجاح", f"تمت إضافة التصنيف الأساسي ({name}) بنجاح!", parent=win)
+            except sqlite3.IntegrityError:
+                messagebox.showerror("خطأ", "هذا التصنيف الأساسي مسجل بالفعل!", parent=win)
+            except Exception as ex:
+                messagebox.showerror("خطأ", str(ex), parent=win)
+
+        ctk.CTkButton(card_main, text="➕ إضافة أساسي", width=110, fg_color="#27ae60", hover_color="#1e8449", command=add_main_cat).pack(side="left", padx=10, pady=8)
+
+        # بطاقة إضافة تصنيف فرعي
+        card_sub = ctk.CTkFrame(win, fg_color="#2c3e50", corner_radius=8)
+        card_sub.pack(fill="x", padx=15, pady=5)
+
+        ctk.CTkLabel(card_sub, text="2. إضافة تصنيف فرعي:", font=ctk.CTkFont(weight="bold"), text_color="#3498db").pack(side="right", padx=10, pady=8)
+        combo_mgr_main = ctk.CTkComboBox(card_sub, width=170)
+        combo_mgr_main.pack(side="right", padx=5, pady=8)
+        
+        ent_new_sub = ctk.CTkEntry(card_sub, placeholder_text="اسم التصنيف الفرعي...", width=160, font=("Arial", 13))
+        ent_new_sub.pack(side="right", padx=5, pady=8)
+
+        def add_sub_cat():
+            main_name = combo_mgr_main.get().strip()
+            sub_name = ent_new_sub.get().strip()
+            if not main_name or not sub_name:
+                messagebox.showwarning("تنبيه", "برجاء اختيار التصنيف الأساسي وكتابة التصنيف الفرعي!", parent=win)
+                return
+            try:
+                self.cursor.execute("SELECT id FROM categories WHERE name=?", (main_name,))
+                row = self.cursor.fetchone()
+                if not row:
+                    messagebox.showerror("خطأ", "التصنيف الأساسي غير موجود!", parent=win)
+                    return
+                main_id = row[0]
+                self.cursor.execute("INSERT INTO sub_categories (name, main_category_id) VALUES (?, ?)", (sub_name, main_id))
+                self.db.commit()
+                ent_new_sub.delete(0, 'end')
+                refresh_mgr_data()
+                self.load_categories_to_combos()
+                self.combo_main_cat.set(main_name)
+                self._on_main_category_selected()
+                self.combo_sub_cat.set(sub_name)
+                messagebox.showinfo("نجاح", f"تمت إضافة التصنيف الفرعي ({sub_name}) تحت ({main_name}) بنجاح!", parent=win)
+            except sqlite3.IntegrityError:
+                messagebox.showerror("خطأ", "هذا التصنيف الفرعي مسجل بالفعل تحت هذا القسم!", parent=win)
+            except Exception as ex:
+                messagebox.showerror("خطأ", str(ex), parent=win)
+
+        ctk.CTkButton(card_sub, text="➕ إضافة فرعي", width=110, fg_color="#2980b9", hover_color="#1f618d", command=add_sub_cat).pack(side="left", padx=10, pady=8)
+
+        # جدول عرض التصنيفات
+        tree_frame = ctk.CTkFrame(win)
+        tree_frame.pack(fill="both", expand=True, padx=15, pady=8)
+
+        tree = ttk.Treeview(tree_frame, columns=('type', 'main_name', 'sub_name', 'id'), show='headings', height=8)
+        tree.heading('type', text='النوع')
+        tree.heading('main_name', text='التصنيف الأساسي')
+        tree.heading('sub_name', text='التصنيف الفرعي')
+        tree.heading('id', text='ID')
+
+        tree.column('type', width=100, anchor='center')
+        tree.column('main_name', width=200, anchor='center')
+        tree.column('sub_name', width=200, anchor='center')
+        tree.column('id', width=60, anchor='center')
+        tree.pack(side="left", fill="both", expand=True)
+
+        scroll = ttk.Scrollbar(tree_frame, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=scroll.set)
+        scroll.pack(side="right", fill="y")
+
+        def refresh_mgr_data():
+            for item in tree.get_children(): tree.delete(item)
+            self.cursor.execute("SELECT name FROM categories ORDER BY id ASC")
+            all_mains = [r[0] for r in self.cursor.fetchall() if r[0]]
+            combo_mgr_main.configure(values=all_mains if all_mains else ["عام"])
+            if all_mains: combo_mgr_main.set(all_mains[0])
+
+            self.cursor.execute("""
+                SELECT c.id, c.name, sc.id, sc.name 
+                FROM categories c 
+                LEFT JOIN sub_categories sc ON sc.main_category_id = c.id 
+                ORDER BY c.id ASC, sc.id ASC
+            """)
+            for c_id, c_name, sc_id, sc_name in self.cursor.fetchall():
+                if sc_id:
+                    tree.insert("", "end", values=("📂 فرعي", c_name, sc_name or "-", f"sub_{sc_id}"))
+                else:
+                    tree.insert("", "end", values=("🏷️ أساسي", c_name, "-", f"main_{c_id}"))
+
+        def delete_selected_cat():
+            selected = tree.selection()
+            if not selected:
+                messagebox.showwarning("تنبيه", "اختر تصنيفاً من الجدول لحذفه!", parent=win)
+                return
+            item = tree.item(selected[0])['values']
+            item_type, main_name, sub_name, tag_id = item[0], item[1], item[2], str(item[3])
+            
+            if "sub_" in tag_id:
+                sub_id = int(tag_id.replace("sub_", ""))
+                if messagebox.askyesno("تأكيد", f"حذف التصنيف الفرعي ({sub_name})؟", parent=win):
+                    self.cursor.execute("DELETE FROM sub_categories WHERE id=?", (sub_id,))
+                    self.db.commit()
+                    refresh_mgr_data()
+                    self.load_categories_to_combos()
+            elif "main_" in tag_id:
+                main_id = int(tag_id.replace("main_", ""))
+                if messagebox.askyesno("تحذير", f"حذف التصنيف الأساسي ({main_name}) وجميع تصنيفاته الفرعية؟", parent=win):
+                    self.cursor.execute("DELETE FROM sub_categories WHERE main_category_id=?", (main_id,))
+                    self.cursor.execute("DELETE FROM categories WHERE id=?", (main_id,))
+                    self.db.commit()
+                    refresh_mgr_data()
+                    self.load_categories_to_combos()
+
+        btn_row = ctk.CTkFrame(win, fg_color="transparent")
+        btn_row.pack(fill="x", padx=15, pady=(0, 10))
+        ctk.CTkButton(btn_row, text="❌ حذف التصنيف المحدد", fg_color="#c0392b", hover_color="#922b21", command=delete_selected_cat).pack(side="right", padx=5)
+        ctk.CTkButton(btn_row, text="إغلاق", fg_color="#7f8c8d", command=win.destroy).pack(side="left", padx=5)
+
+        refresh_mgr_data()
 
     # ==================================
     # دالة البحث المنبثق (Popup Search)
@@ -148,11 +360,11 @@ class ProductsPage(ctk.CTkFrame):
     def open_fast_search_popup(self):
         win = ctk.CTkToplevel(self)
         win.title("بحث وتعديل المنتجات (F3)")
-        win.geometry("750x500")
+        win.geometry("820x520")
         win.attributes("-topmost", True)
 
         search_var = ctk.StringVar()
-        ent_search = ctk.CTkEntry(win, textvariable=search_var, placeholder_text="اكتب اسم المنتج، الباركود المحلي (5 أرقام)، أو الباركود الدولي...", font=("Arial", 16))
+        ent_search = ctk.CTkEntry(win, textvariable=search_var, placeholder_text="اكتب اسم المنتج، التصنيف، الباركود المحلي (5 أرقام)، أو الباركود الدولي...", font=("Arial", 16))
         ent_search.pack(fill="x", padx=10, pady=10)
 
         tree_frame = ctk.CTkFrame(win)
@@ -161,21 +373,23 @@ class ProductsPage(ctk.CTkFrame):
         tree_scroll = ttk.Scrollbar(tree_frame)
         tree_scroll.pack(side="left", fill="y")
         
-        tree = ttk.Treeview(tree_frame, columns=('id', 'local_code', 'barcode', 'name', 'price', 'cost', 'stock'), show='headings', yscrollcommand=tree_scroll.set)
+        tree = ttk.Treeview(tree_frame, columns=('id', 'local_code', 'name', 'main_cat', 'sub_cat', 'price', 'cost', 'stock'), show='headings', yscrollcommand=tree_scroll.set)
         tree_scroll.config(command=tree.yview)
         
         tree.heading('id', text='ID')
-        tree.heading('local_code', text='كود محلي (5 أرقام)')
-        tree.heading('barcode', text='الباركود الدولي')
+        tree.heading('local_code', text='كود محلي')
         tree.heading('name', text='اسم المنتج')
+        tree.heading('main_cat', text='التصنيف الأساسي')
+        tree.heading('sub_cat', text='التصنيف الفرعي')
         tree.heading('price', text='سعر البيع')
         tree.heading('cost', text='التكلفة')
         tree.heading('stock', text='المخزن')
         
         tree.column('id', width=40, stretch=False, anchor='center')
-        tree.column('local_code', width=110, anchor='center')
-        tree.column('barcode', width=130, anchor='center')
+        tree.column('local_code', width=80, anchor='center')
         tree.column('name', width=180, anchor='center')
+        tree.column('main_cat', width=120, anchor='center')
+        tree.column('sub_cat', width=120, anchor='center')
         tree.column('price', width=75, anchor='center')
         tree.column('cost', width=75, anchor='center')
         tree.column('stock', width=75, anchor='center')
@@ -184,14 +398,17 @@ class ProductsPage(ctk.CTkFrame):
         def do_search(*args):
             term = search_var.get().lower()
             for item in tree.get_children(): tree.delete(item)
-            query = "SELECT id, local_code, barcode, name, price, cost, stock FROM products WHERE name LIKE ? OR local_code LIKE ? OR barcode LIKE ? OR barcode2 LIKE ? OR barcode3 LIKE ? OR ',' || COALESCE(all_barcodes, '') || ',' LIKE ?"
+            query = """
+                SELECT id, local_code, name, COALESCE(main_category, category, 'عام'), COALESCE(sub_category, 'عام'), price, cost, stock 
+                FROM products 
+                WHERE name LIKE ? OR local_code LIKE ? OR barcode LIKE ? OR barcode2 LIKE ? OR barcode3 LIKE ? 
+                OR main_category LIKE ? OR sub_category LIKE ? OR category LIKE ? OR ',' || COALESCE(all_barcodes, '') || ',' LIKE ?
+            """
             s = f"%{term}%"
             bc_s = f"%,{term},%"
-            self.cursor.execute(query, (s, s, s, s, s, bc_s))
+            self.cursor.execute(query, (s, s, s, s, s, s, s, s, bc_s))
             for row in self.cursor.fetchall():
                 tree.insert("", "end", values=row)
-
-
 
         search_var.trace("w", do_search)
         do_search() 
@@ -265,7 +482,7 @@ class ProductsPage(ctk.CTkFrame):
         self.all_product_ids = [r[0] for r in self.cursor.fetchall()]
 
     def load_product_by_id(self, p_id):
-        self.cursor.execute("SELECT id, barcode, barcode2, barcode3, name, price, cost, stock, all_barcodes, local_code FROM products WHERE id=?", (p_id,))
+        self.cursor.execute("SELECT id, barcode, barcode2, barcode3, name, price, cost, stock, all_barcodes, local_code, main_category, sub_category, category FROM products WHERE id=?", (p_id,))
         row = self.cursor.fetchone()
         if row:
             self.prod_clear_form()
@@ -277,6 +494,13 @@ class ProductsPage(ctk.CTkFrame):
             self.ent_p_price.insert(0, str(row[5]))
             self.ent_p_cost.insert(0, str(row[6]))
             self.ent_p_stock.insert(0, str(row[7]))
+            
+            main_c = row[10] or row[12] or "عام"
+            sub_c = row[11] or "عام"
+            
+            self.combo_main_cat.set(main_c)
+            self._on_main_category_selected()
+            self.combo_sub_cat.set(sub_c)
             
             all_bcs = row[8]
             self.current_barcodes_list = []
@@ -333,6 +557,9 @@ class ProductsPage(ctk.CTkFrame):
             loc_code = generate_next_local_code(self.cursor)
             self.ent_p_local_code.insert(0, loc_code)
 
+        main_cat = self.combo_main_cat.get().strip() or "عام"
+        sub_cat = self.combo_sub_cat.get().strip() or "عام"
+
         # التقاط أي باركود مكتوب في الخانة ولم تضغط Enter له
         bc_text = self.ent_p_barcode.get().strip()
         if bc_text and bc_text not in self.current_barcodes_list:
@@ -359,14 +586,16 @@ class ProductsPage(ctk.CTkFrame):
             b2 = b_others[1] if len(b_others) > 1 else None
             b3 = b_others[2] if len(b_others) > 2 else None
             
-            self.cursor.execute("INSERT INTO products (barcode, local_code, barcode2, barcode3, name, price, cost, stock, all_barcodes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", 
-                                (b1, loc_code, b2, b3, name, price, cost, stock, all_bcs_str))
+            self.cursor.execute("""
+                INSERT INTO products (barcode, local_code, barcode2, barcode3, name, price, cost, stock, all_barcodes, category, main_category, sub_category) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (b1, loc_code, b2, b3, name, price, cost, stock, all_bcs_str, main_cat, main_cat, sub_cat))
             self.db.commit()
             
             self.refresh_nav_ids()
             self.prod_clear_form()
             
-            self.show_status(f"✅ تم إضافة ({name}) بكود محلي [{loc_code}] بنجاح!", "#2ecc71")
+            self.show_status(f"✅ تم إضافة ({name}) في قسم [{main_cat} > {sub_cat}] بنجاح!", "#2ecc71")
             self.ent_p_name.focus() 
             
         except sqlite3.IntegrityError:
@@ -386,6 +615,9 @@ class ProductsPage(ctk.CTkFrame):
             loc_code = generate_next_local_code(self.cursor)
             self.ent_p_local_code.insert(0, loc_code)
         
+        main_cat = self.combo_main_cat.get().strip() or "عام"
+        sub_cat = self.combo_sub_cat.get().strip() or "عام"
+
         bc_text = self.ent_p_barcode.get().strip()
         if bc_text and bc_text not in self.current_barcodes_list:
             self.current_barcodes_list.append(bc_text)
@@ -411,12 +643,15 @@ class ProductsPage(ctk.CTkFrame):
             b2 = b_others[1] if len(b_others) > 1 else None
             b3 = b_others[2] if len(b_others) > 2 else None
             
-            self.cursor.execute("UPDATE products SET barcode=?, local_code=?, barcode2=?, barcode3=?, name=?, price=?, cost=?, stock=?, all_barcodes=? WHERE id=?", 
-                                (b1, loc_code, b2, b3, name, price, cost, stock, all_bcs_str, self.current_edit_id))
+            self.cursor.execute("""
+                UPDATE products 
+                SET barcode=?, local_code=?, barcode2=?, barcode3=?, name=?, price=?, cost=?, stock=?, all_barcodes=?, category=?, main_category=?, sub_category=? 
+                WHERE id=?
+            """, (b1, loc_code, b2, b3, name, price, cost, stock, all_bcs_str, main_cat, main_cat, sub_cat, self.current_edit_id))
 
             self.db.commit()
             self.prod_clear_form()
-            self.show_status("✅ تم التعديل بنجاح!", "#2ecc71")
+            self.show_status("✅ تم التعديل وحفظ التصنيف بنجاح!", "#2ecc71")
         except sqlite3.IntegrityError:
             messagebox.showerror("خطأ", "أحد الباركودات مستخدم بالفعل لمنتج آخر!")
         except Exception as e: 
@@ -444,6 +679,15 @@ class ProductsPage(ctk.CTkFrame):
         self.current_barcodes_list = []
         self.render_barcodes_list()
         
+        # إعادة تعيين التصنيفات للوضع الافتراضي
+        try:
+            mains = self.combo_main_cat.cget("values")
+            if mains:
+                self.combo_main_cat.set(mains[0])
+                self._on_main_category_selected()
+        except:
+            pass
+
         self.btn_add_prod.configure(state="normal")
         self.btn_edit_prod.configure(state="disabled")
         self.btn_add_stock.configure(state="disabled") 

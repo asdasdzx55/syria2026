@@ -102,6 +102,11 @@ $orders = $pdo->query("SELECT * FROM orders ORDER BY id DESC")->fetchAll(PDO::FE
                                 <span class="bg-royal-sand text-royal-darkgold px-2.5 py-1 rounded-lg font-bold text-[10px]">
                                     <?php echo htmlspecialchars((!empty($o['country']) ? $o['country'] . ' - ' : '') . $o['governorate']); ?>
                                 </span>
+                                <?php if(!empty($o['delivery_distance_km'])): ?>
+                                    <span class="block mt-1 text-[9px] text-emerald-700 font-bold">
+                                        <i class="fa-solid fa-route"></i> <?php echo $o['delivery_distance_km']; ?> كم
+                                    </span>
+                                <?php endif; ?>
                             </td>
                             <td class="p-5 font-serif text-royal-darkgold font-bold text-sm">
                                 <?php echo $o['total_price']; ?> <?php echo htmlspecialchars($o['currency'] ?: ($settings['store_currency'] ?? 'ج.م')); ?>
