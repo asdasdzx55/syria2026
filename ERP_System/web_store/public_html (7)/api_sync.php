@@ -654,12 +654,14 @@ try {
         // 7. تصفير شامل لجميع بيانات المتجر السحابي (Reset All Cloud Data)
         // ============================================================
         case 'reset_all_data':
-            $pdo->exec("DELETE FROM products");
-            $pdo->exec("DELETE FROM orders");
-            $pdo->exec("DELETE FROM order_items");
-            $pdo->exec("DELETE FROM expenses");
-            $pdo->exec("DELETE FROM customers");
-            $pdo->exec("DELETE FROM suppliers");
+            $tables_to_wipe = ['products', 'orders', 'expenses', 'customers', 'suppliers', 'abandoned_carts', 'wishlist', 'notifications'];
+            foreach ($tables_to_wipe as $t) {
+                try {
+                    $pdo->exec("DELETE FROM `{$t}`");
+                } catch (Exception $e) {
+                    // تجاهل الجداول غير الموجودة بأمان
+                }
+            }
             
             echo json_encode([
                 'success' => true,
