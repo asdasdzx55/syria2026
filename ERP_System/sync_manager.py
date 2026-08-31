@@ -7,16 +7,35 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import urllib.parse
+import os
+import sys
+
+def get_base_dir():
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+def get_db_path():
+    base_dir = get_base_dir()
+    p1 = os.path.join(base_dir, 'my_business_v3.db')
+    if os.path.exists(p1): return p1
+    p2 = os.path.join(os.getcwd(), 'my_business_v3.db')
+    if os.path.exists(p2): return p2
+    return p1
 
 class HybridSyncManager:
-    def __init__(self, db_conn, app=None):
-        self.db = db_conn
-        self.cursor = self.db.cursor()
+    def __init__(self, db_conn=None, app=None):
         self.app = app
         self.is_running = False
         self.sync_thread = None
         self._lock = threading.Lock()
         self._session = None
+
+    def _get_db(self):
+        """إنشاء اتصال آمن ومستقل بقاعدة البيانات لكل خيط عمل (Thread-Safe)"""
+        db_path = get_db_path()
+        conn = sqlite3.connect(db_path, timeout=15)
+        return conn
 
     def _get_session(self):
         if self._session is None:
@@ -28,13 +47,18 @@ class HybridSyncManager:
         return self._session
 
     def get_cloud_settings(self):
-        self.cursor.execute("SELECT key, value FROM settings WHERE key LIKE 'cloud_%' OR key LIKE 'hostinger_%' OR key = 'api_secret_key'")
-        st = dict(self.cursor.fetchall())
-        if not st.get('cloud_api_key'):
-            st['cloud_api_key'] = st.get('api_secret_key', 'syrian_home_pos_secret_token_2026')
-        if not st.get('cloud_api_url'):
-            st['cloud_api_url'] = 'https://supermarkrt.almagd555.com/api_sync.php'
-        return st
+        conn = self._get_db()
+        cur = conn.cursor()
+        try:
+            cur.execute("SELECT key, value FROM settings WHERE key LIKE 'cloud_%' OR key LIKE 'hostinger_%' OR key = 'api_secret_key'")
+            st = dict(cur.fetchall())
+            if not st.get('cloud_api_key'):
+                st['cloud_api_key'] = st.get('api_secret_key', 'syrian_home_pos_secret_token_2026')
+            if not st.get('cloud_api_url'):
+                st['cloud_api_url'] = 'https://supermarkrt.almagd555.com/api_sync.php'
+            return st
+        finally:
+            conn.close()
 
     def save_cloud_settings(self, api_url, api_key, auto_sync="1", sync_interval="30"):
         clean_url = (api_url or '').strip().rstrip('/')
@@ -50,19 +74,28 @@ class HybridSyncManager:
             'cloud_auto_sync': str(auto_sync),
             'cloud_sync_interval': str(sync_interval)
         }
-        for k, v in settings.items():
-            self.cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (k, v))
-        self.db.commit()
+        conn = self._get_db()
+        cur = conn.cursor()
+        try:
+            for k, v in settings.items():
+                cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (k, v))
+            conn.commit()
+        finally:
+            conn.close()
 
     def add_to_queue(self, action, entity_type, entity_id, payload_dict):
+        conn = self._get_db()
+        cur = conn.cursor()
         try:
             date_now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             payload_json = json.dumps(payload_dict, ensure_ascii=False)
-            self.cursor.execute("INSERT INTO sync_queue (action, entity_type, entity_id, payload, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?)",
-                                (action, entity_type, entity_id, payload_json, date_now))
-            self.db.commit()
+            cur.execute("INSERT INTO sync_queue (action, entity_type, entity_id, payload, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?)",
+                        (action, entity_type, entity_id, payload_json, date_now))
+            conn.commit()
         except Exception as e:
             print(f"Error adding to sync queue: {e}")
+        finally:
+            conn.close()
 
     def _normalize_url(self, raw_url, action=None):
         url = (raw_url or '').strip().rstrip('/')
@@ -137,10 +170,10 @@ class HybridSyncManager:
 
     def _background_loop(self):
         while self.is_running:
-            settings = self.get_cloud_settings()
-            if settings.get('cloud_auto_sync') == "1":
-                self.run_sync_cycle()
             try:
+                settings = self.get_cloud_settings()
+                if settings.get('cloud_auto_sync') == "1":
+                    self.run_sync_cycle()
                 interval = int(settings.get('cloud_sync_interval', '30'))
             except:
                 interval = 30
@@ -148,38 +181,48 @@ class HybridSyncManager:
 
     def run_sync_cycle(self):
         with self._lock:
-            settings = self.get_cloud_settings()
-            url = settings.get('cloud_api_url', 'https://supermarkrt.almagd555.com/api_sync.php')
-            key = settings.get('cloud_api_key', 'syrian_home_pos_secret_token_2026')
+            conn = self._get_db()
+            cur = conn.cursor()
+            try:
+                cur.execute("SELECT key, value FROM settings WHERE key LIKE 'cloud_%' OR key LIKE 'hostinger_%' OR key = 'api_secret_key'")
+                settings = dict(cur.fetchall())
+                url = settings.get('cloud_api_url', 'https://supermarkrt.almagd555.com/api_sync.php')
+                key = settings.get('cloud_api_key', 'syrian_home_pos_secret_token_2026')
 
-            if not url: return
+                if not url: return
 
-            # 1. دفع الفواتير غير المزامنة من sales إلى الويب سايت
-            self._sync_pending_sales(url, key)
+                # 1. دفع الفواتير غير المزامنة من sales إلى الويب سايت
+                self._sync_pending_sales(url, key, conn, cur)
 
-            # 2. دفع المنتجات المحدثة محلياً إلى الويب سايت
-            self._sync_pending_products(url, key)
+                # 2. دفع المنتجات المحدثة محلياً إلى الويب سايت
+                self._sync_pending_products(url, key, conn, cur)
 
-            # 3. سحب الطلبات الجديدة القادمة من المتجر الإلكتروني
-            self._pull_online_orders(url, key)
+                # 3. سحب الطلبات الجديدة القادمة من المتجر الإلكتروني
+                self._pull_online_orders(url, key, conn, cur)
 
-    def _sync_pending_sales(self, api_url, api_key):
+            except Exception as e:
+                print(f"Sync cycle exception: {e}")
+            finally:
+                conn.close()
+
+    def _sync_pending_sales(self, api_url, api_key, conn, cur):
         try:
-            self.cursor.execute("SELECT id, total, date, customer, phone, address, delivery_person, status, payment_method, payment_fee, discount, delivery_fee FROM sales WHERE synced = 0 LIMIT 20")
-            rows = self.cursor.fetchall()
+            cur.execute("SELECT id, total, date, customer, phone, address, delivery_person, status, payment_method, payment_fee, discount, delivery_fee FROM sales WHERE synced = 0 LIMIT 20")
+            rows = cur.fetchall()
             for r in rows:
                 s_id = r[0]
-                self.cursor.execute("""
-                    SELECT p.id, p.name, p.barcode, p.local_code, s.qty, p.price 
+                cur.execute("""
+                    SELECT p.id, p.name, p.barcode, p.local_code, s.qty, p.price, p.remote_id
                     FROM sale_items s 
                     LEFT JOIN products p ON s.product_id = p.id 
                     WHERE s.sale_id = ?
                 """, (s_id,))
                 
                 items = []
-                for it in self.cursor.fetchall():
+                for it in cur.fetchall():
                     items.append({
-                        'product_id': it[0],
+                        'product_id': it[6] or it[0],
+                        'local_product_id': it[0],
                         'name': it[1] or f"منتج #{it[0]}",
                         'barcode': it[2] or '',
                         'local_code': it[3] or '',
@@ -187,8 +230,8 @@ class HybridSyncManager:
                         'price': it[5] or 0
                     })
 
-                self.cursor.execute("SELECT value FROM settings WHERE key='default_cashier'")
-                cashier_res = self.cursor.fetchone()
+                cur.execute("SELECT value FROM settings WHERE key='default_cashier'")
+                cashier_res = cur.fetchone()
                 cashier_name = cashier_res[0] if cashier_res else 'كاشير محلي'
 
                 payload = {
@@ -212,16 +255,16 @@ class HybridSyncManager:
                 ok, resp = self._make_request(api_url, action='push_sale', payload=payload, api_key=api_key, method='POST')
                 if ok and isinstance(resp, dict) and resp.get('success'):
                     remote_id = resp.get('remote_id', '')
-                    self.cursor.execute("UPDATE sales SET synced=1, remote_id=? WHERE id=?", (str(remote_id), s_id))
-                    self.cursor.execute("UPDATE sync_queue SET status='synced' WHERE entity_type='sale' AND entity_id=?", (s_id,))
-            self.db.commit()
+                    cur.execute("UPDATE sales SET synced=1, remote_id=? WHERE id=?", (str(remote_id), s_id))
+                    cur.execute("UPDATE sync_queue SET status='synced' WHERE entity_type='sale' AND entity_id=?", (s_id,))
+                    conn.commit()
         except Exception as e:
             print(f"Sync sales error: {e}")
 
-    def _sync_pending_products(self, api_url, api_key):
+    def _sync_pending_products(self, api_url, api_key, conn, cur):
         try:
-            self.cursor.execute("SELECT id, barcode, barcode2, barcode3, all_barcodes, local_code, name, price, cost, stock, category, sub_category, remote_id FROM products WHERE synced = 0 LIMIT 50")
-            rows = self.cursor.fetchall()
+            cur.execute("SELECT id, barcode, barcode2, barcode3, all_barcodes, local_code, name, price, cost, stock, category, sub_category, remote_id FROM products WHERE synced = 0 LIMIT 50")
+            rows = cur.fetchall()
             for r in rows:
                 p_id = r[0]
                 payload = {
@@ -243,9 +286,9 @@ class HybridSyncManager:
                 ok, resp = self._make_request(api_url, action='sync_product', payload=payload, api_key=api_key, method='POST')
                 if ok and isinstance(resp, dict) and resp.get('success'):
                     rem_id = resp.get('product_id', '')
-                    self.cursor.execute("UPDATE products SET synced=1, remote_id=? WHERE id=?", (str(rem_id), p_id))
-                    self.cursor.execute("UPDATE sync_queue SET status='synced' WHERE entity_type='product' AND entity_id=?", (p_id,))
-            self.db.commit()
+                    cur.execute("UPDATE products SET synced=1, remote_id=? WHERE id=?", (str(rem_id), p_id))
+                    cur.execute("UPDATE sync_queue SET status='synced' WHERE entity_type='product' AND entity_id=?", (p_id,))
+                    conn.commit()
         except Exception as e:
             print(f"Sync products error: {e}")
 
@@ -285,48 +328,53 @@ class HybridSyncManager:
         inserted_count = 0
         updated_count = 0
 
-        for cp in cloud_products:
-            p_name = (cp.get('name') or '').strip()
-            p_barcode = (cp.get('barcode') or '').strip() or None
-            p_bc2 = (cp.get('barcode2') or '').strip() or None
-            p_bc3 = (cp.get('barcode3') or '').strip() or None
-            p_all_bc = (cp.get('all_barcodes') or '').strip() or (p_barcode if p_barcode else '')
-            p_loc = (cp.get('local_code') or '').strip() or None
-            p_price = float(cp.get('price', 0))
-            p_cost = float(cp.get('cost', 0))
-            p_stock = float(cp.get('stock', 100))
-            p_cat = (cp.get('category') or 'عام').strip()
-            p_sub = (cp.get('sub_category') or '').strip()
-            p_rem_id = str(cp.get('id', ''))
+        conn = self._get_db()
+        cur = conn.cursor()
+        try:
+            for cp in cloud_products:
+                p_name = (cp.get('name') or '').strip()
+                p_barcode = (cp.get('barcode') or '').strip() or None
+                p_bc2 = (cp.get('barcode2') or '').strip() or None
+                p_bc3 = (cp.get('barcode3') or '').strip() or None
+                p_all_bc = (cp.get('all_barcodes') or '').strip() or (p_barcode if p_barcode else '')
+                p_loc = (cp.get('local_code') or '').strip() or None
+                p_price = float(cp.get('price', 0))
+                p_cost = float(cp.get('cost', 0))
+                p_stock = float(cp.get('stock', 100))
+                p_cat = (cp.get('category') or 'عام').strip()
+                p_sub = (cp.get('sub_category') or '').strip()
+                p_rem_id = str(cp.get('id', ''))
 
-            # البحث عن المنتج محلياً بالباركود أو الكود المحلي أو الاسم
-            local_row = None
-            if p_barcode:
-                self.cursor.execute("SELECT id FROM products WHERE barcode = ? LIMIT 1", (p_barcode,))
-                local_row = self.cursor.fetchone()
-            if not local_row and p_loc:
-                self.cursor.execute("SELECT id FROM products WHERE local_code = ? LIMIT 1", (p_loc,))
-                local_row = self.cursor.fetchone()
-            if not local_row:
-                self.cursor.execute("SELECT id FROM products WHERE name = ? LIMIT 1", (p_name,))
-                local_row = self.cursor.fetchone()
+                # البحث عن المنتج محلياً بالباركود أو الكود المحلي أو الاسم
+                local_row = None
+                if p_barcode:
+                    cur.execute("SELECT id FROM products WHERE barcode = ? LIMIT 1", (p_barcode,))
+                    local_row = cur.fetchone()
+                if not local_row and p_loc:
+                    cur.execute("SELECT id FROM products WHERE local_code = ? LIMIT 1", (p_loc,))
+                    local_row = cur.fetchone()
+                if not local_row:
+                    cur.execute("SELECT id FROM products WHERE name = ? LIMIT 1", (p_name,))
+                    local_row = cur.fetchone()
 
-            if local_row:
-                loc_id = local_row[0]
-                self.cursor.execute("""
-                    UPDATE products SET name=?, price=?, cost=?, stock=?, barcode=?, barcode2=?, barcode3=?, all_barcodes=?, local_code=?, category=?, main_category=?, sub_category=?, synced=1, remote_id=? 
-                    WHERE id=?
-                """, (p_name, p_price, p_cost, p_stock, p_barcode, p_bc2, p_bc3, p_all_bc, p_loc, p_cat, p_cat, p_sub, p_rem_id, loc_id))
-                updated_count += 1
-            else:
-                self.cursor.execute("""
-                    INSERT INTO products (barcode, barcode2, barcode3, all_barcodes, local_code, name, price, cost, stock, category, main_category, sub_category, synced, remote_id) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
-                """, (p_barcode, p_bc2, p_bc3, p_all_bc, p_loc, p_name, p_price, p_cost, p_stock, p_cat, p_cat, p_sub, p_rem_id))
-                inserted_count += 1
+                if local_row:
+                    loc_id = local_row[0]
+                    cur.execute("""
+                        UPDATE products SET name=?, price=?, cost=?, stock=?, barcode=?, barcode2=?, barcode3=?, all_barcodes=?, local_code=?, category=?, main_category=?, sub_category=?, synced=1, remote_id=? 
+                        WHERE id=?
+                    """, (p_name, p_price, p_cost, p_stock, p_barcode, p_bc2, p_bc3, p_all_bc, p_loc, p_cat, p_cat, p_sub, p_rem_id, loc_id))
+                    updated_count += 1
+                else:
+                    cur.execute("""
+                        INSERT INTO products (barcode, barcode2, barcode3, all_barcodes, local_code, name, price, cost, stock, category, main_category, sub_category, synced, remote_id) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+                    """, (p_barcode, p_bc2, p_bc3, p_all_bc, p_loc, p_name, p_price, p_cost, p_stock, p_cat, p_cat, p_sub, p_rem_id))
+                    inserted_count += 1
 
-        self.db.commit()
-        return True, f"✅ تمت المزامنة بنجاح: تم تحديث {updated_count} صنف وإضافة {inserted_count} صنف جديد من السحابة (إجمالي {len(cloud_products)} صنف)."
+            conn.commit()
+            return True, f"✅ تمت المزامنة بنجاح: تم تحديث {updated_count} صنف وإضافة {inserted_count} صنف جديد من السحابة (إجمالي {len(cloud_products)} صنف)."
+        finally:
+            conn.close()
 
     def reset_cloud_database(self, api_url=None, api_key=None):
         """تصفير وحذف جميع بيانات المتجر الإلكتروني السحابي المركزي"""
@@ -339,14 +387,12 @@ class HybridSyncManager:
             return True, res.get('message', 'تم تصفير وحذف كافة بيانات المتجر الإلكتروني السحابي بنجاح.')
         return False, f"فشل تصفير السحابة: {res}"
 
-    def _pull_online_orders(self, api_url, api_key):
+    def _pull_online_orders(self, api_url, api_key, conn, cur):
         """سحب وتجهيز الطلبات الواردة عبر المتجر الإلكتروني"""
         try:
             ok, resp = self._make_request(api_url, action='get_pending_orders', api_key=api_key, method='GET')
             if ok and isinstance(resp, dict) and resp.get('success'):
                 orders = resp.get('orders', [])
                 pass
-        except Exception as e:
-            print(f"Pull orders error: {e}")
         except Exception as e:
             print(f"Pull orders error: {e}")
