@@ -670,14 +670,26 @@ class ProductsPage(ctk.CTkFrame):
     def prod_delete(self):
         if not self.current_edit_id: return
         name = self.ent_p_name.get().strip()
+        loc_code = self.ent_p_local_code.get().strip()
         confirm = messagebox.askyesno("تحذير خطير", f"هل أنت متأكد من حذف المنتج ({name}) نهائياً؟")
         if confirm:
             try:
+                self.cursor.execute("SELECT remote_id, barcode, local_code FROM products WHERE id=?", (self.current_edit_id,))
+                row = self.cursor.fetchone()
+                rem_id = row[0] if row else None
+                b_code = row[1] if row else ''
+                l_code = row[2] if row else loc_code
+
                 self.cursor.execute("DELETE FROM products WHERE id=?", (self.current_edit_id,))
                 self.db.commit()
+
+                # حذف المنتج من المتجر الإلكتروني السحابي فوراً
+                if hasattr(self.app, 'sync_mgr'):
+                    self.app.sync_mgr.delete_product_from_cloud(self.current_edit_id, b_code, l_code, name, rem_id)
+
                 self.refresh_nav_ids()
                 self.prod_clear_form()
-                self.show_status(f"🗑️ تم حذف ({name})!", "#e74c3c")
+                self.show_status(f"🗑️ تم حذف ({name}) من الكاشير والمتجر بنجاح!", "#e74c3c")
             except Exception as e:
                 messagebox.showerror("خطأ", f"حدث خطأ أثناء الحذف:\n{e}")
 

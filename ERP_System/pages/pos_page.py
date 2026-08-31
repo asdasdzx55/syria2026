@@ -773,8 +773,23 @@ class POSPage(ctk.CTkFrame):
         formatted_items = []
         for p_id, item in self.pos_cart.items():
             self.cursor.execute("INSERT INTO sale_items (sale_id, product_id, qty) VALUES (?, ?, ?)", (sale_id, p_id, item['qty']))
-            self.cursor.execute("UPDATE products SET stock = stock - ? WHERE id=?", (item['qty'], p_id))
-            formatted_items.append({"name": item['name'], "qty": float(item['qty']), "price": float(item['price'])})
+            self.cursor.execute("UPDATE products SET stock = stock - ?, synced = 0 WHERE id=?", (item['qty'], p_id))
+            
+            self.cursor.execute("SELECT barcode, local_code, remote_id FROM products WHERE id=?", (p_id,))
+            p_info = self.cursor.fetchone()
+            p_bc = p_info[0] if p_info else ''
+            p_loc = p_info[1] if p_info else ''
+            p_rem = p_info[2] if p_info else ''
+
+            formatted_items.append({
+                "product_id": p_rem or p_id,
+                "local_product_id": p_id,
+                "barcode": p_bc or '',
+                "local_code": p_loc or '',
+                "name": item['name'],
+                "qty": float(item['qty']),
+                "price": float(item['price'])
+            })
             
         self.db.commit()
 

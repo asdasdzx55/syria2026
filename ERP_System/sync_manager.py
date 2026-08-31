@@ -220,12 +220,13 @@ class HybridSyncManager:
 
     def _sync_pending_products(self, api_url, api_key):
         try:
-            self.cursor.execute("SELECT id, barcode, barcode2, barcode3, all_barcodes, local_code, name, price, cost, stock, category, sub_category FROM products WHERE synced = 0 LIMIT 30")
+            self.cursor.execute("SELECT id, barcode, barcode2, barcode3, all_barcodes, local_code, name, price, cost, stock, category, sub_category, remote_id FROM products WHERE synced = 0 LIMIT 50")
             rows = self.cursor.fetchall()
             for r in rows:
                 p_id = r[0]
                 payload = {
                     'local_product_id': p_id,
+                    'remote_id': r[12] or '',
                     'barcode': r[1] or '',
                     'barcode2': r[2] or '',
                     'barcode3': r[3] or '',
@@ -241,11 +242,34 @@ class HybridSyncManager:
 
                 ok, resp = self._make_request(api_url, action='sync_product', payload=payload, api_key=api_key, method='POST')
                 if ok and isinstance(resp, dict) and resp.get('success'):
-                    self.cursor.execute("UPDATE products SET synced=1 WHERE id=?", (p_id,))
+                    rem_id = resp.get('product_id', '')
+                    self.cursor.execute("UPDATE products SET synced=1, remote_id=? WHERE id=?", (str(rem_id), p_id))
                     self.cursor.execute("UPDATE sync_queue SET status='synced' WHERE entity_type='product' AND entity_id=?", (p_id,))
             self.db.commit()
         except Exception as e:
             print(f"Sync products error: {e}")
+
+    def delete_product_from_cloud(self, local_id, barcode='', local_code='', name='', remote_id=None):
+        """حذف منتج من المتجر الإلكتروني السحابي فوراً في الخلفية"""
+        try:
+            settings = self.get_cloud_settings()
+            url = settings.get('cloud_api_url', 'https://supermarkrt.almagd555.com/api_sync.php')
+            key = settings.get('cloud_api_key', 'syrian_home_pos_secret_token_2026')
+            payload = {
+                'product_id': remote_id or '',
+                'barcode': barcode or '',
+                'local_code': local_code or '',
+                'name': name or ''
+            }
+            def _task(target_url, api_key, pl):
+                try:
+                    self._make_request(target_url, action='delete_product', payload=pl, api_key=api_key, method='POST')
+                except Exception as e:
+                    print(f"Delete product from cloud error: {e}")
+
+            threading.Thread(target=_task, args=(url, key, payload), daemon=True).start()
+        except Exception as e:
+            print(f"Delete product dispatch error: {e}")
 
     def pull_products_from_cloud(self, api_url=None, api_key=None):
         """سحب كافة المنتجات والمخزون من السيرفر المركزي وحفظها في قاعدة البيانات المحلية"""

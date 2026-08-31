@@ -141,13 +141,30 @@ try {
                 $price = (float)($it['price'] ?? 0);
                 $items_text[] = "• {$name} × {$qty} = " . ($qty * $price) . " ج.م";
                 
-                // خصم المخزون المركزي للمنتج
-                if (!empty($it['product_id'])) {
-                    $upd = $pdo->prepare("UPDATE products SET stock = MAX(0, stock - ?) WHERE id = ?");
-                    $upd->execute([$qty, $it['product_id']]);
-                } elseif (!empty($it['barcode'])) {
-                    $upd = $pdo->prepare("UPDATE products SET stock = MAX(0, stock - ?) WHERE barcode = ? OR local_code = ?");
-                    $upd->execute([$qty, $it['barcode'], $it['barcode']]);
+                // خصم المخزون المركزي للمنتج في المتجر الإلكتروني
+                $p_id = (int)($it['product_id'] ?? $it['remote_id'] ?? 0);
+                $p_bc = trim($it['barcode'] ?? '');
+                $p_loc = trim($it['local_code'] ?? '');
+                
+                $deducted = false;
+                if ($p_id > 0) {
+                    $upd = $pdo->prepare("UPDATE products SET stock = GREATEST(0, stock - ?) WHERE id = ?");
+                    $upd->execute([$qty, $p_id]);
+                    if ($upd->rowCount() > 0) $deducted = true;
+                }
+                if (!$deducted && !empty($p_bc)) {
+                    $upd = $pdo->prepare("UPDATE products SET stock = GREATEST(0, stock - ?) WHERE barcode = ?");
+                    $upd->execute([$qty, $p_bc]);
+                    if ($upd->rowCount() > 0) $deducted = true;
+                }
+                if (!$deducted && !empty($p_loc)) {
+                    $upd = $pdo->prepare("UPDATE products SET stock = GREATEST(0, stock - ?) WHERE local_code = ?");
+                    $upd->execute([$qty, $p_loc]);
+                    if ($upd->rowCount() > 0) $deducted = true;
+                }
+                if (!$deducted && !empty($name)) {
+                    $upd = $pdo->prepare("UPDATE products SET stock = GREATEST(0, stock - ?) WHERE name = ?");
+                    $upd->execute([$qty, $name]);
                 }
             }
             $details_str = implode("\n", $items_text);
@@ -189,12 +206,14 @@ try {
             break;
 
         // ============================================================
-        // 3. إضافة أو مزامنة صنف/منتج مركزي
+        // 3. إضافة أو تعديل أو مزامنة صنف/منتج مركزي في المتجر
         // ============================================================
         case 'sync_product':
             $data = !empty($json_payload) ? $json_payload : $_POST;
+            $remote_id = (int)($data['product_id'] ?? $data['remote_id'] ?? 0);
             $name = trim($data['name'] ?? '');
             $category = trim($data['category'] ?? 'عام');
+            $sub_category = trim($data['sub_category'] ?? '');
             $price = (float)($data['price'] ?? 0);
             $cost = (float)($data['cost'] ?? 0);
             $stock = (float)($data['stock'] ?? 100);
@@ -205,28 +224,56 @@ try {
             $local_code = trim($data['local_code'] ?? '');
             $description = trim($data['description'] ?? '');
             $image_url = trim($data['image_url'] ?? '');
+            $is_weight_based = !empty($data['is_weight_based']) ? 1 : 0;
             
             if (empty($name)) {
                 echo json_encode(['success' => false, 'error' => 'اسم المنتج مطلوب!']);
                 exit;
             }
             
-            // فحص وجود المنتج بالباركود أو الكود المحلي
+            // التأكد من وجود القسم في جدول التصنيفات
+            if (!empty($category)) {
+                try {
+                    $cat_chk = $pdo->prepare("SELECT id FROM categories WHERE name = ? LIMIT 1");
+                    $cat_chk->execute([$category]);
+                    if (!$cat_chk->fetchColumn()) {
+                        $cat_ins = $pdo->prepare("INSERT INTO categories (name) VALUES (?)");
+                        $cat_ins->execute([$category]);
+                    }
+                } catch (Exception $e) {}
+            }
+            
+            // فحص وجود المنتج بالمعرف السحابي أو الباركود أو الكود المحلي أو الاسم
             $existing_id = null;
-            if (!empty($barcode) || !empty($local_code)) {
-                $chk = $pdo->prepare("SELECT id FROM products WHERE (barcode != '' AND barcode = ?) OR (local_code != '' AND local_code = ?) LIMIT 1");
-                $chk->execute([$barcode, $local_code]);
+            if ($remote_id > 0) {
+                $chk = $pdo->prepare("SELECT id FROM products WHERE id = ? LIMIT 1");
+                $chk->execute([$remote_id]);
+                $existing_id = $chk->fetchColumn();
+            }
+            if (!$existing_id && !empty($barcode)) {
+                $chk = $pdo->prepare("SELECT id FROM products WHERE barcode = ? LIMIT 1");
+                $chk->execute([$barcode]);
+                $existing_id = $chk->fetchColumn();
+            }
+            if (!$existing_id && !empty($local_code)) {
+                $chk = $pdo->prepare("SELECT id FROM products WHERE local_code = ? LIMIT 1");
+                $chk->execute([$local_code]);
+                $existing_id = $chk->fetchColumn();
+            }
+            if (!$existing_id) {
+                $chk = $pdo->prepare("SELECT id FROM products WHERE name = ? LIMIT 1");
+                $chk->execute([$name]);
                 $existing_id = $chk->fetchColumn();
             }
             
             if ($existing_id) {
-                $upd = $pdo->prepare("UPDATE products SET name = ?, category = ?, price = ?, cost = ?, stock = ?, barcode = ?, barcode2 = ?, barcode3 = ?, all_barcodes = ?, local_code = ? WHERE id = ?");
-                $upd->execute([$name, $category, $price, $cost, $stock, $barcode, $barcode2, $barcode3, $all_barcodes, $local_code, $existing_id]);
+                $upd = $pdo->prepare("UPDATE products SET name = ?, category = ?, sub_category = ?, price = ?, cost = ?, stock = ?, barcode = ?, barcode2 = ?, barcode3 = ?, all_barcodes = ?, local_code = ?, is_weight_based = ? WHERE id = ?");
+                $upd->execute([$name, $category, $sub_category, $price, $cost, $stock, $barcode, $barcode2, $barcode3, $all_barcodes, $local_code, $is_weight_based, $existing_id]);
                 $final_id = $existing_id;
                 $action_done = 'updated';
             } else {
-                $ins = $pdo->prepare("INSERT INTO products (name, category, price, cost, stock, barcode, barcode2, barcode3, all_barcodes, local_code, description, image_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                $ins->execute([$name, $category, $price, $cost, $stock, $barcode, $barcode2, $barcode3, $all_barcodes, $local_code, $description, $image_url]);
+                $ins = $pdo->prepare("INSERT INTO products (name, category, sub_category, price, cost, stock, barcode, barcode2, barcode3, all_barcodes, local_code, description, image_url, is_weight_based) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $ins->execute([$name, $category, $sub_category, $price, $cost, $stock, $barcode, $barcode2, $barcode3, $all_barcodes, $local_code, $description, $image_url, $is_weight_based]);
                 $final_id = $pdo->lastInsertId();
                 $action_done = 'inserted';
             }
@@ -235,7 +282,70 @@ try {
                 'success' => true,
                 'action' => $action_done,
                 'product_id' => (int)$final_id,
-                'message' => "تمت مزامنة المنتج ({$name}) بنجاح."
+                'message' => "✅ تمت مزامنة المنتج ({$name}) على المتجر الإلكتروني بنجاح."
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 3.1 حذف منتج من المتجر الإلكتروني
+        // ============================================================
+        case 'delete_product':
+            $data = !empty($json_payload) ? $json_payload : $_POST;
+            $remote_id = (int)($data['product_id'] ?? $data['remote_id'] ?? 0);
+            $barcode = trim($data['barcode'] ?? '');
+            $local_code = trim($data['local_code'] ?? '');
+            $name = trim($data['name'] ?? '');
+            
+            $deleted = false;
+            if ($remote_id > 0) {
+                $del = $pdo->prepare("DELETE FROM products WHERE id = ?");
+                $del->execute([$remote_id]);
+                $deleted = true;
+            } elseif (!empty($barcode)) {
+                $del = $pdo->prepare("DELETE FROM products WHERE barcode = ?");
+                $del->execute([$barcode]);
+                $deleted = true;
+            } elseif (!empty($local_code)) {
+                $del = $pdo->prepare("DELETE FROM products WHERE local_code = ?");
+                $del->execute([$local_code]);
+                $deleted = true;
+            } elseif (!empty($name)) {
+                $del = $pdo->prepare("DELETE FROM products WHERE name = ?");
+                $del->execute([$name]);
+                $deleted = true;
+            }
+            
+            echo json_encode([
+                'success' => true,
+                'deleted' => $deleted,
+                'message' => "✅ تم حذف المنتج من المتجر الإلكتروني بنجاح."
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 3.2 تحديث سريع لمخزون منتج على المتجر
+        // ============================================================
+        case 'update_stock':
+            $data = !empty($json_payload) ? $json_payload : $_POST;
+            $remote_id = (int)($data['product_id'] ?? 0);
+            $barcode = trim($data['barcode'] ?? '');
+            $name = trim($data['name'] ?? '');
+            $new_stock = (float)($data['stock'] ?? 0);
+            
+            if ($remote_id > 0) {
+                $upd = $pdo->prepare("UPDATE products SET stock = ? WHERE id = ?");
+                $upd->execute([$new_stock, $remote_id]);
+            } elseif (!empty($barcode)) {
+                $upd = $pdo->prepare("UPDATE products SET stock = ? WHERE barcode = ?");
+                $upd->execute([$new_stock, $barcode]);
+            } elseif (!empty($name)) {
+                $upd = $pdo->prepare("UPDATE products SET stock = ? WHERE name = ?");
+                $upd->execute([$new_stock, $name]);
+            }
+            
+            echo json_encode([
+                'success' => true,
+                'message' => "✅ تم تحديث رصيد المخزون في المتجر إلى ({$new_stock}) بنجاح."
             ], JSON_UNESCAPED_UNICODE);
             break;
 
