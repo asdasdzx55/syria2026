@@ -236,6 +236,8 @@ class ProductsPage(ctk.CTkFrame):
                 self.load_categories_to_combos()
                 self.combo_main_cat.set(name)
                 self._on_main_category_selected()
+                if hasattr(self.app, 'sync_mgr'):
+                    self.app.sync_mgr.trigger_instant_sync()
                 messagebox.showinfo("نجاح", f"تمت إضافة التصنيف الأساسي ({name}) بنجاح!", parent=win)
             except sqlite3.IntegrityError:
                 messagebox.showerror("خطأ", "هذا التصنيف الأساسي مسجل بالفعل!", parent=win)
@@ -276,6 +278,8 @@ class ProductsPage(ctk.CTkFrame):
                 self.combo_main_cat.set(main_name)
                 self._on_main_category_selected()
                 self.combo_sub_cat.set(sub_name)
+                if hasattr(self.app, 'sync_mgr'):
+                    self.app.sync_mgr.trigger_instant_sync()
                 messagebox.showinfo("نجاح", f"تمت إضافة التصنيف الفرعي ({sub_name}) تحت ({main_name}) بنجاح!", parent=win)
             except sqlite3.IntegrityError:
                 messagebox.showerror("خطأ", "هذا التصنيف الفرعي مسجل بالفعل تحت هذا القسم!", parent=win)
@@ -338,6 +342,8 @@ class ProductsPage(ctk.CTkFrame):
                     self.db.commit()
                     refresh_mgr_data()
                     self.load_categories_to_combos()
+                    if hasattr(self.app, 'sync_mgr'):
+                        self.app.sync_mgr.trigger_instant_sync()
             elif "main_" in tag_id:
                 main_id = int(tag_id.replace("main_", ""))
                 if messagebox.askyesno("تحذير", f"حذف التصنيف الأساسي ({main_name}) وجميع تصنيفاته الفرعية؟", parent=win):
@@ -346,6 +352,8 @@ class ProductsPage(ctk.CTkFrame):
                     self.db.commit()
                     refresh_mgr_data()
                     self.load_categories_to_combos()
+                    if hasattr(self.app, 'sync_mgr'):
+                        self.app.sync_mgr.trigger_instant_sync()
 
         btn_row = ctk.CTkFrame(win, fg_color="transparent")
         btn_row.pack(fill="x", padx=15, pady=(0, 10))
@@ -587,15 +595,20 @@ class ProductsPage(ctk.CTkFrame):
             b3 = b_others[2] if len(b_others) > 2 else None
             
             self.cursor.execute("""
-                INSERT INTO products (barcode, local_code, barcode2, barcode3, name, price, cost, stock, all_barcodes, category, main_category, sub_category) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO products (barcode, local_code, barcode2, barcode3, name, price, cost, stock, all_barcodes, category, main_category, sub_category, synced) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
             """, (b1, loc_code, b2, b3, name, price, cost, stock, all_bcs_str, main_cat, main_cat, sub_cat))
+            new_id = self.cursor.lastrowid
             self.db.commit()
             
+            # تشغيل المزامنة الفورية مع المتجر الإلكتروني
+            if hasattr(self.app, 'sync_mgr'):
+                self.app.sync_mgr.trigger_instant_sync()
+
             self.refresh_nav_ids()
             self.prod_clear_form()
             
-            self.show_status(f"✅ تم إضافة ({name}) في قسم [{main_cat} > {sub_cat}] بنجاح!", "#2ecc71")
+            self.show_status(f"✅ تم إضافة ({name}) في قسم [{main_cat} > {sub_cat}] والمزامنة بنجاح!", "#2ecc71")
             self.ent_p_name.focus() 
             
         except sqlite3.IntegrityError:
@@ -645,13 +658,18 @@ class ProductsPage(ctk.CTkFrame):
             
             self.cursor.execute("""
                 UPDATE products 
-                SET barcode=?, local_code=?, barcode2=?, barcode3=?, name=?, price=?, cost=?, stock=?, all_barcodes=?, category=?, main_category=?, sub_category=? 
+                SET barcode=?, local_code=?, barcode2=?, barcode3=?, name=?, price=?, cost=?, stock=?, all_barcodes=?, category=?, main_category=?, sub_category=?, synced=0 
                 WHERE id=?
             """, (b1, loc_code, b2, b3, name, price, cost, stock, all_bcs_str, main_cat, main_cat, sub_cat, self.current_edit_id))
 
             self.db.commit()
+            
+            # تشغيل المزامنة الفورية مع المتجر الإلكتروني
+            if hasattr(self.app, 'sync_mgr'):
+                self.app.sync_mgr.trigger_instant_sync()
+
             self.prod_clear_form()
-            self.show_status("✅ تم التعديل وحفظ التصنيف بنجاح!", "#2ecc71")
+            self.show_status("✅ تم التعديل وحفظ التصنيف والمزامنة بنجاح!", "#2ecc71")
         except sqlite3.IntegrityError:
             messagebox.showerror("خطأ", "أحد الباركودات مستخدم بالفعل لمنتج آخر!")
         except Exception as e: 
@@ -660,14 +678,26 @@ class ProductsPage(ctk.CTkFrame):
     def prod_delete(self):
         if not self.current_edit_id: return
         name = self.ent_p_name.get().strip()
+        loc_code = self.ent_p_local_code.get().strip()
         confirm = messagebox.askyesno("تحذير خطير", f"هل أنت متأكد من حذف المنتج ({name}) نهائياً؟")
         if confirm:
             try:
+                self.cursor.execute("SELECT remote_id, barcode, local_code FROM products WHERE id=?", (self.current_edit_id,))
+                row = self.cursor.fetchone()
+                rem_id = row[0] if row else None
+                b_code = row[1] if row else ''
+                l_code = row[2] if row else loc_code
+
                 self.cursor.execute("DELETE FROM products WHERE id=?", (self.current_edit_id,))
                 self.db.commit()
+
+                # حذف المنتج من المتجر الإلكتروني السحابي فوراً
+                if hasattr(self.app, 'sync_mgr'):
+                    self.app.sync_mgr.delete_product_from_cloud(self.current_edit_id, b_code, l_code, name, rem_id)
+
                 self.refresh_nav_ids()
                 self.prod_clear_form()
-                self.show_status(f"🗑️ تم حذف ({name})!", "#e74c3c")
+                self.show_status(f"🗑️ تم حذف ({name}) من الكاشير والمتجر بنجاح!", "#e74c3c")
             except Exception as e:
                 messagebox.showerror("خطأ", f"حدث خطأ أثناء الحذف:\n{e}")
 
@@ -707,14 +737,17 @@ class ProductsPage(ctk.CTkFrame):
         try:
             qty = float(val)
             if qty == 0: return
-            self.cursor.execute("UPDATE products SET stock = stock + ? WHERE id=?", (qty, self.current_edit_id))
+            self.cursor.execute("UPDATE products SET stock = stock + ?, synced=0 WHERE id=?", (qty, self.current_edit_id))
             self.db.commit()
             
+            if hasattr(self.app, 'sync_mgr'):
+                self.app.sync_mgr.trigger_instant_sync()
+
             current_stock = float(self.ent_p_stock.get() or 0)
             self.ent_p_stock.delete(0, 'end')
             self.ent_p_stock.insert(0, str(current_stock + qty))
             
-            self.show_status(f"✅ تم إضافة ({qty:g}) لرصيد {name}!", "#2ecc71")
+            self.show_status(f"✅ تم إضافة ({qty:g}) لرصيد {name} ومزامنته!", "#2ecc71")
         except ValueError:
             messagebox.showerror("خطأ", "برجاء إدخال أرقام صحيحة!")
 

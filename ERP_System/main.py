@@ -79,6 +79,10 @@ class ERPSystem(ctk.CTk):
         self.main_container.grid_rowconfigure(0, weight=1)
         self.main_container.grid_columnconfigure(0, weight=1)
 
+        # ----------------- تهيئة المزامنة السحابية المركزية -----------------
+        from sync_manager import HybridSyncManager
+        self.sync_mgr = HybridSyncManager(self.db, self)
+
         # ----------------- تهيئة الصفحات -----------------
         self.frames = {}
         
@@ -118,6 +122,14 @@ class ERPSystem(ctk.CTk):
             self.login_frame.destroy()
             self.sidebar.grid(row=0, column=0, sticky="nsew")
             self.main_container.grid(row=0, column=1, sticky="nsew", padx=15, pady=15)
+            
+            # تشغيل المزامنة اللحظية في الخلفية تلقائياً
+            try:
+                self.sync_mgr.start_background_sync()
+                self.sync_mgr.trigger_instant_sync()
+            except Exception as e:
+                print(f"Auto-sync start error: {e}")
+                
             self.show_frame("pos")
         else:
             messagebox.showerror("خطأ", "كلمة المرور غير صحيحة!")

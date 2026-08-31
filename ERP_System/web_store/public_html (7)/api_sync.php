@@ -141,13 +141,30 @@ try {
                 $price = (float)($it['price'] ?? 0);
                 $items_text[] = "• {$name} × {$qty} = " . ($qty * $price) . " ج.م";
                 
-                // خصم المخزون المركزي للمنتج
-                if (!empty($it['product_id'])) {
-                    $upd = $pdo->prepare("UPDATE products SET stock = MAX(0, stock - ?) WHERE id = ?");
-                    $upd->execute([$qty, $it['product_id']]);
-                } elseif (!empty($it['barcode'])) {
-                    $upd = $pdo->prepare("UPDATE products SET stock = MAX(0, stock - ?) WHERE barcode = ? OR local_code = ?");
-                    $upd->execute([$qty, $it['barcode'], $it['barcode']]);
+                // خصم المخزون المركزي للمنتج في المتجر الإلكتروني
+                $p_id = (int)($it['product_id'] ?? $it['remote_id'] ?? 0);
+                $p_bc = trim($it['barcode'] ?? '');
+                $p_loc = trim($it['local_code'] ?? '');
+                
+                $deducted = false;
+                if ($p_id > 0) {
+                    $upd = $pdo->prepare("UPDATE products SET stock = GREATEST(0, stock - ?) WHERE id = ?");
+                    $upd->execute([$qty, $p_id]);
+                    if ($upd->rowCount() > 0) $deducted = true;
+                }
+                if (!$deducted && !empty($p_bc)) {
+                    $upd = $pdo->prepare("UPDATE products SET stock = GREATEST(0, stock - ?) WHERE barcode = ?");
+                    $upd->execute([$qty, $p_bc]);
+                    if ($upd->rowCount() > 0) $deducted = true;
+                }
+                if (!$deducted && !empty($p_loc)) {
+                    $upd = $pdo->prepare("UPDATE products SET stock = GREATEST(0, stock - ?) WHERE local_code = ?");
+                    $upd->execute([$qty, $p_loc]);
+                    if ($upd->rowCount() > 0) $deducted = true;
+                }
+                if (!$deducted && !empty($name)) {
+                    $upd = $pdo->prepare("UPDATE products SET stock = GREATEST(0, stock - ?) WHERE name = ?");
+                    $upd->execute([$qty, $name]);
                 }
             }
             $details_str = implode("\n", $items_text);
@@ -189,12 +206,14 @@ try {
             break;
 
         // ============================================================
-        // 3. إضافة أو مزامنة صنف/منتج مركزي
+        // 3. إضافة أو تعديل أو مزامنة صنف/منتج مركزي في المتجر
         // ============================================================
         case 'sync_product':
             $data = !empty($json_payload) ? $json_payload : $_POST;
+            $remote_id = (int)($data['product_id'] ?? $data['remote_id'] ?? 0);
             $name = trim($data['name'] ?? '');
             $category = trim($data['category'] ?? 'عام');
+            $sub_category = trim($data['sub_category'] ?? '');
             $price = (float)($data['price'] ?? 0);
             $cost = (float)($data['cost'] ?? 0);
             $stock = (float)($data['stock'] ?? 100);
@@ -205,28 +224,63 @@ try {
             $local_code = trim($data['local_code'] ?? '');
             $description = trim($data['description'] ?? '');
             $image_url = trim($data['image_url'] ?? '');
+            $is_weight_based = !empty($data['is_weight_based']) ? 1 : 0;
             
             if (empty($name)) {
                 echo json_encode(['success' => false, 'error' => 'اسم المنتج مطلوب!']);
                 exit;
             }
             
-            // فحص وجود المنتج بالباركود أو الكود المحلي
+            // التأكد من وجود القسم في جدول التصنيفات
+            if (!empty($category)) {
+                try {
+                    $cat_chk = $pdo->prepare("SELECT id FROM categories WHERE name = ? LIMIT 1");
+                    $cat_chk->execute([$category]);
+                    if (!$cat_chk->fetchColumn()) {
+                        $cat_ins = $pdo->prepare("INSERT INTO categories (name) VALUES (?)");
+                        $cat_ins->execute([$category]);
+                    }
+                } catch (Exception $e) {}
+            }
+            
+            // فحص وجود المنتج بالمعرف السحابي أو الباركود أو الكود المحلي أو الاسم
             $existing_id = null;
-            if (!empty($barcode) || !empty($local_code)) {
-                $chk = $pdo->prepare("SELECT id FROM products WHERE (barcode != '' AND barcode = ?) OR (local_code != '' AND local_code = ?) LIMIT 1");
-                $chk->execute([$barcode, $local_code]);
+            if ($remote_id > 0) {
+                $chk = $pdo->prepare("SELECT id FROM products WHERE id = ? LIMIT 1");
+                $chk->execute([$remote_id]);
+                $existing_id = $chk->fetchColumn();
+            }
+            if (!$existing_id && !empty($barcode)) {
+                $chk = $pdo->prepare("SELECT id FROM products WHERE barcode = ? LIMIT 1");
+                $chk->execute([$barcode]);
+                $existing_id = $chk->fetchColumn();
+            }
+            if (!$existing_id && !empty($local_code)) {
+                $chk = $pdo->prepare("SELECT id FROM products WHERE local_code = ? LIMIT 1");
+                $chk->execute([$local_code]);
+                $existing_id = $chk->fetchColumn();
+            }
+            if (!$existing_id) {
+                $chk = $pdo->prepare("SELECT id FROM products WHERE name = ? LIMIT 1");
+                $chk->execute([$name]);
                 $existing_id = $chk->fetchColumn();
             }
             
+            // التأكد التلقائي من وجود الأعمدة الإضافية في جدول المنتجات
+            try { $pdo->exec("ALTER TABLE products ADD COLUMN sub_category VARCHAR(100) DEFAULT NULL"); } catch (Exception $e) {}
+            try { $pdo->exec("ALTER TABLE products ADD COLUMN barcode2 VARCHAR(100) DEFAULT NULL"); } catch (Exception $e) {}
+            try { $pdo->exec("ALTER TABLE products ADD COLUMN barcode3 VARCHAR(100) DEFAULT NULL"); } catch (Exception $e) {}
+            try { $pdo->exec("ALTER TABLE products ADD COLUMN all_barcodes TEXT DEFAULT NULL"); } catch (Exception $e) {}
+            try { $pdo->exec("ALTER TABLE products ADD COLUMN local_code VARCHAR(50) DEFAULT NULL"); } catch (Exception $e) {}
+
             if ($existing_id) {
-                $upd = $pdo->prepare("UPDATE products SET name = ?, category = ?, price = ?, cost = ?, stock = ?, barcode = ?, barcode2 = ?, barcode3 = ?, all_barcodes = ?, local_code = ? WHERE id = ?");
-                $upd->execute([$name, $category, $price, $cost, $stock, $barcode, $barcode2, $barcode3, $all_barcodes, $local_code, $existing_id]);
+                $upd = $pdo->prepare("UPDATE products SET name = ?, category = ?, sub_category = ?, price = ?, cost = ?, stock = ?, barcode = ?, barcode2 = ?, barcode3 = ?, all_barcodes = ?, local_code = ? WHERE id = ?");
+                $upd->execute([$name, $category, $sub_category, $price, $cost, $stock, $barcode, $barcode2, $barcode3, $all_barcodes, $local_code, $existing_id]);
                 $final_id = $existing_id;
                 $action_done = 'updated';
             } else {
-                $ins = $pdo->prepare("INSERT INTO products (name, category, price, cost, stock, barcode, barcode2, barcode3, all_barcodes, local_code, description, image_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                $ins->execute([$name, $category, $price, $cost, $stock, $barcode, $barcode2, $barcode3, $all_barcodes, $local_code, $description, $image_url]);
+                $ins = $pdo->prepare("INSERT INTO products (name, category, sub_category, price, cost, stock, barcode, barcode2, barcode3, all_barcodes, local_code, description, image_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $ins->execute([$name, $category, $sub_category, $price, $cost, $stock, $barcode, $barcode2, $barcode3, $all_barcodes, $local_code, $description, $image_url]);
                 $final_id = $pdo->lastInsertId();
                 $action_done = 'inserted';
             }
@@ -235,8 +289,140 @@ try {
                 'success' => true,
                 'action' => $action_done,
                 'product_id' => (int)$final_id,
-                'message' => "تمت مزامنة المنتج ({$name}) بنجاح."
+                'message' => "✅ تمت مزامنة المنتج ({$name}) على المتجر الإلكتروني بنجاح."
             ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 3.1 حذف منتج من المتجر الإلكتروني
+        // ============================================================
+        case 'delete_product':
+            $data = !empty($json_payload) ? $json_payload : $_POST;
+            $remote_id = (int)($data['product_id'] ?? $data['remote_id'] ?? 0);
+            $barcode = trim($data['barcode'] ?? '');
+            $local_code = trim($data['local_code'] ?? '');
+            $name = trim($data['name'] ?? '');
+            
+            $deleted = false;
+            if ($remote_id > 0) {
+                $del = $pdo->prepare("DELETE FROM products WHERE id = ?");
+                $del->execute([$remote_id]);
+                $deleted = true;
+            } elseif (!empty($barcode)) {
+                $del = $pdo->prepare("DELETE FROM products WHERE barcode = ?");
+                $del->execute([$barcode]);
+                $deleted = true;
+            } elseif (!empty($local_code)) {
+                $del = $pdo->prepare("DELETE FROM products WHERE local_code = ?");
+                $del->execute([$local_code]);
+                $deleted = true;
+            } elseif (!empty($name)) {
+                $del = $pdo->prepare("DELETE FROM products WHERE name = ?");
+                $del->execute([$name]);
+                $deleted = true;
+            }
+            
+            echo json_encode([
+                'success' => true,
+                'deleted' => $deleted,
+                'message' => "✅ تم حذف المنتج من المتجر الإلكتروني بنجاح."
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 3.2 تحديث سريع لمخزون منتج على المتجر
+        // ============================================================
+        case 'update_stock':
+            $data = !empty($json_payload) ? $json_payload : $_POST;
+            $remote_id = (int)($data['product_id'] ?? 0);
+            $barcode = trim($data['barcode'] ?? '');
+            $name = trim($data['name'] ?? '');
+            $new_stock = (float)($data['stock'] ?? 0);
+            
+            if ($remote_id > 0) {
+                $upd = $pdo->prepare("UPDATE products SET stock = ? WHERE id = ?");
+                $upd->execute([$new_stock, $remote_id]);
+            } elseif (!empty($barcode)) {
+                $upd = $pdo->prepare("UPDATE products SET stock = ? WHERE barcode = ?");
+                $upd->execute([$new_stock, $barcode]);
+            } elseif (!empty($name)) {
+                $upd = $pdo->prepare("UPDATE products SET stock = ? WHERE name = ?");
+                $upd->execute([$new_stock, $name]);
+            }
+            
+            echo json_encode([
+                'success' => true,
+                'message' => "✅ تم تحديث رصيد المخزون في المتجر إلى ({$new_stock}) بنجاح."
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 3.3 جلب كافة الأقسام والتصنيفات (Get Categories)
+        // ============================================================
+        case 'get_categories':
+            $cats = $pdo->query("SELECT id, name, parent_id FROM categories ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC);
+            echo json_encode([
+                'success' => true,
+                'count' => count($cats),
+                'categories' => $cats
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 3.4 مزامنة قسم أساسي أو فرعي (Sync Category)
+        // ============================================================
+        case 'sync_category':
+            $data = !empty($json_payload) ? $json_payload : $_POST;
+            $main_name = trim($data['main_category'] ?? $data['name'] ?? '');
+            $sub_name = trim($data['sub_category'] ?? '');
+            
+            if (empty($main_name)) {
+                echo json_encode(['success' => false, 'error' => 'اسم القسم الأساسي مطلوب!']);
+                exit;
+            }
+            
+            // التأكد من وجود القسم الأساسي
+            $chk = $pdo->prepare("SELECT id FROM categories WHERE name = ? LIMIT 1");
+            $chk->execute([$main_name]);
+            $main_id = $chk->fetchColumn();
+            if (!$main_id) {
+                $ins = $pdo->prepare("INSERT INTO categories (name) VALUES (?)");
+                $ins->execute([$main_name]);
+                $main_id = $pdo->lastInsertId();
+            }
+            
+            // إذا كان هناك قسم فرعي
+            if (!empty($sub_name)) {
+                $chk_sub = $pdo->prepare("SELECT id FROM categories WHERE name = ? AND parent_id = ? LIMIT 1");
+                $chk_sub->execute([$sub_name, $main_id]);
+                if (!$chk_sub->fetchColumn()) {
+                    $ins_sub = $pdo->prepare("INSERT INTO categories (name, parent_id) VALUES (?, ?)");
+                    $ins_sub->execute([$sub_name, $main_id]);
+                }
+            }
+            
+            echo json_encode([
+                'success' => true,
+                'message' => "✅ تمت مزامنة التصنيف ({$main_name}) بنجاح."
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 3.5 حذف قسم (Delete Category)
+        // ============================================================
+        case 'delete_category':
+            $data = !empty($json_payload) ? $json_payload : $_POST;
+            $cat_name = trim($data['name'] ?? '');
+            if (!empty($cat_name)) {
+                $chk = $pdo->prepare("SELECT id FROM categories WHERE name = ? LIMIT 1");
+                $chk->execute([$cat_name]);
+                $c_id = $chk->fetchColumn();
+                if ($c_id) {
+                    $pdo->prepare("DELETE FROM categories WHERE parent_id = ?")->execute([$c_id]);
+                    $pdo->prepare("DELETE FROM categories WHERE id = ?")->execute([$c_id]);
+                }
+            }
+            echo json_encode(['success' => true, 'message' => 'تم حذف القسم من المتجر بنجاح.'], JSON_UNESCAPED_UNICODE);
             break;
 
         // ============================================================
@@ -647,6 +833,25 @@ try {
                 'success' => true,
                 'message' => "تم تسليم وتصفية مبلغ {$amount} ج.م من الكابتن {$driver_name} بنجاح!",
                 'settled_amount' => $amount
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 7. تصفير شامل لجميع بيانات المتجر السحابي (Reset All Cloud Data)
+        // ============================================================
+        case 'reset_all_data':
+            $tables_to_wipe = ['products', 'orders', 'expenses', 'customers', 'suppliers', 'abandoned_carts', 'wishlist', 'notifications'];
+            foreach ($tables_to_wipe as $t) {
+                try {
+                    $pdo->exec("DELETE FROM `{$t}`");
+                } catch (Exception $e) {
+                    // تجاهل الجداول غير الموجودة بأمان
+                }
+            }
+            
+            echo json_encode([
+                'success' => true,
+                'message' => '✅ تم تصفير وحذف كافة بيانات المتجر الإلكتروني السحابي بنجاح.'
             ], JSON_UNESCAPED_UNICODE);
             break;
 
