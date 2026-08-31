@@ -109,6 +109,30 @@ try {
             break;
 
         // ============================================================
+        // 1.1 الاستعلام عن باركود سريعاً
+        // ============================================================
+        case 'lookup_barcode':
+        case 'search_barcode':
+            $barcode = trim($_GET['barcode'] ?? $json_payload['barcode'] ?? $_GET['q'] ?? '');
+            if (empty($barcode)) {
+                echo json_encode(['success' => false, 'error' => 'يرجى تحديد الباركود.'], JSON_UNESCAPED_UNICODE);
+                break;
+            }
+            $stmt = $pdo->prepare("SELECT id, name, price, cost, stock, barcode, local_code, all_barcodes, image, category_id, description FROM products WHERE barcode = ? OR local_code = ? OR all_barcodes LIKE ? LIMIT 1");
+            $stmt->execute([$barcode, $barcode, '%' . $barcode . '%']);
+            $prod = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($prod) {
+                $prod['id'] = (int)$prod['id'];
+                $prod['price'] = (float)$prod['price'];
+                $prod['cost'] = (float)($prod['cost'] ?? 0);
+                $prod['stock'] = (float)($prod['stock'] ?? 0);
+                echo json_encode(['success' => true, 'found' => true, 'product' => $prod], JSON_UNESCAPED_UNICODE);
+            } else {
+                echo json_encode(['success' => true, 'found' => false, 'message' => 'المنتج غير موجود'], JSON_UNESCAPED_UNICODE);
+            }
+            break;
+
+        // ============================================================
         // 2. استقبال فواتير ومبيعات الكاشير وخصم المخزون مركزياً
         // ============================================================
         case 'push_sale':
@@ -821,7 +845,7 @@ try {
             }
 
             // تصفية أو خصم المبلغ من رصيد الطيار
-            $pdo->prepare("UPDATE delivery_drivers SET cash_balance = MAX(0, cash_balance - ?) WHERE name = ?")->execute([$amount, $driver_name]);
+            $pdo->prepare("UPDATE delivery_drivers SET cash_balance = CASE WHEN cash_balance >= ? THEN cash_balance - ? ELSE 0 END WHERE name = ?")->execute([$amount, $amount, $driver_name]);
 
             // تسجيل إيراد / قيد حركة استلام عهدة
             try {
