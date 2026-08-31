@@ -197,7 +197,10 @@ class HybridSyncManager:
                 # 2. دفع المنتجات المحدثة محلياً إلى الويب سايت
                 self._sync_pending_products(url, key, conn, cur)
 
-                # 3. سحب الطلبات الجديدة القادمة من المتجر الإلكتروني
+                # 3. مزامنة الأقسام والتصنيفات الأساسية والفرعية
+                self._sync_all_categories(url, key, conn, cur)
+
+                # 4. سحب الطلبات الجديدة القادمة من المتجر الإلكتروني
                 self._pull_online_orders(url, key, conn, cur)
 
             except Exception as e:
@@ -291,6 +294,23 @@ class HybridSyncManager:
                     conn.commit()
         except Exception as e:
             print(f"Sync products error: {e}")
+    def _sync_all_categories(self, api_url, api_key, conn, cur):
+        try:
+            cur.execute("""
+                SELECT c.name, sc.name 
+                FROM categories c 
+                LEFT JOIN sub_categories sc ON sc.main_category_id = c.id
+            """)
+            rows = cur.fetchall()
+            for main_name, sub_name in rows:
+                if main_name:
+                    payload = {
+                        'main_category': main_name,
+                        'sub_category': sub_name or ''
+                    }
+                    self._make_request(api_url, action='sync_category', payload=payload, api_key=api_key, method='POST')
+        except Exception as e:
+            print(f"Sync categories error: {e}")
 
     def delete_product_from_cloud(self, local_id, barcode='', local_code='', name='', remote_id=None):
         """حذف منتج من المتجر الإلكتروني السحابي فوراً في الخلفية"""
@@ -371,8 +391,31 @@ class HybridSyncManager:
                     """, (p_barcode, p_bc2, p_bc3, p_all_bc, p_loc, p_name, p_price, p_cost, p_stock, p_cat, p_cat, p_sub, p_rem_id))
                     inserted_count += 1
 
+                # تسجيل وتحديث الأقسام والتصنيفات تلقائياً محلياً
+                if p_cat:
+                    cur.execute("INSERT OR IGNORE INTO categories (name) VALUES (?)", (p_cat,))
+                    if p_sub and p_sub != "عام" and p_sub != "-":
+                        cur.execute("SELECT id FROM categories WHERE name = ?", (p_cat,))
+                        cat_id_row = cur.fetchone()
+                        if cat_id_row:
+                            cur.execute("SELECT id FROM sub_categories WHERE name = ? AND main_category_id = ?", (p_sub, cat_id_row[0]))
+                            if not cur.fetchone():
+                                cur.execute("INSERT INTO sub_categories (name, main_category_id) VALUES (?, ?)", (p_sub, cat_id_row[0]))
+
+            # جلب وتحديث كافة تصنيفات السحابة
+            try:
+                ok_c, resp_c = self._make_request(url, action='get_categories', api_key=key, method='GET')
+                if ok_c and isinstance(resp_c, dict) and resp_c.get('success'):
+                    for cc in resp_c.get('categories', []):
+                        cn = (cc.get('name') or '').strip()
+                        cp = cc.get('parent_id')
+                        if cn and not cp:
+                            cur.execute("INSERT OR IGNORE INTO categories (name) VALUES (?)", (cn,))
+            except Exception as ce:
+                print(f"Categories pull error: {ce}")
+
             conn.commit()
-            return True, f"✅ تمت المزامنة بنجاح: تم تحديث {updated_count} صنف وإضافة {inserted_count} صنف جديد من السحابة (إجمالي {len(cloud_products)} صنف)."
+            return True, f"✅ تمت المزامنة بنجاح: تم تحديث {updated_count} صنف وإضافة {inserted_count} صنف جديد ومزامنة الأقسام من السحابة (إجمالي {len(cloud_products)} صنف)."
         finally:
             conn.close()
 

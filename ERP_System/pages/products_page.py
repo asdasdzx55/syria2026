@@ -236,6 +236,8 @@ class ProductsPage(ctk.CTkFrame):
                 self.load_categories_to_combos()
                 self.combo_main_cat.set(name)
                 self._on_main_category_selected()
+                if hasattr(self.app, 'sync_mgr'):
+                    self.app.sync_mgr.trigger_instant_sync()
                 messagebox.showinfo("نجاح", f"تمت إضافة التصنيف الأساسي ({name}) بنجاح!", parent=win)
             except sqlite3.IntegrityError:
                 messagebox.showerror("خطأ", "هذا التصنيف الأساسي مسجل بالفعل!", parent=win)
@@ -276,6 +278,8 @@ class ProductsPage(ctk.CTkFrame):
                 self.combo_main_cat.set(main_name)
                 self._on_main_category_selected()
                 self.combo_sub_cat.set(sub_name)
+                if hasattr(self.app, 'sync_mgr'):
+                    self.app.sync_mgr.trigger_instant_sync()
                 messagebox.showinfo("نجاح", f"تمت إضافة التصنيف الفرعي ({sub_name}) تحت ({main_name}) بنجاح!", parent=win)
             except sqlite3.IntegrityError:
                 messagebox.showerror("خطأ", "هذا التصنيف الفرعي مسجل بالفعل تحت هذا القسم!", parent=win)
@@ -338,6 +342,8 @@ class ProductsPage(ctk.CTkFrame):
                     self.db.commit()
                     refresh_mgr_data()
                     self.load_categories_to_combos()
+                    if hasattr(self.app, 'sync_mgr'):
+                        self.app.sync_mgr.trigger_instant_sync()
             elif "main_" in tag_id:
                 main_id = int(tag_id.replace("main_", ""))
                 if messagebox.askyesno("تحذير", f"حذف التصنيف الأساسي ({main_name}) وجميع تصنيفاته الفرعية؟", parent=win):
@@ -346,6 +352,8 @@ class ProductsPage(ctk.CTkFrame):
                     self.db.commit()
                     refresh_mgr_data()
                     self.load_categories_to_combos()
+                    if hasattr(self.app, 'sync_mgr'):
+                        self.app.sync_mgr.trigger_instant_sync()
 
         btn_row = ctk.CTkFrame(win, fg_color="transparent")
         btn_row.pack(fill="x", padx=15, pady=(0, 10))

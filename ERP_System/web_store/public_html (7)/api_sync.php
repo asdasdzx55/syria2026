@@ -357,6 +357,75 @@ try {
             break;
 
         // ============================================================
+        // 3.3 جلب كافة الأقسام والتصنيفات (Get Categories)
+        // ============================================================
+        case 'get_categories':
+            $cats = $pdo->query("SELECT id, name, parent_id FROM categories ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC);
+            echo json_encode([
+                'success' => true,
+                'count' => count($cats),
+                'categories' => $cats
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 3.4 مزامنة قسم أساسي أو فرعي (Sync Category)
+        // ============================================================
+        case 'sync_category':
+            $data = !empty($json_payload) ? $json_payload : $_POST;
+            $main_name = trim($data['main_category'] ?? $data['name'] ?? '');
+            $sub_name = trim($data['sub_category'] ?? '');
+            
+            if (empty($main_name)) {
+                echo json_encode(['success' => false, 'error' => 'اسم القسم الأساسي مطلوب!']);
+                exit;
+            }
+            
+            // التأكد من وجود القسم الأساسي
+            $chk = $pdo->prepare("SELECT id FROM categories WHERE name = ? LIMIT 1");
+            $chk->execute([$main_name]);
+            $main_id = $chk->fetchColumn();
+            if (!$main_id) {
+                $ins = $pdo->prepare("INSERT INTO categories (name) VALUES (?)");
+                $ins->execute([$main_name]);
+                $main_id = $pdo->lastInsertId();
+            }
+            
+            // إذا كان هناك قسم فرعي
+            if (!empty($sub_name)) {
+                $chk_sub = $pdo->prepare("SELECT id FROM categories WHERE name = ? AND parent_id = ? LIMIT 1");
+                $chk_sub->execute([$sub_name, $main_id]);
+                if (!$chk_sub->fetchColumn()) {
+                    $ins_sub = $pdo->prepare("INSERT INTO categories (name, parent_id) VALUES (?, ?)");
+                    $ins_sub->execute([$sub_name, $main_id]);
+                }
+            }
+            
+            echo json_encode([
+                'success' => true,
+                'message' => "✅ تمت مزامنة التصنيف ({$main_name}) بنجاح."
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 3.5 حذف قسم (Delete Category)
+        // ============================================================
+        case 'delete_category':
+            $data = !empty($json_payload) ? $json_payload : $_POST;
+            $cat_name = trim($data['name'] ?? '');
+            if (!empty($cat_name)) {
+                $chk = $pdo->prepare("SELECT id FROM categories WHERE name = ? LIMIT 1");
+                $chk->execute([$cat_name]);
+                $c_id = $chk->fetchColumn();
+                if ($c_id) {
+                    $pdo->prepare("DELETE FROM categories WHERE parent_id = ?")->execute([$c_id]);
+                    $pdo->prepare("DELETE FROM categories WHERE id = ?")->execute([$c_id]);
+                }
+            }
+            echo json_encode(['success' => true, 'message' => 'تم حذف القسم من المتجر بنجاح.'], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
         // 4. سحب الطلبات الجديدة لتجهيزها في الكاشير المحلي
         // ============================================================
         case 'get_pending_orders':
