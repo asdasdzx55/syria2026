@@ -587,15 +587,20 @@ class ProductsPage(ctk.CTkFrame):
             b3 = b_others[2] if len(b_others) > 2 else None
             
             self.cursor.execute("""
-                INSERT INTO products (barcode, local_code, barcode2, barcode3, name, price, cost, stock, all_barcodes, category, main_category, sub_category) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO products (barcode, local_code, barcode2, barcode3, name, price, cost, stock, all_barcodes, category, main_category, sub_category, synced) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
             """, (b1, loc_code, b2, b3, name, price, cost, stock, all_bcs_str, main_cat, main_cat, sub_cat))
+            new_id = self.cursor.lastrowid
             self.db.commit()
             
+            # تشغيل المزامنة الفورية مع المتجر الإلكتروني
+            if hasattr(self.app, 'sync_mgr'):
+                self.app.sync_mgr.trigger_instant_sync()
+
             self.refresh_nav_ids()
             self.prod_clear_form()
             
-            self.show_status(f"✅ تم إضافة ({name}) في قسم [{main_cat} > {sub_cat}] بنجاح!", "#2ecc71")
+            self.show_status(f"✅ تم إضافة ({name}) في قسم [{main_cat} > {sub_cat}] والمزامنة بنجاح!", "#2ecc71")
             self.ent_p_name.focus() 
             
         except sqlite3.IntegrityError:
@@ -645,13 +650,18 @@ class ProductsPage(ctk.CTkFrame):
             
             self.cursor.execute("""
                 UPDATE products 
-                SET barcode=?, local_code=?, barcode2=?, barcode3=?, name=?, price=?, cost=?, stock=?, all_barcodes=?, category=?, main_category=?, sub_category=? 
+                SET barcode=?, local_code=?, barcode2=?, barcode3=?, name=?, price=?, cost=?, stock=?, all_barcodes=?, category=?, main_category=?, sub_category=?, synced=0 
                 WHERE id=?
             """, (b1, loc_code, b2, b3, name, price, cost, stock, all_bcs_str, main_cat, main_cat, sub_cat, self.current_edit_id))
 
             self.db.commit()
+            
+            # تشغيل المزامنة الفورية مع المتجر الإلكتروني
+            if hasattr(self.app, 'sync_mgr'):
+                self.app.sync_mgr.trigger_instant_sync()
+
             self.prod_clear_form()
-            self.show_status("✅ تم التعديل وحفظ التصنيف بنجاح!", "#2ecc71")
+            self.show_status("✅ تم التعديل وحفظ التصنيف والمزامنة بنجاح!", "#2ecc71")
         except sqlite3.IntegrityError:
             messagebox.showerror("خطأ", "أحد الباركودات مستخدم بالفعل لمنتج آخر!")
         except Exception as e: 
@@ -707,14 +717,17 @@ class ProductsPage(ctk.CTkFrame):
         try:
             qty = float(val)
             if qty == 0: return
-            self.cursor.execute("UPDATE products SET stock = stock + ? WHERE id=?", (qty, self.current_edit_id))
+            self.cursor.execute("UPDATE products SET stock = stock + ?, synced=0 WHERE id=?", (qty, self.current_edit_id))
             self.db.commit()
             
+            if hasattr(self.app, 'sync_mgr'):
+                self.app.sync_mgr.trigger_instant_sync()
+
             current_stock = float(self.ent_p_stock.get() or 0)
             self.ent_p_stock.delete(0, 'end')
             self.ent_p_stock.insert(0, str(current_stock + qty))
             
-            self.show_status(f"✅ تم إضافة ({qty:g}) لرصيد {name}!", "#2ecc71")
+            self.show_status(f"✅ تم إضافة ({qty:g}) لرصيد {name} ومزامنته!", "#2ecc71")
         except ValueError:
             messagebox.showerror("خطأ", "برجاء إدخال أرقام صحيحة!")
 
