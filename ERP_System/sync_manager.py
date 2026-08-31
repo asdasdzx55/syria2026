@@ -3,9 +3,10 @@ import datetime
 import json
 import threading
 import time
-import urllib.request
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 import urllib.parse
-import urllib.error
 
 class HybridSyncManager:
     def __init__(self, db_conn, app=None):
@@ -15,23 +16,36 @@ class HybridSyncManager:
         self.is_running = False
         self.sync_thread = None
         self._lock = threading.Lock()
+        self._session = None
+
+    def _get_session(self):
+        if self._session is None:
+            self._session = requests.Session()
+            retries = Retry(total=3, backoff_factor=0.3, status_forcelist=[500, 502, 503, 504])
+            adapter = HTTPAdapter(max_retries=retries)
+            self._session.mount('https://', adapter)
+            self._session.mount('http://', adapter)
+        return self._session
 
     def get_cloud_settings(self):
         self.cursor.execute("SELECT key, value FROM settings WHERE key LIKE 'cloud_%' OR key LIKE 'hostinger_%' OR key = 'api_secret_key'")
         st = dict(self.cursor.fetchall())
         if not st.get('cloud_api_key'):
             st['cloud_api_key'] = st.get('api_secret_key', 'syrian_home_pos_secret_token_2026')
+        if not st.get('cloud_api_url'):
+            st['cloud_api_url'] = 'https://supermarkrt.almagd555.com/api_sync.php'
         return st
 
     def save_cloud_settings(self, api_url, api_key, auto_sync="1", sync_interval="30"):
-        # تنظيف وضبط الرابط
-        clean_url = api_url.strip().rstrip('/')
-        if not clean_url.endswith('.php') and not clean_url.endswith('/api_sync.php'):
+        clean_url = (api_url or '').strip().rstrip('/')
+        if clean_url and not clean_url.endswith('.php') and not clean_url.endswith('/api_sync.php'):
             if '/web_store' in clean_url or 'public_html' in clean_url:
                 clean_url = clean_url.rstrip('/') + '/api_sync.php'
+            else:
+                clean_url = f"{clean_url}/api_sync.php"
         
         settings = {
-            'cloud_api_url': clean_url,
+            'cloud_api_url': clean_url or 'https://supermarkrt.almagd555.com/api_sync.php',
             'cloud_api_key': api_key.strip() if api_key else 'syrian_home_pos_secret_token_2026',
             'cloud_auto_sync': str(auto_sync),
             'cloud_sync_interval': str(sync_interval)
@@ -52,7 +66,8 @@ class HybridSyncManager:
 
     def _normalize_url(self, raw_url, action=None):
         url = (raw_url or '').strip().rstrip('/')
-        if not url: return ''
+        if not url: 
+            url = 'https://supermarkrt.almagd555.com/api_sync.php'
         
         if not url.endswith('api_sync.php'):
             if url.endswith('.php'):
@@ -65,52 +80,43 @@ class HybridSyncManager:
             url = f"{url}{sep}action={urllib.parse.quote(action)}"
         return url
 
-    def _make_request(self, raw_url, action, payload=None, api_key=None, method='GET', timeout=8):
+    def _make_request(self, raw_url, action, payload=None, api_key=None, method='GET', timeout=10):
         target_url = self._normalize_url(raw_url, action)
-        if not target_url:
-            return False, "رابط السيرفر / الويب غير محدد"
-
         headers = {
             'User-Agent': 'SyrianHome-ERP-SyncHub/2.0',
             'Authorization': f"Bearer {api_key or 'syrian_home_pos_secret_token_2026'}",
             'X-API-KEY': api_key or 'syrian_home_pos_secret_token_2026',
-            'Content-Type': 'application/json; charset=utf-8'
+            'Connection': 'close'
         }
 
-        data_bytes = None
-        if payload is not None and method == 'POST':
-            data_bytes = json.dumps(payload, ensure_ascii=False).encode('utf-8')
-
-        req = urllib.request.Request(target_url, data=data_bytes, headers=headers, method=method)
+        session = self._get_session()
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                status_code = resp.status
-                resp_text = resp.read().decode('utf-8', errors='ignore')
-                try:
-                    res_json = json.loads(resp_text)
-                    return True, res_json
-                except json.JSONDecodeError:
-                    return (status_code in (200, 201)), resp_text
-        except urllib.error.HTTPError as e:
-            err_msg = e.read().decode('utf-8', errors='ignore')
-            return False, f"خطأ من الخادم ({e.code}): {err_msg or e.reason}"
-        except urllib.error.URLError as e:
-            return False, f"تعذر الوصول للسيرفر: {e.reason}"
+            if method.upper() == 'POST':
+                headers['Content-Type'] = 'application/json; charset=utf-8'
+                resp = session.post(target_url, json=payload, headers=headers, timeout=timeout)
+            else:
+                resp = session.get(target_url, headers=headers, timeout=timeout)
+
+            try:
+                res_json = resp.json()
+                return (resp.status_code in (200, 201)), res_json
+            except Exception:
+                return (resp.status_code in (200, 201)), resp.text
+        except requests.exceptions.RequestException as e:
+            return False, f"خطأ في الاتصال بالخادم: {e}"
         except Exception as e:
-            return False, f"خطأ في الاتصال: {e}"
+            return False, f"خطأ غير متوقع: {e}"
 
     def test_cloud_connection(self, api_url=None, api_key=None):
         settings = self.get_cloud_settings()
-        url = api_url or settings.get('cloud_api_url', '')
+        url = api_url or settings.get('cloud_api_url', 'https://supermarkrt.almagd555.com/api_sync.php')
         key = api_key or settings.get('cloud_api_key', 'syrian_home_pos_secret_token_2026')
 
-        if not url:
-            return False, "رابط السيرفر / المتجر الإلكتروني غير محدد!"
-
-        ok, res = self._make_request(url, action='ping', api_key=key, method='GET', timeout=5)
+        ok, res = self._make_request(url, action='ping', api_key=key, method='GET', timeout=8)
         if ok and isinstance(res, dict) and res.get('success'):
             store = res.get('store_name', 'سوبر ماركت المنزل السوري')
-            return True, f"✅ متصل بنجاح بمركز بيانات ({store}) ⚡"
+            cnt = res.get('total_products', 0)
+            return True, f"✅ متصل بنجاح بسحابة ({store}) ⚡\nإجمالي المنتجات بالسحابة: {cnt} صنف"
         elif ok:
             return True, "✅ تم الاتصال بنجاح بالخادم المركزي!"
         else:
@@ -143,7 +149,7 @@ class HybridSyncManager:
     def run_sync_cycle(self):
         with self._lock:
             settings = self.get_cloud_settings()
-            url = settings.get('cloud_api_url', '')
+            url = settings.get('cloud_api_url', 'https://supermarkrt.almagd555.com/api_sync.php')
             key = settings.get('cloud_api_key', 'syrian_home_pos_secret_token_2026')
 
             if not url: return
@@ -208,16 +214,13 @@ class HybridSyncManager:
                     remote_id = resp.get('remote_id', '')
                     self.cursor.execute("UPDATE sales SET synced=1, remote_id=? WHERE id=?", (str(remote_id), s_id))
                     self.cursor.execute("UPDATE sync_queue SET status='synced' WHERE entity_type='sale' AND entity_id=?", (s_id,))
-                else:
-                    # في حالة عدم توفر اتصال بالإنترنت نتركها بالانتظار
-                    pass
             self.db.commit()
         except Exception as e:
             print(f"Sync sales error: {e}")
 
     def _sync_pending_products(self, api_url, api_key):
         try:
-            self.cursor.execute("SELECT id, barcode, barcode2, barcode3, all_barcodes, local_code, name, price, cost, stock FROM products WHERE synced = 0 LIMIT 30")
+            self.cursor.execute("SELECT id, barcode, barcode2, barcode3, all_barcodes, local_code, name, price, cost, stock, category, sub_category FROM products WHERE synced = 0 LIMIT 30")
             rows = self.cursor.fetchall()
             for r in rows:
                 p_id = r[0]
@@ -231,7 +234,9 @@ class HybridSyncManager:
                     'name': r[6] or '',
                     'price': r[7] or 0,
                     'cost': r[8] or 0,
-                    'stock': r[9] or 0
+                    'stock': r[9] or 0,
+                    'category': r[10] or 'عام',
+                    'sub_category': r[11] or ''
                 }
 
                 ok, resp = self._make_request(api_url, action='sync_product', payload=payload, api_key=api_key, method='POST')
@@ -245,12 +250,10 @@ class HybridSyncManager:
     def pull_products_from_cloud(self, api_url=None, api_key=None):
         """سحب كافة المنتجات والمخزون من السيرفر المركزي وحفظها في قاعدة البيانات المحلية"""
         settings = self.get_cloud_settings()
-        url = api_url or settings.get('cloud_api_url', '')
+        url = api_url or settings.get('cloud_api_url', 'https://supermarkrt.almagd555.com/api_sync.php')
         key = api_key or settings.get('cloud_api_key', 'syrian_home_pos_secret_token_2026')
 
-        if not url: return False, "رابط السيرفر غير محدد!"
-
-        ok, resp = self._make_request(url, action='get_products', api_key=key, method='GET')
+        ok, resp = self._make_request(url, action='get_products', api_key=key, method='GET', timeout=12)
         if not ok or not isinstance(resp, dict) or not resp.get('success'):
             return False, f"تعذر جلب المنتجات من السحابة: {resp}"
 
@@ -259,36 +262,58 @@ class HybridSyncManager:
         updated_count = 0
 
         for cp in cloud_products:
-            p_name = cp.get('name', '').strip()
-            p_barcode = cp.get('barcode', '').strip()
-            p_bc2 = cp.get('barcode2', '').strip()
-            p_bc3 = cp.get('barcode3', '').strip()
-            p_all_bc = cp.get('all_barcodes', '').strip() or p_barcode
-            p_loc = cp.get('local_code', '').strip()
+            p_name = (cp.get('name') or '').strip()
+            p_barcode = (cp.get('barcode') or '').strip() or None
+            p_bc2 = (cp.get('barcode2') or '').strip() or None
+            p_bc3 = (cp.get('barcode3') or '').strip() or None
+            p_all_bc = (cp.get('all_barcodes') or '').strip() or (p_barcode if p_barcode else '')
+            p_loc = (cp.get('local_code') or '').strip() or None
             p_price = float(cp.get('price', 0))
             p_cost = float(cp.get('cost', 0))
             p_stock = float(cp.get('stock', 100))
+            p_cat = (cp.get('category') or 'عام').strip()
+            p_sub = (cp.get('sub_category') or '').strip()
+            p_rem_id = str(cp.get('id', ''))
 
             # البحث عن المنتج محلياً بالباركود أو الكود المحلي أو الاسم
-            self.cursor.execute("SELECT id FROM products WHERE (barcode != '' AND barcode = ?) OR (local_code != '' AND local_code = ?) OR name = ? LIMIT 1", (p_barcode, p_loc, p_name))
-            local_row = self.cursor.fetchone()
+            local_row = None
+            if p_barcode:
+                self.cursor.execute("SELECT id FROM products WHERE barcode = ? LIMIT 1", (p_barcode,))
+                local_row = self.cursor.fetchone()
+            if not local_row and p_loc:
+                self.cursor.execute("SELECT id FROM products WHERE local_code = ? LIMIT 1", (p_loc,))
+                local_row = self.cursor.fetchone()
+            if not local_row:
+                self.cursor.execute("SELECT id FROM products WHERE name = ? LIMIT 1", (p_name,))
+                local_row = self.cursor.fetchone()
 
             if local_row:
                 loc_id = local_row[0]
                 self.cursor.execute("""
-                    UPDATE products SET name=?, price=?, cost=?, stock=?, barcode=?, barcode2=?, barcode3=?, all_barcodes=?, local_code=?, synced=1 
+                    UPDATE products SET name=?, price=?, cost=?, stock=?, barcode=?, barcode2=?, barcode3=?, all_barcodes=?, local_code=?, category=?, main_category=?, sub_category=?, synced=1, remote_id=? 
                     WHERE id=?
-                """, (p_name, p_price, p_cost, p_stock, p_barcode, p_bc2, p_bc3, p_all_bc, p_loc, loc_id))
+                """, (p_name, p_price, p_cost, p_stock, p_barcode, p_bc2, p_bc3, p_all_bc, p_loc, p_cat, p_cat, p_sub, p_rem_id, loc_id))
                 updated_count += 1
             else:
                 self.cursor.execute("""
-                    INSERT INTO products (barcode, barcode2, barcode3, all_barcodes, local_code, name, price, cost, stock, synced) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-                """, (p_barcode, p_bc2, p_bc3, p_all_bc, p_loc, p_name, p_price, p_cost, p_stock))
+                    INSERT INTO products (barcode, barcode2, barcode3, all_barcodes, local_code, name, price, cost, stock, category, main_category, sub_category, synced, remote_id) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+                """, (p_barcode, p_bc2, p_bc3, p_all_bc, p_loc, p_name, p_price, p_cost, p_stock, p_cat, p_cat, p_sub, p_rem_id))
                 inserted_count += 1
 
         self.db.commit()
-        return True, f"✅ تمت المزامنة بنجاح: تم تحديث {updated_count} صنف وإضافة {inserted_count} صنف جديد من السحابة."
+        return True, f"✅ تمت المزامنة بنجاح: تم تحديث {updated_count} صنف وإضافة {inserted_count} صنف جديد من السحابة (إجمالي {len(cloud_products)} صنف)."
+
+    def reset_cloud_database(self, api_url=None, api_key=None):
+        """تصفير وحذف جميع بيانات المتجر الإلكتروني السحابي المركزي"""
+        settings = self.get_cloud_settings()
+        url = api_url or settings.get('cloud_api_url', 'https://supermarkrt.almagd555.com/api_sync.php')
+        key = api_key or settings.get('cloud_api_key', 'syrian_home_pos_secret_token_2026')
+        
+        ok, res = self._make_request(url, action='reset_all_data', api_key=key, method='POST', timeout=12)
+        if ok and isinstance(res, dict) and res.get('success'):
+            return True, res.get('message', 'تم تصفير وحذف كافة بيانات المتجر الإلكتروني السحابي بنجاح.')
+        return False, f"فشل تصفير السحابة: {res}"
 
     def _pull_online_orders(self, api_url, api_key):
         """سحب وتجهيز الطلبات الواردة عبر المتجر الإلكتروني"""
@@ -296,7 +321,8 @@ class HybridSyncManager:
             ok, resp = self._make_request(api_url, action='get_pending_orders', api_key=api_key, method='GET')
             if ok and isinstance(resp, dict) and resp.get('success'):
                 orders = resp.get('orders', [])
-                # يمكن دمجها أو حفظها كفواتير تحت الطلب
                 pass
+        except Exception as e:
+            print(f"Pull orders error: {e}")
         except Exception as e:
             print(f"Pull orders error: {e}")

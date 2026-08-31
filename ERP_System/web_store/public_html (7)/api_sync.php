@@ -651,6 +651,23 @@ try {
             break;
 
         // ============================================================
+        // 7. تصفير شامل لجميع بيانات المتجر السحابي (Reset All Cloud Data)
+        // ============================================================
+        case 'reset_all_data':
+            $pdo->exec("DELETE FROM products");
+            $pdo->exec("DELETE FROM orders");
+            $pdo->exec("DELETE FROM order_items");
+            $pdo->exec("DELETE FROM expenses");
+            $pdo->exec("DELETE FROM customers");
+            $pdo->exec("DELETE FROM suppliers");
+            
+            echo json_encode([
+                'success' => true,
+                'message' => '✅ تم تصفير وحذف كافة بيانات المتجر الإلكتروني السحابي بنجاح.'
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
         // 15. جلب قائمة الطيارين المتاحين (للكاشير وشاشة الدخول)
         // ============================================================
         case 'get_delivery_drivers':

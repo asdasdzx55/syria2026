@@ -999,9 +999,68 @@ class AdminPage(ctk.CTkFrame):
         messagebox.showinfo("نجاح", "تم التغيير بنجاح.")
 
     def delete_all_data(self):
-        if messagebox.askyesno("تحذير", "حذف كل البيانات؟") and messagebox.askyesno("تأكيد", "متأكد؟"):
-            for table in ['products', 'sales', 'sale_items', 'expenses', 'suppliers', 'purchases', 'purchase_items', 'employees', 'temp_invoices', 'temp_invoice_items']:
+        # نافذة حوارية تتيح الاختيار بين التصفير المحلي والتصفير الشامل
+        dialog_win = ctk.CTkToplevel(self)
+        dialog_win.title("⚠️ خيارات تصفير وحذف البيانات")
+        dialog_win.geometry("520x360")
+        dialog_win.attributes("-topmost", True)
+        dialog_win.resizable(False, False)
+
+        header = ctk.CTkFrame(dialog_win, fg_color="#c0392b", corner_radius=10)
+        header.pack(fill="x", padx=15, pady=15)
+        ctk.CTkLabel(header, text="⚠️ تحذير: تصفير وحذف البيانات", font=ctk.CTkFont(size=18, weight="bold"), text_color="white").pack(pady=10)
+
+        ctk.CTkLabel(dialog_win, text="يرجى اختيار نوع التصفير المطلوب بدقة:", font=ctk.CTkFont(size=14, weight="bold")).pack(pady=5)
+
+        def do_local_reset():
+            if not messagebox.askyesno("تأكيد التصفير المحلي", "هل أنت متأكد من مسح كافة المنتجات والمبيعات من هذا الجهاز المحلي فقط؟\n(ستبقى بيانات السحابة محفوظة ويمكنك سحبها لاحقاً بضغطة زر)"):
+                return
+            dialog_win.destroy()
+            for table in ['products', 'sales', 'sale_items', 'expenses', 'suppliers', 'purchases', 'purchase_items', 'employees', 'temp_invoices', 'temp_invoice_items', 'sync_queue']:
                 try: self.cursor.execute(f"DELETE FROM {table}")
                 except: pass
             self.db.commit()
             self.on_show()
+            if hasattr(self.app, 'frames') and 'products' in self.app.frames:
+                self.app.frames['products'].prod_clear_form()
+            if hasattr(self.app, 'frames') and 'pos' in self.app.frames:
+                self.app.frames['pos'].pos_load_products_tree()
+            messagebox.showinfo("تم التصفير", "✅ تم تصفير البيانات المحلية بنجاح.\n(يمكنك في أي وقت سحب المنتجات من السحابة بضغطة زر).")
+
+        def do_full_reset_everywhere():
+            msg = "🚨 تحذير بالغ الخطورة 🚨\n\nأنت على وشك تصفير وحذف البيانات من:\n1. برنامج الكاشير المحلي على هذا الجهاز.\n2. المتجر الإلكتروني السحابي على Hostinger بالكامل.\n\nهل أنت متأكد بنسبة 100% أنك تريد الحذف من كل مكان؟"
+            if not messagebox.askyesno("تأكيد الحذف الشامل", msg, icon="warning"):
+                return
+            dialog_win.destroy()
+            
+            # 1. تصفير محلي
+            for table in ['products', 'sales', 'sale_items', 'expenses', 'suppliers', 'purchases', 'purchase_items', 'employees', 'temp_invoices', 'temp_invoice_items', 'sync_queue']:
+                try: self.cursor.execute(f"DELETE FROM {table}")
+                except: pass
+            self.db.commit()
+
+            # 2. تصفير السحابة
+            cloud_msg = ""
+            if hasattr(self, 'sync_mgr'):
+                ok, cloud_res = self.sync_mgr.reset_cloud_database()
+                cloud_msg = f"\nالسحابة: {cloud_res}"
+
+            self.on_show()
+            if hasattr(self.app, 'frames') and 'products' in self.app.frames:
+                self.app.frames['products'].prod_clear_form()
+            if hasattr(self.app, 'frames') and 'pos' in self.app.frames:
+                self.app.frames['pos'].pos_load_products_tree()
+
+            messagebox.showinfo("تم التصفير الشامل", f"✅ تم تصفير وحذف كافة البيانات من الكاشير المحلي ومن المتجر الإلكتروني السحابي معاً بنجاح!{cloud_msg}")
+
+        btn_f1 = ctk.CTkFrame(dialog_win, fg_color="transparent")
+        btn_f1.pack(fill="x", padx=30, pady=8)
+        ctk.CTkButton(btn_f1, text="1. 💻 تصفير محلي فقط (مع الحفاظ على السحابة)", font=ctk.CTkFont(size=13, weight="bold"), fg_color="#d35400", hover_color="#ba4a00", height=42, command=do_local_reset).pack(fill="x")
+
+        btn_f2 = ctk.CTkFrame(dialog_win, fg_color="transparent")
+        btn_f2.pack(fill="x", padx=30, pady=8)
+        ctk.CTkButton(btn_f2, text="2. 🌐 تصفير شامل من الكل (محلي + المتجر السحابي)", font=ctk.CTkFont(size=13, weight="bold"), fg_color="#c0392b", hover_color="#922b21", height=42, command=do_full_reset_everywhere).pack(fill="x")
+
+        btn_f3 = ctk.CTkFrame(dialog_win, fg_color="transparent")
+        btn_f3.pack(fill="x", padx=30, pady=12)
+        ctk.CTkButton(btn_f3, text="إلغاء وتراجع", font=ctk.CTkFont(size=12), fg_color="#7f8c8d", hover_color="#626567", height=35, command=dialog_win.destroy).pack(fill="x")
