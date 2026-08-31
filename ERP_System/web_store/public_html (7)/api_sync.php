@@ -230,6 +230,251 @@ try {
             break;
 
         // ============================================================
+        // 2.2 تسجيل فاتورة مشتريات / توريد من مورد (Purchase Invoice API)
+        // ============================================================
+        case 'push_purchase':
+        case 'record_purchase':
+        case 'create_purchase':
+            // التأكد من وجود جداول المشتريات والموردين
+            try {
+                $pdo->exec("CREATE TABLE IF NOT EXISTS suppliers (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    name VARCHAR(255) NOT NULL,
+                    phone VARCHAR(50) DEFAULT NULL,
+                    balance DECIMAL(12, 2) DEFAULT 0.00,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+                
+                $pdo->exec("CREATE TABLE IF NOT EXISTS purchases (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    supplier_id INT DEFAULT NULL,
+                    supplier_name VARCHAR(255) DEFAULT NULL,
+                    invoice_number VARCHAR(100) DEFAULT NULL,
+                    payment_method VARCHAR(100) DEFAULT 'نقدي',
+                    total_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+                    paid_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+                    date DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    status VARCHAR(50) DEFAULT 'مكتملة',
+                    discount DECIMAL(12, 2) DEFAULT 0.00,
+                    source VARCHAR(50) DEFAULT 'web_pos',
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+
+                $pdo->exec("CREATE TABLE IF NOT EXISTS purchase_items (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    purchase_id INT NOT NULL,
+                    product_id INT DEFAULT NULL,
+                    barcode VARCHAR(100) DEFAULT NULL,
+                    name VARCHAR(255) NOT NULL,
+                    qty DECIMAL(10, 2) NOT NULL DEFAULT 1,
+                    unit VARCHAR(50) DEFAULT 'قطعة',
+                    cost_price DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+                    selling_price DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+                    total_cost DECIMAL(12, 2) NOT NULL DEFAULT 0.00
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+            } catch (Exception $e) {}
+
+            $data = !empty($json_payload) ? $json_payload : $_POST;
+            
+            $supplier_name = trim($data['supplier_name'] ?? 'مورد عام');
+            $supplier_id = (int)($data['supplier_id'] ?? 0);
+            $invoice_number = trim($data['invoice_number'] ?? ('INV-' . time()));
+            $payment_method = trim($data['payment_method'] ?? 'نقدي');
+            $total_amount = (float)($data['total_amount'] ?? 0);
+            $discount = (float)($data['discount'] ?? 0);
+            $paid_amount = isset($data['paid_amount']) ? (float)$data['paid_amount'] : ($payment_method === 'آجل' ? 0 : $total_amount);
+            $date = $data['date'] ?? date('Y-m-d H:i:s');
+            $status = trim($data['status'] ?? 'مكتملة');
+            $source = trim($data['source'] ?? 'web_pos');
+            $items = $data['items'] ?? [];
+
+            if (is_string($items)) {
+                $items = json_decode($items, true) ?: [];
+            }
+
+            if (empty($items)) {
+                echo json_encode(['success' => false, 'error' => 'يجب إرسال عناصر الفاتورة (items) على الأقل صنف واحد!']);
+                exit;
+            }
+
+            // فحص أو إنشاء المورد
+            if (!empty($supplier_name)) {
+                try {
+                    $sup_chk = $pdo->prepare("SELECT id FROM suppliers WHERE name = ? OR (id = ? AND id > 0) LIMIT 1");
+                    $sup_chk->execute([$supplier_name, $supplier_id]);
+                    $found_id = $sup_chk->fetchColumn();
+                    if ($found_id) {
+                        $supplier_id = (int)$found_id;
+                    } else {
+                        $sup_ins = $pdo->prepare("INSERT INTO suppliers (name, balance) VALUES (?, 0)");
+                        $sup_ins->execute([$supplier_name]);
+                        $supplier_id = (int)$pdo->lastInsertId();
+                    }
+                } catch (Exception $e) {}
+            }
+
+            // إذا لم يتم تحديد المجموع الإجمالي، حسابه من العناصر
+            if ($total_amount <= 0) {
+                foreach ($items as $it) {
+                    $q = (float)($it['qty'] ?? 1);
+                    $c = (float)($it['cost_price'] ?? $it['cost'] ?? 0);
+                    $total_amount += ($q * $c);
+                }
+                $total_amount = max(0, $total_amount - $discount);
+                if (!isset($data['paid_amount']) && $payment_method !== 'آجل') {
+                    $paid_amount = $total_amount;
+                }
+            }
+
+            // حفظ رأس فاتورة المشتريات
+            $stmt = $pdo->prepare("INSERT INTO purchases (
+                supplier_id, supplier_name, invoice_number, payment_method, total_amount, paid_amount, date, status, discount, source
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([
+                $supplier_id, $supplier_name, $invoice_number, $payment_method, $total_amount, $paid_amount, $date, $status, $discount, $source
+            ]);
+            $purchase_id = (int)$pdo->lastInsertId();
+
+            // معالجة كل صنف: إضافة إلى purchase_items وزيادة المخزون وتحديث أسعار التكلفة والبيع
+            $updated_products = [];
+            foreach ($items as $it) {
+                $p_name = trim($it['name'] ?? 'صنف جديد');
+                $p_bc = trim($it['barcode'] ?? '');
+                $p_loc = trim($it['local_code'] ?? '');
+                $p_qty = (float)($it['qty'] ?? 1);
+                $p_unit = trim($it['unit'] ?? 'قطعة');
+                $p_cost = (float)($it['cost_price'] ?? $it['cost'] ?? 0);
+                $p_price = (float)($it['selling_price'] ?? $it['price'] ?? 0);
+                $line_total = $p_qty * $p_cost;
+
+                // البحث عن المنتج في قاعدة البيانات
+                $existing_prod_id = null;
+                $current_stock = 0;
+                if (!empty($p_bc)) {
+                    $chk = $pdo->prepare("SELECT id, stock FROM products WHERE barcode = ? LIMIT 1");
+                    $chk->execute([$p_bc]);
+                    $row = $chk->fetch(PDO::FETCH_ASSOC);
+                    if ($row) {
+                        $existing_prod_id = $row['id'];
+                        $current_stock = (float)$row['stock'];
+                    }
+                }
+                if (!$existing_prod_id && !empty($p_loc)) {
+                    $chk = $pdo->prepare("SELECT id, stock FROM products WHERE local_code = ? LIMIT 1");
+                    $chk->execute([$p_loc]);
+                    $row = $chk->fetch(PDO::FETCH_ASSOC);
+                    if ($row) {
+                        $existing_prod_id = $row['id'];
+                        $current_stock = (float)$row['stock'];
+                    }
+                }
+                if (!$existing_prod_id && !empty($p_name)) {
+                    $chk = $pdo->prepare("SELECT id, stock FROM products WHERE name = ? LIMIT 1");
+                    $chk->execute([$p_name]);
+                    $row = $chk->fetch(PDO::FETCH_ASSOC);
+                    if ($row) {
+                        $existing_prod_id = $row['id'];
+                        $current_stock = (float)$row['stock'];
+                    }
+                }
+
+                if ($existing_prod_id) {
+                    // تحديث المخزون + سعر التكلفة وسعر البيع إذا كان أكبر من 0
+                    if ($p_price > 0) {
+                        $upd = $pdo->prepare("UPDATE products SET stock = stock + ?, cost = ?, price = ? WHERE id = ?");
+                        $upd->execute([$p_qty, $p_cost, $p_price, $existing_prod_id]);
+                    } else {
+                        $upd = $pdo->prepare("UPDATE products SET stock = stock + ?, cost = ? WHERE id = ?");
+                        $upd->execute([$p_qty, $p_cost, $existing_prod_id]);
+                    }
+                    $final_pid = $existing_prod_id;
+                    $new_stock = $current_stock + $p_qty;
+                } else {
+                    // إضافة المنتج جديداً إلى كتالوج المنتجات
+                    $ins = $pdo->prepare("INSERT INTO products (name, barcode, local_code, cost, price, stock, category) VALUES (?, ?, ?, ?, ?, ?, 'عام')");
+                    $ins->execute([$p_name, $p_bc, $p_loc, $p_cost, $p_price, $p_qty]);
+                    $final_pid = (int)$pdo->lastInsertId();
+                    $new_stock = $p_qty;
+                }
+
+                // إضافة الصنف لجدول تفاصيل المشتريات
+                $item_ins = $pdo->prepare("INSERT INTO purchase_items (
+                    purchase_id, product_id, barcode, name, qty, unit, cost_price, selling_price, total_cost
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $item_ins->execute([
+                    $purchase_id, $final_pid, $p_bc, $p_name, $p_qty, $p_unit, $p_cost, $p_price, $line_total
+                ]);
+
+                $updated_products[] = [
+                    'product_id' => (int)$final_pid,
+                    'name' => $p_name,
+                    'barcode' => $p_bc,
+                    'added_qty' => $p_qty,
+                    'new_stock' => $new_stock,
+                    'cost_price' => $p_cost,
+                    'selling_price' => $p_price
+                ];
+            }
+
+            // إذا كانت الفاتورة آجلة، تحديث رصيد المورد
+            $remaining = $total_amount - $paid_amount;
+            if ($remaining > 0 && $supplier_id > 0) {
+                try {
+                    $pdo->prepare("UPDATE suppliers SET balance = balance + ? WHERE id = ?")->execute([$remaining, $supplier_id]);
+                } catch (Exception $e) {}
+            }
+
+            // تسجيل إشعار بنظام الإدارة
+            try {
+                $notif_stmt = $pdo->prepare("INSERT INTO notifications (title, body, link) VALUES (?, ?, ?)");
+                $notif_stmt->execute([
+                    "📦 فاتورة توريد مشتريات جديدة (#{$invoice_number})",
+                    "تم تسجيل توريد من المورد ({$supplier_name}) بإجمالي {$total_amount} ج.م",
+                    "admin_purchases.php?id=" . $purchase_id
+                ]);
+            } catch (Exception $e) {}
+
+            echo json_encode([
+                'success' => true,
+                'message' => "✅ تم تسجيل فاتورة المشتريات وتحديث المخزون بنجاح!",
+                'purchase_id' => $purchase_id,
+                'invoice_number' => $invoice_number,
+                'supplier_id' => $supplier_id,
+                'supplier_name' => $supplier_name,
+                'payment_method' => $payment_method,
+                'total_amount' => $total_amount,
+                'paid_amount' => $paid_amount,
+                'items_count' => count($updated_products),
+                'updated_products' => $updated_products
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 2.3 جلب فواتير المشتريات (Get Purchases)
+        // ============================================================
+        case 'get_purchases':
+            $limit = min(100, max(1, (int)($_GET['limit'] ?? 50)));
+            $purchases = $pdo->query("SELECT * FROM purchases ORDER BY id DESC LIMIT {$limit}")->fetchAll(PDO::FETCH_ASSOC);
+            echo json_encode([
+                'success' => true,
+                'count' => count($purchases),
+                'purchases' => $purchases
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 2.4 جلب قائمة الموردين (Get Suppliers)
+        // ============================================================
+        case 'get_suppliers':
+            $suppliers = $pdo->query("SELECT * FROM suppliers ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
+            echo json_encode([
+                'success' => true,
+                'count' => count($suppliers),
+                'suppliers' => $suppliers
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
         // 3. إضافة أو تعديل أو مزامنة صنف/منتج مركزي في المتجر
         // ============================================================
         case 'sync_product':
