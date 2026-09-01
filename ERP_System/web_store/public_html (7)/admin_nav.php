@@ -17,6 +17,12 @@ $current_admin_page = basename($_SERVER['PHP_SELF']);
             <a href="admin_orders.php" class="px-3 py-2.5 rounded-xl transition-all <?php echo in_array($current_admin_page, ['admin_orders.php', 'admin_order_details.php']) ? 'bg-royal-charcoal text-white shadow-sm' : 'text-gray-500 hover:text-royal-dark hover:bg-royal-sand border border-gray-100'; ?>">
                 <i class="fa-solid fa-receipt block md:inline mb-1 md:mb-0"></i> طلبات العملاء
             </a>
+            <a href="admin_purchases.php" class="px-3 py-2.5 rounded-xl transition-all <?php echo $current_admin_page == 'admin_purchases.php' ? 'bg-royal-charcoal text-white shadow-sm' : 'text-gray-500 hover:text-royal-dark hover:bg-royal-sand border border-gray-100'; ?>">
+                <i class="fa-solid fa-truck-ramp-box block md:inline mb-1 md:mb-0 text-amber-500"></i> فواتير المشتريات
+            </a>
+            <a href="admin_suppliers.php" class="px-3 py-2.5 rounded-xl transition-all <?php echo $current_admin_page == 'admin_suppliers.php' ? 'bg-royal-charcoal text-white shadow-sm' : 'text-gray-500 hover:text-royal-dark hover:bg-royal-sand border border-gray-100'; ?>">
+                <i class="fa-solid fa-handshake block md:inline mb-1 md:mb-0 text-blue-500"></i> إدارة الموردين
+            </a>
             <a href="admin_abandoned_carts.php" class="px-3 py-2.5 rounded-xl transition-all <?php echo $current_admin_page == 'admin_abandoned_carts.php' ? 'bg-royal-charcoal text-white shadow-sm' : 'text-gray-500 hover:text-royal-dark hover:bg-royal-sand border border-gray-100'; ?>">
                 <i class="fa-solid fa-cart-arrow-down block md:inline mb-1 md:mb-0 text-red-500"></i> السلات المتروكة
             </a>

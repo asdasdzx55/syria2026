@@ -200,7 +200,13 @@ class HybridSyncManager:
                 # 3. مزامنة الأقسام والتصنيفات الأساسية والفرعية
                 self._sync_all_categories(url, key, conn, cur)
 
-                # 4. سحب الطلبات الجديدة القادمة من المتجر الإلكتروني
+                # 4. دفع الموردين غير المزامنين محلياً إلى السحابة
+                self._sync_pending_suppliers(url, key, conn, cur)
+
+                # 5. دفع فواتير المشتريات والتوريد غير المزامنة محلياً إلى السحابة
+                self._sync_pending_purchases(url, key, conn, cur)
+
+                # 6. سحب الطلبات الجديدة القادمة من المتجر الإلكتروني
                 self._pull_online_orders(url, key, conn, cur)
 
             except Exception as e:
@@ -294,6 +300,83 @@ class HybridSyncManager:
                     conn.commit()
         except Exception as e:
             print(f"Sync products error: {e}")
+
+    def _sync_pending_suppliers(self, api_url, api_key, conn, cur):
+        try:
+            cur.execute("SELECT id, name, phone, balance, remote_id FROM suppliers WHERE synced = 0 LIMIT 50")
+            rows = cur.fetchall()
+            for r in rows:
+                s_id = r[0]
+                payload = {
+                    'local_id': s_id,
+                    'remote_id': r[4] or '',
+                    'name': r[1] or '',
+                    'phone': r[2] or '',
+                    'balance': r[3] or 0
+                }
+                ok, resp = self._make_request(api_url, action='sync_supplier', payload=payload, api_key=api_key, method='POST')
+                if ok and isinstance(resp, dict) and resp.get('success'):
+                    rem_id = resp.get('supplier_id', '')
+                    cur.execute("UPDATE suppliers SET synced=1, remote_id=? WHERE id=?", (str(rem_id), s_id))
+                    conn.commit()
+        except Exception as e:
+            print(f"Sync suppliers error: {e}")
+
+    def _sync_pending_purchases(self, api_url, api_key, conn, cur):
+        try:
+            cur.execute("""
+                SELECT p.id, p.supplier_id, p.total, p.paid, p.date, p.status, p.discount, p.invoice_number, p.payment_method, p.remote_id, s.name 
+                FROM purchases p 
+                LEFT JOIN suppliers s ON p.supplier_id = s.id 
+                WHERE p.synced = 0 LIMIT 20
+            """)
+            rows = cur.fetchall()
+            for r in rows:
+                p_id = r[0]
+                cur.execute("""
+                    SELECT pi.product_id, pi.qty, pi.cost, pi.barcode, pi.name, pi.unit, pi.selling_price, pr.remote_id
+                    FROM purchase_items pi
+                    LEFT JOIN products pr ON pi.product_id = pr.id
+                    WHERE pi.purchase_id = ?
+                """, (p_id,))
+                
+                items = []
+                for it in cur.fetchall():
+                    items.append({
+                        'product_id': it[7] or it[0],
+                        'local_product_id': it[0],
+                        'qty': it[1],
+                        'cost_price': it[2],
+                        'barcode': it[3] or '',
+                        'name': it[4] or f"منتج #{it[0]}",
+                        'unit': it[5] or 'قطعة',
+                        'selling_price': it[6] or 0
+                    })
+
+                payload = {
+                    'local_purchase_id': p_id,
+                    'remote_id': r[9] or '',
+                    'supplier_id': r[1] or 0,
+                    'supplier_name': r[10] or 'مورد عام',
+                    'invoice_number': r[7] or f"INV-{p_id}",
+                    'payment_method': r[8] or 'نقدي',
+                    'total_amount': r[2] or 0,
+                    'paid_amount': r[3] or 0,
+                    'discount': r[6] or 0,
+                    'date': r[4] or '',
+                    'status': r[5] or 'مكتملة',
+                    'source': 'desktop_pos',
+                    'items': items
+                }
+
+                ok, resp = self._make_request(api_url, action='push_purchase', payload=payload, api_key=api_key, method='POST')
+                if ok and isinstance(resp, dict) and resp.get('success'):
+                    remote_id = resp.get('remote_id', resp.get('purchase_id', ''))
+                    cur.execute("UPDATE purchases SET synced=1, remote_id=? WHERE id=?", (str(remote_id), p_id))
+                    conn.commit()
+        except Exception as e:
+            print(f"Sync purchases error: {e}")
+
     def _sync_all_categories(self, api_url, api_key, conn, cur):
         try:
             cur.execute("""

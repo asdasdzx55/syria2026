@@ -109,7 +109,19 @@ def setup_database():
         ("temp_invoices", "delivery_fee REAL DEFAULT 0"),
         ("products", "category TEXT DEFAULT 'عام'"),
         ("products", "main_category TEXT DEFAULT 'عام'"),
-        ("products", "sub_category TEXT DEFAULT 'عام'")
+        ("products", "sub_category TEXT DEFAULT 'عام'"),
+        ("suppliers", "phone TEXT"),
+        ("suppliers", "synced INTEGER DEFAULT 0"),
+        ("suppliers", "remote_id TEXT"),
+        ("purchases", "invoice_number TEXT"),
+        ("purchases", "payment_method TEXT DEFAULT 'نقدي'"),
+        ("purchases", "source TEXT DEFAULT 'desktop_pos'"),
+        ("purchases", "synced INTEGER DEFAULT 0"),
+        ("purchases", "remote_id TEXT"),
+        ("purchase_items", "barcode TEXT"),
+        ("purchase_items", "name TEXT"),
+        ("purchase_items", "unit TEXT DEFAULT 'قطعة'"),
+        ("purchase_items", "selling_price REAL DEFAULT 0")
     ]
 
     for table, col_def in migrations:

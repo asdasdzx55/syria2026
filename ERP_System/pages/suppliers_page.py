@@ -802,8 +802,9 @@ class SuppliersPage(ctk.CTkFrame):
                 self.cursor.execute("DELETE FROM purchase_items WHERE purchase_id=?", (purch_id,))
             else:
                 # إنشاء فاتورة جديدة
-                self.cursor.execute("INSERT INTO purchases (supplier_id, total, paid, date, status, discount) VALUES (?, ?, ?, ?, 'مكتملة', ?)",
-                                    (sup_id, net_total, paid, date_now, self.buy_discount_val))
+                inv_no = f"INV-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
+                self.cursor.execute("INSERT INTO purchases (supplier_id, total, paid, date, status, discount, invoice_number, synced) VALUES (?, ?, ?, ?, 'مكتملة', ?, ?, 0)",
+                                    (sup_id, net_total, paid, date_now, self.buy_discount_val, inv_no))
                 purch_id = self.cursor.lastrowid
 
             # إضافة العناصر وتطبيق الكميات والأسعار الجديدة
@@ -1005,8 +1006,10 @@ class SuppliersPage(ctk.CTkFrame):
         name = self.sup_name.get().strip()
         if not name: return
         balance = float(self.sup_balance.get() or 0)
-        self.cursor.execute("INSERT INTO suppliers (name, balance) VALUES (?, ?)", (name, balance))
+        self.cursor.execute("INSERT INTO suppliers (name, balance, synced) VALUES (?, ?, 0)", (name, balance))
         self.db.commit()
+        if hasattr(self.app, 'sync_mgr'):
+            self.app.sync_mgr.trigger_instant_sync()
         messagebox.showinfo("نجاح", f"تم إضافة المورد {name} بنجاح!")
         self.load_suppliers()
         self.sup_name.delete(0, 'end')
@@ -1029,8 +1032,10 @@ class SuppliersPage(ctk.CTkFrame):
         name = self.sup_name.get().strip()
         try:
             balance = float(self.sup_balance.get() or 0)
-            self.cursor.execute("UPDATE suppliers SET name=?, balance=? WHERE id=?", (name, balance, self.current_edit_sup_id))
+            self.cursor.execute("UPDATE suppliers SET name=?, balance=?, synced=0 WHERE id=?", (name, balance, self.current_edit_sup_id))
             self.db.commit()
+            if hasattr(self.app, 'sync_mgr'):
+                self.app.sync_mgr.trigger_instant_sync()
             messagebox.showinfo("نجاح", "تم تحديث بيانات المورد بنجاح.")
             self.load_suppliers()
             self.sup_name.delete(0, 'end')
@@ -1062,11 +1067,13 @@ class SuppliersPage(ctk.CTkFrame):
             s_id = int(sup_str.split(" - ")[0])
             amount = float(self.sup_pay_amount.get())
             if amount <= 0: raise ValueError
-            self.cursor.execute("UPDATE suppliers SET balance = balance - ? WHERE id=?", (amount, s_id))
+            self.cursor.execute("UPDATE suppliers SET balance = balance - ?, synced = 0 WHERE id=?", (amount, s_id))
             date_now = datetime.datetime.now().strftime("%Y-%m-%d")
             self.cursor.execute("INSERT INTO expenses (category, amount, note, date) VALUES (?, ?, ?, ?)", 
                                 ("سداد موردين", amount, f"سداد دفعة نقدية لمورد", date_now))
             self.db.commit()
+            if hasattr(self.app, 'sync_mgr'):
+                self.app.sync_mgr.trigger_instant_sync()
             messagebox.showinfo("نجاح", f"تم سداد {amount:g} ج.م للمورد.")
             self.sup_pay_amount.delete(0, 'end')
             self.pay_sup_search.delete(0, 'end')
@@ -1291,13 +1298,13 @@ class SuppliersPage(ctk.CTkFrame):
         if paid > 0: msg += f"\n- استرداد ({paid:g} ج.م) للخزينة"
             
         if messagebox.askyesno("تأكيد المرتجع", msg):
-            self.cursor.execute("UPDATE purchases SET status = 'مرتجع' WHERE id=?", (p_id,))
+            self.cursor.execute("UPDATE purchases SET status = 'مرتجع', synced = 0 WHERE id=?", (p_id,))
             self.cursor.execute("SELECT product_id, qty FROM purchase_items WHERE purchase_id=?", (p_id,))
             for item in self.cursor.fetchall():
-                self.cursor.execute("UPDATE products SET stock = stock - ? WHERE id=?", (item[1], item[0]))
+                self.cursor.execute("UPDATE products SET stock = stock - ?, synced = 0 WHERE id=?", (item[1], item[0]))
                 
             rem = total - paid
-            self.cursor.execute("UPDATE suppliers SET balance = balance - ? WHERE id=?", (rem, sup_id))
+            self.cursor.execute("UPDATE suppliers SET balance = balance - ?, synced = 0 WHERE id=?", (rem, sup_id))
             
             if paid > 0:
                 date_now = datetime.datetime.now().strftime("%Y-%m-%d")
@@ -1305,6 +1312,8 @@ class SuppliersPage(ctk.CTkFrame):
                                     ("استرداد مشتريات", -paid, f"استرداد نقدي لمرتجع فاتورة مورد {p_id}", date_now))
                                     
             self.db.commit()
+            if hasattr(self.app, 'sync_mgr'):
+                self.app.sync_mgr.trigger_instant_sync()
             messagebox.showinfo("نجاح", "تم استرجاع الفاتورة بنجاح.")
             self.load_purchase_invoice() 
             self.load_suppliers() 

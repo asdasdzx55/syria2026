@@ -438,6 +438,8 @@ try {
                 'success' => true,
                 'message' => "✅ تم تسجيل فاتورة المشتريات وتحديث المخزون بنجاح!",
                 'purchase_id' => $purchase_id,
+                'remote_id' => $purchase_id,
+                'local_purchase_id' => (int)($data['local_purchase_id'] ?? $data['local_id'] ?? 0),
                 'invoice_number' => $invoice_number,
                 'supplier_id' => $supplier_id,
                 'supplier_name' => $supplier_name,
@@ -471,6 +473,209 @@ try {
                 'success' => true,
                 'count' => count($suppliers),
                 'suppliers' => $suppliers
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 2.5 مزامنة مورد (إضافة أو تعديل أو تحديث رصيد)
+        // ============================================================
+        case 'sync_supplier':
+            $data = !empty($json_payload) ? $json_payload : $_POST;
+            $remote_id = (int)($data['remote_id'] ?? $data['supplier_id'] ?? 0);
+            $local_id = (int)($data['local_id'] ?? 0);
+            $name = trim($data['name'] ?? '');
+            $phone = trim($data['phone'] ?? '');
+            $balance = (float)($data['balance'] ?? 0);
+
+            if (empty($name)) {
+                echo json_encode(['success' => false, 'error' => 'اسم المورد مطلوب!']);
+                exit;
+            }
+
+            try {
+                $pdo->exec("CREATE TABLE IF NOT EXISTS suppliers (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    name VARCHAR(255) NOT NULL,
+                    phone VARCHAR(50) DEFAULT NULL,
+                    balance DECIMAL(12, 2) DEFAULT 0.00,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+            } catch (Exception $e) {}
+
+            $existing_id = null;
+            if ($remote_id > 0) {
+                $chk = $pdo->prepare("SELECT id FROM suppliers WHERE id = ? LIMIT 1");
+                $chk->execute([$remote_id]);
+                $existing_id = $chk->fetchColumn();
+            }
+            if (!$existing_id && !empty($name)) {
+                $chk = $pdo->prepare("SELECT id FROM suppliers WHERE name = ? LIMIT 1");
+                $chk->execute([$name]);
+                $existing_id = $chk->fetchColumn();
+            }
+
+            if ($existing_id) {
+                $upd = $pdo->prepare("UPDATE suppliers SET name = ?, phone = ?, balance = ? WHERE id = ?");
+                $upd->execute([$name, $phone, $balance, $existing_id]);
+                $final_id = (int)$existing_id;
+                $action_done = 'updated';
+            } else {
+                $ins = $pdo->prepare("INSERT INTO suppliers (name, phone, balance) VALUES (?, ?, ?)");
+                $ins->execute([$name, $phone, $balance]);
+                $final_id = (int)$pdo->lastInsertId();
+                $action_done = 'inserted';
+            }
+
+            echo json_encode([
+                'success' => true,
+                'action' => $action_done,
+                'supplier_id' => $final_id,
+                'local_id' => $local_id,
+                'name' => $name,
+                'balance' => $balance,
+                'message' => "✅ تمت مزامنة بيانات المورد ({$name}) بنجاح."
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 2.6 حذف مورد من السحابة
+        // ============================================================
+        case 'delete_supplier':
+            $data = !empty($json_payload) ? $json_payload : $_POST;
+            $s_id = (int)($data['supplier_id'] ?? $data['id'] ?? 0);
+            $s_name = trim($data['name'] ?? '');
+
+            if ($s_id > 0) {
+                $pdo->prepare("DELETE FROM suppliers WHERE id = ?")->execute([$s_id]);
+            } elseif (!empty($s_name)) {
+                $pdo->prepare("DELETE FROM suppliers WHERE name = ?")->execute([$s_name]);
+            }
+
+            echo json_encode([
+                'success' => true,
+                'message' => '✅ تم حذف المورد من السحابة بنجاح.'
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 2.7 تسجيل مرتجع فاتورة مشتريات (Purchase Return)
+        // ============================================================
+        case 'return_purchase':
+            $data = !empty($json_payload) ? $json_payload : $_POST;
+            $p_id = (int)($data['purchase_id'] ?? $data['remote_id'] ?? 0);
+            $inv_num = trim($data['invoice_number'] ?? '');
+            $local_id = (int)($data['local_purchase_id'] ?? 0);
+
+            $purch = null;
+            if ($p_id > 0) {
+                $chk = $pdo->prepare("SELECT * FROM purchases WHERE id = ? LIMIT 1");
+                $chk->execute([$p_id]);
+                $purch = $chk->fetch(PDO::FETCH_ASSOC);
+            }
+            if (!$purch && !empty($inv_num)) {
+                $chk = $pdo->prepare("SELECT * FROM purchases WHERE invoice_number = ? LIMIT 1");
+                $chk->execute([$inv_num]);
+                $purch = $chk->fetch(PDO::FETCH_ASSOC);
+            }
+
+            if (!$purch) {
+                echo json_encode(['success' => false, 'error' => 'فاتورة المشتريات غير موجودة بالسيرفر!']);
+                exit;
+            }
+
+            $actual_pid = $purch['id'];
+            $sup_id = (int)$purch['supplier_id'];
+            $total_amt = (float)$purch['total_amount'];
+            $paid_amt = (float)$purch['paid_amount'];
+            $remaining = $total_amt - $paid_amt;
+
+            // تحديث حالة الفاتورة
+            $pdo->prepare("UPDATE purchases SET status = 'مرتجع' WHERE id = ?")->execute([$actual_pid]);
+
+            // استرجاع البضاعة من المخزون
+            $items_stmt = $pdo->prepare("SELECT * FROM purchase_items WHERE purchase_id = ?");
+            $items_stmt->execute([$actual_pid]);
+            $p_items = $items_stmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($p_items as $pit) {
+                $p_qty = (float)$pit['qty'];
+                $pr_id = (int)$pit['product_id'];
+                $p_bc = trim($pit['barcode'] ?? '');
+                if ($pr_id > 0) {
+                    $pdo->prepare("UPDATE products SET stock = GREATEST(0, stock - ?) WHERE id = ?")->execute([$p_qty, $pr_id]);
+                } elseif (!empty($p_bc)) {
+                    $pdo->prepare("UPDATE products SET stock = GREATEST(0, stock - ?) WHERE barcode = ?")->execute([$p_qty, $p_bc]);
+                }
+            }
+
+            // تخفيض مديونية المورد بالمبلغ المتبقي غير المسدد
+            if ($remaining > 0 && $sup_id > 0) {
+                $pdo->prepare("UPDATE suppliers SET balance = GREATEST(0, balance - ?) WHERE id = ?")->execute([$remaining, $sup_id]);
+            }
+
+            echo json_encode([
+                'success' => true,
+                'message' => "✅ تم تسجيل مرتجع فاتورة الشراء (#{$purch['invoice_number']}) واسترجاع المخزون بنجاح.",
+                'purchase_id' => $actual_pid,
+                'local_purchase_id' => $local_id
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 2.8 تقرير مالي مركزي شامل (Central Financial Reports Summary)
+        // ============================================================
+        case 'get_reports_summary':
+            // 1. مبيعات
+            $sales_sum = $pdo->query("SELECT COUNT(*) as orders_count, COALESCE(SUM(total_price), 0) as total_sales FROM orders WHERE status != 'ملغي'")->fetch(PDO::FETCH_ASSOC);
+            $today = date('Y-m-d');
+            $sales_today = $pdo->query("SELECT COALESCE(SUM(total_price), 0) FROM orders WHERE status != 'ملغي' AND DATE(created_at) = '{$today}'")->fetchColumn() ?: 0;
+            $month_start = date('Y-m-01');
+            $sales_month = $pdo->query("SELECT COALESCE(SUM(total_price), 0) FROM orders WHERE status != 'ملغي' AND DATE(created_at) >= '{$month_start}'")->fetchColumn() ?: 0;
+
+            // 2. مشتريات
+            try {
+                $purch_sum = $pdo->query("SELECT COUNT(*) as purchases_count, COALESCE(SUM(total_amount), 0) as total_purchases, COALESCE(SUM(paid_amount), 0) as total_paid FROM purchases WHERE status != 'مرتجع'")->fetch(PDO::FETCH_ASSOC);
+            } catch (Exception $e) {
+                $purch_sum = ['purchases_count' => 0, 'total_purchases' => 0, 'total_paid' => 0];
+            }
+
+            // 3. موردين
+            try {
+                $sup_sum = $pdo->query("SELECT COUNT(*) as suppliers_count, COALESCE(SUM(balance), 0) as total_debt FROM suppliers")->fetch(PDO::FETCH_ASSOC);
+            } catch (Exception $e) {
+                $sup_sum = ['suppliers_count' => 0, 'total_debt' => 0];
+            }
+
+            // 4. تقييم المخزون الحالي
+            $inv_sum = $pdo->query("SELECT COUNT(*) as products_count, COALESCE(SUM(stock), 0) as total_units, COALESCE(SUM(stock * cost), 0) as cost_valuation, COALESCE(SUM(stock * price), 0) as sale_valuation FROM products")->fetch(PDO::FETCH_ASSOC);
+
+            // 5. الأرباح المتوقعة
+            $expected_profit = (float)$inv_sum['sale_valuation'] - (float)$inv_sum['cost_valuation'];
+
+            echo json_encode([
+                'success' => true,
+                'generated_at' => date('Y-m-d H:i:s'),
+                'sales' => [
+                    'total_orders' => (int)$sales_sum['orders_count'],
+                    'total_revenue' => (float)$sales_sum['total_sales'],
+                    'today_revenue' => (float)$sales_today,
+                    'this_month_revenue' => (float)$sales_month
+                ],
+                'purchases' => [
+                    'total_invoices' => (int)$purch_sum['purchases_count'],
+                    'total_purchases' => (float)$purch_sum['total_purchases'],
+                    'total_paid' => (float)$purch_sum['total_paid']
+                ],
+                'suppliers' => [
+                    'total_suppliers' => (int)$sup_sum['suppliers_count'],
+                    'total_outstanding_debt' => (float)$sup_sum['total_debt']
+                ],
+                'inventory' => [
+                    'total_products' => (int)$inv_sum['products_count'],
+                    'total_stock_units' => (float)$inv_sum['total_units'],
+                    'cost_valuation' => (float)$inv_sum['cost_valuation'],
+                    'sale_valuation' => (float)$inv_sum['sale_valuation'],
+                    'potential_margin' => $expected_profit
+                ]
             ], JSON_UNESCAPED_UNICODE);
             break;
 
