@@ -206,7 +206,10 @@ class HybridSyncManager:
                 # 5. دفع فواتير المشتريات والتوريد غير المزامنة محلياً إلى السحابة
                 self._sync_pending_purchases(url, key, conn, cur)
 
-                # 6. سحب الطلبات الجديدة القادمة من المتجر الإلكتروني
+                # 6. مزامنة طياري ومندوبي الدليفري ثنائياً
+                self._sync_delivery_drivers(url, key, conn, cur)
+
+                # 7. سحب الطلبات الجديدة القادمة من المتجر الإلكتروني
                 self._pull_online_orders(url, key, conn, cur)
 
             except Exception as e:
@@ -300,6 +303,21 @@ class HybridSyncManager:
                     conn.commit()
         except Exception as e:
             print(f"Sync products error: {e}")
+
+
+    def _sync_delivery_drivers(self, api_url, api_key, conn, cur):
+        try:
+            cur.execute("SELECT id, name FROM employees WHERE role IN ('دليفري', 'طيار', 'سائق', 'عامل') OR role LIKE '%دليفري%' OR role LIKE '%طيار%'")
+            rows = cur.fetchall()
+            for r in rows:
+                payload = {
+                    'name': r[1] or '',
+                    'phone': '',
+                    'pin_code': '1234'
+                }
+                self._make_request(api_url, action='sync_delivery_driver', payload=payload, api_key=api_key, method='POST')
+        except Exception as e:
+            print(f"Sync delivery drivers error: {e}")
 
     def _sync_pending_suppliers(self, api_url, api_key, conn, cur):
         try:

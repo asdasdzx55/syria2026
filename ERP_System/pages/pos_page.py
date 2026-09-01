@@ -309,6 +309,8 @@ class POSPage(ctk.CTkFrame):
             try:
                 self.cursor.execute("INSERT INTO employees (name, role, salary, hours) VALUES (?, 'دليفري', 0, 0)", (d_name,))
                 self.db.commit()
+                if hasattr(self.app, 'sync_mgr'):
+                    self.app.sync_mgr.trigger_instant_sync()
                 self.load_delivery_boys()
                 self.pos_delivery_combo.set(d_name)
                 messagebox.showinfo("نجاح", f"تم إضافة الطيار ({d_name}) بنجاح وتحديده!")

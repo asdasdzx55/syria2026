@@ -680,6 +680,138 @@ try {
             break;
 
         // ============================================================
+        // 2.9 جلب قائمة طياري ومندوبي الدليفري (Get Delivery Drivers)
+        // ============================================================
+        case 'get_delivery_drivers':
+            try {
+                $pdo->exec("CREATE TABLE IF NOT EXISTS delivery_drivers (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    name VARCHAR(255) NOT NULL,
+                    phone VARCHAR(50) DEFAULT NULL,
+                    pin_code VARCHAR(10) DEFAULT '1234',
+                    cash_balance DECIMAL(12, 2) DEFAULT 0.00,
+                    is_active TINYINT DEFAULT 1,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+            } catch (Exception $e) {}
+
+            $drivers = $pdo->query("SELECT id, name, phone, pin_code, cash_balance, is_active FROM delivery_drivers ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
+            echo json_encode([
+                'success' => true,
+                'count' => count($drivers),
+                'drivers' => $drivers
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 2.10 مزامنة أو إضافة طيار دليفري (Sync Delivery Driver)
+        // ============================================================
+        case 'sync_delivery_driver':
+            $data = !empty($json_payload) ? $json_payload : $_POST;
+            $name = trim($data['name'] ?? $data['driver_name'] ?? '');
+            $phone = trim($data['phone'] ?? '');
+            $pin = trim($data['pin_code'] ?? '1234');
+            $cash = (float)($data['cash_balance'] ?? 0);
+            $active = isset($data['is_active']) ? (int)$data['is_active'] : 1;
+
+            if (empty($name)) {
+                echo json_encode(['success' => false, 'error' => 'اسم الطيار مطلوب!']);
+                exit;
+            }
+
+            try {
+                $pdo->exec("CREATE TABLE IF NOT EXISTS delivery_drivers (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    name VARCHAR(255) NOT NULL,
+                    phone VARCHAR(50) DEFAULT NULL,
+                    pin_code VARCHAR(10) DEFAULT '1234',
+                    cash_balance DECIMAL(12, 2) DEFAULT 0.00,
+                    is_active TINYINT DEFAULT 1,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+            } catch (Exception $e) {}
+
+            $chk = $pdo->prepare("SELECT id FROM delivery_drivers WHERE name = ? LIMIT 1");
+            $chk->execute([$name]);
+            $exist_id = $chk->fetchColumn();
+
+            if ($exist_id) {
+                $upd = $pdo->prepare("UPDATE delivery_drivers SET phone = ?, pin_code = ?, is_active = ? WHERE id = ?");
+                $upd->execute([$phone, $pin, $active, $exist_id]);
+                $driver_id = (int)$exist_id;
+            } else {
+                $ins = $pdo->prepare("INSERT INTO delivery_drivers (name, phone, pin_code, cash_balance, is_active) VALUES (?, ?, ?, ?, ?)");
+                $ins->execute([$name, $phone, $pin, $cash, $active]);
+                $driver_id = (int)$pdo->lastInsertId();
+            }
+
+            echo json_encode([
+                'success' => true,
+                'driver_id' => $driver_id,
+                'name' => $name,
+                'message' => "✅ تمت مزامنة بيانات الطيار ({$name}) بنجاح."
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 2.11 تخصيص أوردر لطيار دليفري بالاسم (Assign Order to Driver)
+        // ============================================================
+        case 'assign_delivery_driver':
+            $data = !empty($json_payload) ? $json_payload : $_POST;
+            $order_id = (int)($data['order_id'] ?? 0);
+            $inv_num = trim($data['invoice_number'] ?? '');
+            $driver_name = trim($data['delivery_person'] ?? $data['driver_name'] ?? '');
+
+            if (empty($driver_name)) {
+                echo json_encode(['success' => false, 'error' => 'اسم الطيار مطلوب!']);
+                exit;
+            }
+
+            if ($order_id > 0) {
+                $upd = $pdo->prepare("UPDATE orders SET delivery_person = ?, status = 'قيد التوصيل' WHERE id = ?");
+                $upd->execute([$driver_name, $order_id]);
+            } elseif (!empty($inv_num)) {
+                $upd = $pdo->prepare("UPDATE orders SET delivery_person = ?, status = 'قيد التوصيل' WHERE invoice_number = ? OR id = ?");
+                $upd->execute([$driver_name, $inv_num, (int)$inv_num]);
+            }
+
+            echo json_encode([
+                'success' => true,
+                'message' => "✅ تم إسناد الأوردر للطيار ({$driver_name}) بنجاح.",
+                'delivery_person' => $driver_name
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 2.12 تصفية حساب وسداد عهدة طيار دليفري (Settle Delivery Account)
+        // ============================================================
+        case 'settle_delivery_account':
+            $data = !empty($json_payload) ? $json_payload : $_POST;
+            $driver_id = (int)($data['driver_id'] ?? 0);
+            $driver_name = trim($data['driver_name'] ?? '');
+            $amount = (float)($data['amount'] ?? 0);
+
+            if ($driver_id > 0) {
+                if ($amount > 0) {
+                    $pdo->prepare("UPDATE delivery_drivers SET cash_balance = GREATEST(0, cash_balance - ?) WHERE id = ?")->execute([$amount, $driver_id]);
+                } else {
+                    $pdo->prepare("UPDATE delivery_drivers SET cash_balance = 0 WHERE id = ?")->execute([$driver_id]);
+                }
+            } elseif (!empty($driver_name)) {
+                if ($amount > 0) {
+                    $pdo->prepare("UPDATE delivery_drivers SET cash_balance = GREATEST(0, cash_balance - ?) WHERE name = ?")->execute([$amount, $driver_name]);
+                } else {
+                    $pdo->prepare("UPDATE delivery_drivers SET cash_balance = 0 WHERE name = ?")->execute([$driver_name]);
+                }
+            }
+
+            echo json_encode([
+                'success' => true,
+                'message' => '✅ تم تصفية عهدة الطيار بنجاح.'
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
         // 3. إضافة أو تعديل أو مزامنة صنف/منتج مركزي في المتجر
         // ============================================================
         case 'sync_product':
