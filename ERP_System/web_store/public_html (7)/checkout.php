@@ -307,43 +307,55 @@ include 'header.php';
                     </div>
                 </div>
 
-                <!-- زر تحديد الموقع عبر الخريطة المدمجة -->
-                <div class="mb-4">
-                    <button type="button" id="btn-open-map" class="w-full bg-royal-sand/60 hover:bg-royal-gold/15 text-royal-darkgold border border-royal-gold/20 py-3.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-sm">
-                        <i class="fa-solid fa-map-location-dot text-base animate-bounce"></i> تحديد موقع التوصيل على الخريطة تلقائياً
-                    </button>
+                <!-- أزرار تحديد الموقع التلقائي والخريطة -->
+                <div class="mb-4 space-y-2">
+                    <div class="flex flex-col sm:flex-row gap-2">
+                        <button type="button" id="btn-quick-gps" class="flex-1 bg-royal-dark text-white hover:bg-royal-gold hover:text-royal-charcoal py-3 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-md btn-shine">
+                            <i class="fa-solid fa-location-crosshairs text-royal-gold text-base"></i> تحديد عنواني وموقعي الحالي تلقائياً (GPS)
+                        </button>
+                        <button type="button" id="btn-open-map" class="flex-1 bg-royal-sand/60 hover:bg-royal-gold/15 text-royal-darkgold border border-royal-gold/20 py-3 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-sm">
+                            <i class="fa-solid fa-map-location-dot text-base"></i> تحديد موقعي على الخريطة يدوياً
+                        </button>
+                    </div>
+
+                    <!-- شريط إشعار حالة جلب الـ GPS والعنوان -->
+                    <div id="gps-status-box" class="hidden p-3 rounded-xl text-xs font-bold transition-all"></div>
+
                     <!-- حاوية الخريطة -->
-                    <div id="map-container" class="hidden mt-3.5 border border-royal-gold/20 rounded-xl overflow-hidden shadow-inner relative z-30">
+                    <div id="map-container" class="hidden mt-2 border border-royal-gold/20 rounded-xl overflow-hidden shadow-inner relative z-30">
                         <!-- شريط البحث داخل الخريطة -->
-                        <div class="p-2 bg-royal-sand/50 border-b border-royal-gold/15 flex gap-2">
-                            <input type="text" id="map-search-input" placeholder="ابحثي عن منطقتكِ أو شارعكِ هنا..." class="flex-grow p-2.5 border border-gray-200 rounded-lg text-xs outline-none focus:border-royal-gold bg-white">
+                        <div class="p-2.5 bg-royal-sand/50 border-b border-royal-gold/15 flex gap-2">
+                            <input type="text" id="map-search-input" placeholder="ابحث عن منطقتكِ أو شارعكِ هنا (مثال: المعادي، الدقي، مدينة نصر)..." class="flex-grow p-2.5 border border-gray-200 rounded-lg text-xs outline-none focus:border-royal-gold bg-white font-medium">
                             <button type="button" id="btn-map-search" class="bg-royal-charcoal text-white hover:bg-royal-gold hover:text-royal-charcoal px-4 py-2 rounded-lg text-xs font-bold transition">بحث</button>
                         </div>
                         <div id="checkout-map" class="h-64 w-full"></div>
-                        <div class="bg-royal-charcoal text-royal-gold p-3.5 text-[10px] text-center font-bold">
-                            <i class="fa-solid fa-info-circle"></i> يمكنكِ سحب الدبوس الأحمر أو البحث بالأعلى لتحديد موقعكِ بدقة، وسيتم جلب اسم المنطقة والشارع تلقائياً!
+                        <div class="bg-royal-charcoal text-royal-gold p-3 text-[10px] text-center font-bold">
+                            <i class="fa-solid fa-info-circle"></i> يمكنكِ سحب الدبوس أو النقر في أي مكان على الخريطة، وسيتم استخراج اسم الشارع والمنطقة تلقائياً!
                         </div>
                     </div>
                 </div>
 
                 <!-- تفاصيل العنوان المجزأة -->
                 <div class="space-y-4">
-                    <div>
-                        <input type="text" name="addr_street" id="addr_street" required placeholder="اسم الشارع / المنطقة / الميدان *" value="<?php echo htmlspecialchars($logged_street); ?>" class="w-full p-4 border border-gray-200 bg-royal-cream/35 outline-none focus:bg-white focus:border-royal-gold transition rounded-xl text-sm">
+                    <div class="relative">
+                        <input type="text" name="addr_street" id="addr_street" required placeholder="اسم الشارع / المنطقة / الميدان *" value="<?php echo htmlspecialchars($logged_street); ?>" class="w-full p-4 pl-24 border border-gray-200 bg-royal-cream/35 outline-none focus:bg-white focus:border-royal-gold transition rounded-xl text-sm font-medium">
+                        <button type="button" id="btn-input-gps" title="جلب عنواني الحالي عبر GPS" class="absolute left-2.5 top-2.5 bg-royal-sand hover:bg-royal-gold text-royal-dark hover:text-white px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition flex items-center gap-1 border border-royal-gold/20 shadow-sm">
+                            <i class="fa-solid fa-location-arrow text-royal-darkgold"></i> موقعي 📍
+                        </button>
                     </div>
                     <div class="grid grid-cols-3 gap-3">
                         <div class="col-span-1">
-                            <input type="text" name="addr_building" id="addr_building" required placeholder="رقم العمارة *" value="<?php echo htmlspecialchars($logged_building); ?>" class="w-full p-4 border border-gray-200 bg-royal-cream/35 outline-none focus:bg-white focus:border-royal-gold transition rounded-xl text-sm">
+                            <input type="text" name="addr_building" id="addr_building" required placeholder="رقم العمارة *" value="<?php echo htmlspecialchars($logged_building); ?>" class="w-full p-4 border border-gray-200 bg-royal-cream/35 outline-none focus:bg-white focus:border-royal-gold transition rounded-xl text-sm font-medium">
                         </div>
                         <div class="col-span-1">
-                            <input type="text" name="addr_floor" id="addr_floor" placeholder="رقم الدور" value="<?php echo htmlspecialchars($logged_floor); ?>" class="w-full p-4 border border-gray-200 bg-royal-cream/35 outline-none focus:bg-white focus:border-royal-gold transition rounded-xl text-sm">
+                            <input type="text" name="addr_floor" id="addr_floor" placeholder="رقم الدور" value="<?php echo htmlspecialchars($logged_floor); ?>" class="w-full p-4 border border-gray-200 bg-royal-cream/35 outline-none focus:bg-white focus:border-royal-gold transition rounded-xl text-sm font-medium">
                         </div>
                         <div class="col-span-1">
-                            <input type="text" name="addr_apartment" id="addr_apartment" required placeholder="رقم الشقة *" value="<?php echo htmlspecialchars($logged_apartment); ?>" class="w-full p-4 border border-gray-200 bg-royal-cream/35 outline-none focus:bg-white focus:border-royal-gold transition rounded-xl text-sm">
+                            <input type="text" name="addr_apartment" id="addr_apartment" required placeholder="رقم الشقة *" value="<?php echo htmlspecialchars($logged_apartment); ?>" class="w-full p-4 border border-gray-200 bg-royal-cream/35 outline-none focus:bg-white focus:border-royal-gold transition rounded-xl text-sm font-medium">
                         </div>
                     </div>
                     <div>
-                        <input type="text" name="addr_landmark" id="addr_landmark" placeholder="أقرب علامة مميزة (مثال: بجوار صيدلية...) (اختياري)" value="<?php echo htmlspecialchars($logged_landmark); ?>" class="w-full p-4 border border-gray-200 bg-royal-cream/35 outline-none focus:bg-white focus:border-royal-gold transition rounded-xl text-sm">
+                        <input type="text" name="addr_landmark" id="addr_landmark" placeholder="أقرب علامة مميزة (مثال: بجوار صيدلية...) (اختياري)" value="<?php echo htmlspecialchars($logged_landmark); ?>" class="w-full p-4 border border-gray-200 bg-royal-cream/35 outline-none focus:bg-white focus:border-royal-gold transition rounded-xl text-sm font-medium">
                     </div>
                 </div>
                 
@@ -705,20 +717,41 @@ include 'header.php';
         }
     });
         
-    // ================= برمجة الخريطة وجلب الإحداثيات وحساب الكيلومتر =================
+    // ================= برمجة الخريطة وتحديد الموقع وعنوان العميل (GPS & Reverse Geocoding) =================
     let map = null;
     let marker = null;
+    const gpsStatusBox = document.getElementById('gps-status-box');
     
-    document.getElementById('btn-open-map').addEventListener('click', function() {
+    function showGpsStatus(msg, type = 'info') {
+        if (!gpsStatusBox) return;
+        gpsStatusBox.classList.remove('hidden', 'bg-blue-50', 'text-blue-800', 'border-blue-200', 'bg-green-50', 'text-green-800', 'border-green-200', 'bg-amber-50', 'text-amber-800', 'border-amber-200', 'border');
+        
+        let icon = '<i class="fa-solid fa-info-circle text-blue-600"></i>';
+        let cls = 'bg-blue-50 text-blue-800 border border-blue-200';
+        
+        if (type === 'loading') {
+            icon = '<i class="fa-solid fa-spinner fa-spin text-royal-darkgold"></i>';
+            cls = 'bg-royal-sand/40 text-royal-dark border border-royal-gold/30';
+        } else if (type === 'success') {
+            icon = '<i class="fa-solid fa-circle-check text-green-600"></i>';
+            cls = 'bg-green-50 text-green-800 border border-green-200';
+        } else if (type === 'error') {
+            icon = '<i class="fa-solid fa-triangle-exclamation text-amber-600"></i>';
+            cls = 'bg-amber-50 text-amber-800 border border-amber-200';
+        }
+        
+        gpsStatusBox.className = `${cls} p-3 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-sm`;
+        gpsStatusBox.innerHTML = `<span>${icon}</span> <span>${msg}</span>`;
+    }
+
+    function initCheckoutMap() {
         const container = document.getElementById('map-container');
-        container.classList.toggle('hidden');
+        container.classList.remove('hidden');
         
-        if (container.classList.contains('hidden')) return;
-        
+        const defaultLat = parseFloat(kmConfig.storeLat) || 30.0444;
+        const defaultLng = parseFloat(kmConfig.storeLng) || 31.2357;
+
         if (!map) {
-            const defaultLat = kmConfig.storeLat || 30.0444;
-            const defaultLng = kmConfig.storeLng || 31.2357;
-            
             map = L.map('checkout-map').setView([defaultLat, defaultLng], 13);
             
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -726,7 +759,7 @@ include 'header.php';
                 attribution: '© OpenStreetMap'
             }).addTo(map);
 
-            // إضافة نقطة متجرنا على الخريطة
+            // نقطة المتجر الرئيسية (نقطة الصفر)
             const storeIcon = new L.Icon({
                 iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-gold.png',
                 shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
@@ -735,12 +768,13 @@ include 'header.php';
                 popupAnchor: [1, -34],
                 shadowSize: [41, 41]
             });
-            L.marker([kmConfig.storeLat, kmConfig.storeLng], { icon: storeIcon })
+            L.marker([defaultLat, defaultLng], { icon: storeIcon })
                 .addTo(map)
-                .bindPopup("<b>🏬 " + kmConfig.storeName + "</b><br>نقطة انطلاق الشحن");
+                .bindPopup("<b>🏬 " + (kmConfig.storeName || 'المتجر الرئيسي') + "</b><br>نقطة انطلاق الشحن والتوصيل");
             
+            // دبوس موقع العميل القابل للتحريك
             marker = L.marker([defaultLat, defaultLng], { draggable: true }).addTo(map);
-            marker.bindPopup("<b>📍 موقع التوصيل الخاص بك</b>").openPopup();
+            marker.bindPopup("<b>📍 موقع التوصيل الخاص بكِ</b>").openPopup();
             
             marker.on('dragend', function() {
                 const position = marker.getLatLng();
@@ -751,112 +785,248 @@ include 'header.php';
                 marker.setLatLng(e.latlng);
                 updateFieldsFromCoords(e.latlng.lat, e.latlng.lng);
             });
-            
-            // جلب الموقع التلقائي للمستخدم عبر GPS
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(function(pos) {
-                    const lat = pos.coords.latitude;
-                    const lng = pos.coords.longitude;
-                    map.setView([lat, lng], 16);
-                    marker.setLatLng([lat, lng]);
-                    updateFieldsFromCoords(lat, lng);
-                }, function() {
-                    updateFieldsFromCoords(defaultLat, defaultLng);
-                });
-            } else {
-                updateFieldsFromCoords(defaultLat, defaultLng);
-            }
-        } else {
-            setTimeout(() => {
-                map.invalidateSize();
-            }, 100);
         }
-    });
+        
+        setTimeout(() => {
+            if (map) map.invalidateSize();
+        }, 200);
+    }
+
+    // تشغيل جلب الموقع عبر GPS
+    function getCustomerGPSLocation(openMap = false) {
+        showGpsStatus("جاري الاتصال بالأقمار الصناعية وتحديد موقعكِ وعنوانكِ بدقة... 🛰️", "loading");
+
+        if (!navigator.geolocation) {
+            showGpsStatus("المتصفح لا يدعم التحديد التلقائي للموقع، يمكنكِ اختيار موقعكِ من الخريطة أو كتابة العنوان يدوياً.", "error");
+            if (openMap) initCheckoutMap();
+            return;
+        }
+
+        const geoOptions = {
+            enableHighAccuracy: true,
+            timeout: 12000,
+            maximumAge: 0
+        };
+
+        navigator.geolocation.getCurrentPosition(
+            function(pos) {
+                const lat = pos.coords.latitude;
+                const lng = pos.coords.longitude;
+
+                if (openMap || map) {
+                    initCheckoutMap();
+                    if (map) {
+                        map.setView([lat, lng], 16);
+                        marker.setLatLng([lat, lng]);
+                    }
+                }
+
+                updateFieldsFromCoords(lat, lng, true);
+            },
+            function(err) {
+                console.warn('Geolocation error:', err);
+                let errMsg = "تعذر الوصول لموقعكِ التلقائي، يرجى السماح بصلاحية الموقع للمتصفح أو استخدام الخريطة بالأسفل.";
+                if (err.code === 1) errMsg = "تم رفض إذن الوصول للموقع، يرجى تفعيل الـ GPS بالمتصفح أو البحث بالخريطة.";
+                else if (err.code === 3) errMsg = "استغرق جلب الموقع وقتاً أطول من المعتاد، يمكنكِ اختيار موقعكِ مباشرة من الخريطة.";
+                
+                showGpsStatus(errMsg, "error");
+                if (openMap) initCheckoutMap();
+            },
+            geoOptions
+        );
+    }
+
+    // ربط أزرار الـ GPS
+    const btnQuickGps = document.getElementById('btn-quick-gps');
+    if (btnQuickGps) {
+        btnQuickGps.addEventListener('click', function() {
+            getCustomerGPSLocation(true);
+        });
+    }
+
+    const btnInputGps = document.getElementById('btn-input-gps');
+    if (btnInputGps) {
+        btnInputGps.addEventListener('click', function() {
+            getCustomerGPSLocation(false);
+        });
+    }
+
+    const btnOpenMap = document.getElementById('btn-open-map');
+    if (btnOpenMap) {
+        btnOpenMap.addEventListener('click', function() {
+            const container = document.getElementById('map-container');
+            if (container.classList.contains('hidden')) {
+                initCheckoutMap();
+            } else {
+                container.classList.add('hidden');
+            }
+        });
+    }
     
     // إعداد البحث في الخريطة
-    document.getElementById('btn-map-search').addEventListener('click', function() {
-        performMapSearch();
-    });
-    document.getElementById('map-search-input').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            performMapSearch();
-        }
-    });
-    
+    const btnMapSearch = document.getElementById('btn-map-search');
+    const mapSearchInput = document.getElementById('map-search-input');
+
     function performMapSearch() {
-        const query = document.getElementById('map-search-input').value.trim();
+        let query = mapSearchInput.value.trim();
         if (!query) return;
         
-        const btn = document.getElementById('btn-map-search');
-        btn.innerText = "جاري...";
-        btn.disabled = true;
+        btnMapSearch.innerText = "جاري...";
+        btnMapSearch.disabled = true;
+
+        if (!query.includes('مصر') && !query.toLowerCase().includes('egypt')) {
+            query += '، مصر';
+        }
         
         fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&accept-language=ar&limit=1`)
             .then(res => res.json())
             .then(data => {
-                btn.innerText = "بحث";
-                btn.disabled = false;
+                btnMapSearch.innerText = "بحث";
+                btnMapSearch.disabled = false;
                 if (data && data.length > 0) {
                     const lat = parseFloat(data[0].lat);
                     const lng = parseFloat(data[0].lon);
+                    initCheckoutMap();
                     map.setView([lat, lng], 16);
                     marker.setLatLng([lat, lng]);
                     updateFieldsFromCoords(lat, lng);
                 } else {
-                    alert("عذراً، لم نجد نتائج لهذا البحث. جرب كتابة اسم الشارع أو المنطقة بشكل أوضح.");
+                    showGpsStatus("عذراً، لم نجد نتائج لهذا البحث، يرجى كتابة اسم المنطقة أو الشارع بشكل أوضح.", "error");
                 }
             })
             .catch(err => {
                 console.error('Search error:', err);
-                btn.innerText = "بحث";
-                btn.disabled = false;
+                btnMapSearch.innerText = "بحث";
+                btnMapSearch.disabled = false;
+                showGpsStatus("حدث خطأ أثناء البحث، يرجى المحاولة مجدداً أو النقر على الخريطة.", "error");
             });
     }
+
+    if (btnMapSearch) btnMapSearch.addEventListener('click', performMapSearch);
+    if (mapSearchInput) {
+        mapSearchInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                performMapSearch();
+            }
+        });
+    }
     
-    function updateFieldsFromCoords(lat, lng) {
-        document.getElementById('delivery_lat').value = lat;
-        document.getElementById('delivery_lng').value = lng;
+    // دالة استخراج وتحديث العنوان والمحافظة وحساب المسافة
+    async function updateFieldsFromCoords(lat, lng, isUserGps = false) {
+        document.getElementById('delivery_lat').value = lat.toFixed(6);
+        document.getElementById('delivery_lng').value = lng.toFixed(6);
 
         const streetField = document.getElementById('addr_street');
-        streetField.placeholder = "جاري جلب اسم الشارع والمنطقة من الخريطة... 📍";
+        streetField.placeholder = "جاري استخراج اسم الشارع والمنطقة من الخريطة... 📍";
         
-        fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=ar`)
-            .then(res => res.json())
-            .then(data => {
-                streetField.placeholder = "اسم الشارع / المنطقة / الميدان *";
+        let foundAddress = '';
+        let foundState = '';
+
+        // المحاولة 1: OpenStreetMap Nominatim
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 6000);
+            
+            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=ar&addressdetails=1`, {
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            
+            if (res.ok) {
+                const data = await res.json();
                 if (data && data.address) {
-                    const road = data.address.road || data.address.suburb || data.address.neighbourhood || '';
-                    const city = data.address.city || data.address.town || data.address.village || '';
-                    const county = data.address.county || '';
+                    const a = data.address;
+                    const road = a.road || a.pedestrian || a.street || a.footway || a.amenity || a.building || '';
+                    const neighbourhood = a.neighbourhood || a.suburb || a.quarter || a.residential || a.city_district || a.district || '';
+                    const city = a.city || a.town || a.village || a.municipality || a.county || '';
                     
-                    streetField.value = [road, city, county].filter(Boolean).join('، ');
-                    
-                    // محاولة مطابقة المحافظة تلقائياً
-                    const state = data.address.state || data.address.governorate || '';
-                    if (state) {
-                        const select = document.getElementById('gov-select');
-                        const cleanState = state.replace('محافظة', '').trim();
-                        for (let i = 0; i < select.options.length; i++) {
-                            const optText = select.options[i].text;
-                            if (cleanState.includes(optText) || optText.includes(cleanState)) {
-                                select.selectedIndex = i;
-                                break;
-                            }
+                    const parts = [road, neighbourhood, city].filter(Boolean);
+                    if (parts.length > 0) {
+                        foundAddress = parts.join('، ');
+                    } else if (data.display_name) {
+                        foundAddress = data.display_name.split('،').map(s=>s.trim()).filter(s=>s && !s.includes('مصر') && !/^\d{4,6}$/.test(s)).slice(0, 3).join('، ');
+                    }
+                    foundState = a.state || a.governorate || a.city || '';
+                }
+            }
+        } catch (e) {
+            console.log('Nominatim failed or timed out, trying fallback...');
+        }
+
+        // المحاولة 2 (احتياطي سريع): BigDataCloud Client API
+        if (!foundAddress) {
+            try {
+                const res2 = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=ar`);
+                if (res2.ok) {
+                    const data2 = await res2.json();
+                    if (data2) {
+                        const locality = data2.locality || data2.city || '';
+                        const subDiv = data2.principalSubdivision || '';
+                        const parts2 = [locality, subDiv].filter(Boolean);
+                        if (parts2.length > 0) {
+                            foundAddress = parts2.join('، ');
                         }
+                        if (!foundState) foundState = subDiv;
                     }
                 }
-                if (window.recalcShipping) {
-                    window.recalcShipping();
+            } catch (e2) {
+                console.log('Fallback reverse geocoding also failed:', e2);
+            }
+        }
+
+        streetField.placeholder = "اسم الشارع / المنطقة / الميدان *";
+        if (foundAddress) {
+            streetField.value = foundAddress;
+        }
+
+        // مطابقة وتحديد المحافظة تلقائياً في القائمة
+        matchAndSelectGovernorate(foundState, foundAddress, lat, lng);
+
+        // إعادة حساب المسافة والتكلفة فوراً
+        if (window.recalcShipping) {
+            window.recalcShipping();
+        }
+
+        // إظهار رسالة النجاح في شريط الـ GPS
+        const displayLabel = foundAddress ? `العنوان: (${foundAddress})` : `الإحداثيات: (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+        showGpsStatus(`تم تحديد موقع التوصيل بنجاح! 📍 ${displayLabel}`, "success");
+    }
+
+    // دالة مطابقة المحافظة الذكية في مصر
+    function matchAndSelectGovernorate(stateName, fullAddressText, lat, lng) {
+        const select = document.getElementById('gov-select');
+        if (!select) return;
+
+        const targetText = `${stateName} ${fullAddressText}`.toLowerCase();
+
+        // فحص الكلمات المفتاحية للمناطق الشهيرة أولاً
+        let matchedIndex = -1;
+
+        if (targetText.includes('أكتوبر') || targetText.includes('october') || targetText.includes('زايد') || targetText.includes('zayed')) {
+            for (let i = 0; i < select.options.length; i++) {
+                const optName = select.options[i].getAttribute('data-name') || '';
+                if (targetText.includes('زايد') && optName.includes('الشيخ زايد')) { matchedIndex = i; break; }
+                if (targetText.includes('أكتوبر') && optName.includes('6 أكتوبر')) { matchedIndex = i; break; }
+            }
+        }
+
+        if (matchedIndex === -1) {
+            for (let i = 0; i < select.options.length; i++) {
+                const optName = select.options[i].getAttribute('data-name') || '';
+                if (!optName) continue;
+                
+                const cleanGov = optName.replace('محافظة', '').trim();
+                if (targetText.includes(cleanGov.toLowerCase()) || cleanGov.toLowerCase().includes(stateName.toLowerCase())) {
+                    matchedIndex = i;
+                    break;
                 }
-            })
-            .catch(err => {
-                console.error('Geocoding error:', err);
-                streetField.placeholder = "اسم الشارع / المنطقة / الميدان *";
-                if (window.recalcShipping) {
-                    window.recalcShipping();
-                }
-            });
+            }
+        }
+
+        if (matchedIndex > 0) {
+            select.selectedIndex = matchedIndex;
+        }
     }
 
     // مزامنة السلة المتروكة في الخلفية عند كتابة العميل لبياناته
