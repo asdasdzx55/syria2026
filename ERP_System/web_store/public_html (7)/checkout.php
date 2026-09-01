@@ -87,14 +87,31 @@ if (isset($_POST['submit_order'])) {
 
     // حساب الشحن الذكي بالكيلومتر لمناطق القاهرة والجيزة وأكتوبر أو عند تحديد الموقع بالخريطة
     $enable_km = ($settings['enable_km_shipping'] ?? '1') === '1';
-    $store_lat = (float)($settings['store_lat'] ?? 30.0444);
-    $store_lng = (float)($settings['store_lng'] ?? 31.2357);
+    $store_lat = (float)($settings['store_lat'] ?? 30.066576);
+    $store_lng = (float)($settings['store_lng'] ?? 31.332781);
     $km_rate = (float)($settings['km_rate'] ?? 2.00);
     $km_base_min = (float)($settings['km_base_min_price'] ?? 25.00);
-    $km_govs = !empty($settings['km_shipping_govs']) ? json_decode($settings['km_shipping_govs'], true) : ['القاهرة', 'الجيزة', '6 أكتوبر', 'الشيخ زايد'];
-    if (!is_array($km_govs)) $km_govs = ['القاهرة', 'الجيزة', '6 أكتوبر', 'الشيخ زايد'];
+    
+    $km_govs_raw = !empty($settings['km_shipping_govs']) ? json_decode($settings['km_shipping_govs'], true) : null;
+    if (!is_array($km_govs_raw) || empty($km_govs_raw)) {
+        $km_govs_raw = ['القاهرة', 'الجيزة', '6 أكتوبر', 'الشيخ زايد', 'القليوبية'];
+    }
 
-    if ($enable_km && $delivery_lat && $delivery_lng && (in_array($gov_name, $km_govs) || $shipping_type === 'km')) {
+    $is_km_eligible = false;
+    if ($enable_km && !empty($delivery_lat) && !empty($delivery_lng)) {
+        if ($shipping_type === 'km') {
+            $is_km_eligible = true;
+        } else {
+            foreach ($km_govs_raw as $kg) {
+                if (mb_strpos($gov_name, $kg) !== false || mb_strpos($kg, $gov_name) !== false) {
+                    $is_km_eligible = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    if ($is_km_eligible) {
         // معادلة هافرسين لحساب المسافة الدقيقة بين المحل والعميل
         $earthRadius = 6371; // km
         $dLat = deg2rad((float)$delivery_lat - $store_lat);
@@ -104,13 +121,19 @@ if (isset($_POST['submit_order'])) {
         $dist_calc = round($earthRadius * $c, 1);
         $delivery_distance_km = $dist_calc;
 
-        if ($dist_calc <= 1.0) {
-            $shipping_cost = $km_base_min;
+        // إذا كانت المسافة ضمن النطاق المحلي (أقل من 75 كم)
+        if ($dist_calc <= 75.0) {
+            if ($dist_calc <= 1.0) {
+                $shipping_cost = $km_base_min;
+            } else {
+                $extra_dist = $dist_calc - 1.0;
+                $shipping_cost = $km_base_min + round($extra_dist * $km_rate);
+            }
+            $shipping_type = 'km';
         } else {
-            $extra_dist = $dist_calc - 1.0;
-            $shipping_cost = $km_base_min + round($extra_dist * $km_rate);
+            // مسافة بعيدة خارج النطاق، اعتماد سعر المحافظة المباشر
+            $shipping_type = 'flat';
         }
-        $shipping_type = 'km';
     }
 
     // تفاصيل المنتجات في الطلب بالفاتورة
@@ -599,14 +622,20 @@ include 'header.php';
 
 <script>
     // إعدادات الشحن الذكي بالكيلومتر من لوحة التحكم
+    <?php
+    $km_govs_arr_js = !empty($settings['km_shipping_govs']) ? json_decode($settings['km_shipping_govs'], true) : null;
+    if (!is_array($km_govs_arr_js) || empty($km_govs_arr_js)) {
+        $km_govs_arr_js = ['القاهرة', 'الجيزة', '6 أكتوبر', 'الشيخ زايد', 'القليوبية'];
+    }
+    ?>
     const kmConfig = {
         enabled: <?php echo (($settings['enable_km_shipping'] ?? '1') === '1') ? 'true' : 'false'; ?>,
-        storeLat: <?php echo (float)($settings['store_lat'] ?? 30.0444); ?>,
-        storeLng: <?php echo (float)($settings['store_lng'] ?? 31.2357); ?>,
+        storeLat: <?php echo (float)($settings['store_lat'] ?? 30.066576); ?>,
+        storeLng: <?php echo (float)($settings['store_lng'] ?? 31.332781); ?>,
         storeName: '<?php echo addslashes($settings['store_address_name'] ?? 'الفرع الرئيسي'); ?>',
         rate: <?php echo (float)($settings['km_rate'] ?? 2.00); ?>,
         baseMin: <?php echo (float)($settings['km_base_min_price'] ?? 25.00); ?>,
-        kmGovs: <?php echo json_encode(!empty($settings['km_shipping_govs']) ? json_decode($settings['km_shipping_govs'], true) : ['القاهرة', 'الجيزة', '6 أكتوبر', 'الشيخ زايد'], JSON_UNESCAPED_UNICODE); ?>
+        kmGovs: <?php echo json_encode($km_govs_arr_js, JSON_UNESCAPED_UNICODE); ?> || ['القاهرة', 'الجيزة', '6 أكتوبر', 'الشيخ زايد', 'القليوبية']
     };
 
     // حساب المسافة الدقيقة بين نقطتين إحداثيات (Haversine Formula)
@@ -671,40 +700,48 @@ include 'header.php';
 
             const lat = parseFloat(latInput.value);
             const lng = parseFloat(lngInput.value);
-            const isKmEligible = kmConfig.enabled && kmConfig.kmGovs.some(g => govName.includes(g) || g.includes(govName));
+            const kmGovs = Array.isArray(kmConfig.kmGovs) ? kmConfig.kmGovs : ['القاهرة', 'الجيزة', '6 أكتوبر', 'الشيخ زايد', 'القليوبية'];
+            const isKmEligibleGov = kmConfig.enabled && kmGovs.some(g => govName.includes(g) || g.includes(govName));
 
-            if (isKmEligible && !isNaN(lat) && !isNaN(lng)) {
+            // إذا كان الـ GPS متوفراً وإحداثياته صالحة
+            if (kmConfig.enabled && !isNaN(lat) && !isNaN(lng) && lat > 20 && lat < 35 && lng > 24 && lng < 38) {
                 const dist = calculateDistanceKm(kmConfig.storeLat, kmConfig.storeLng, lat, lng);
                 distInput.value = dist;
-                typeInput.value = 'km';
 
-                let finalCost = 0;
-                let extraDist = 0;
-                if (dist <= 1.0) {
-                    finalCost = kmConfig.baseMin;
-                } else {
-                    extraDist = dist - 1.0;
-                    finalCost = kmConfig.baseMin + Math.round(extraDist * kmConfig.rate);
+                // التحقق أن المسافة ضمن النطاق المحلي (أقل من 75 كم)
+                if (dist <= 75.0 && (isKmEligibleGov || typeInput.value === 'km' || dist <= 40.0)) {
+                    typeInput.value = 'km';
+
+                    let finalCost = 0;
+                    let extraDist = 0;
+                    if (dist <= 1.0) {
+                        finalCost = kmConfig.baseMin;
+                    } else {
+                        extraDist = dist - 1.0;
+                        finalCost = kmConfig.baseMin + Math.round(extraDist * kmConfig.rate);
+                    }
+
+                    shippingValEl.innerText = finalCost + ' ج.م';
+                    shippingValEl.className = 'font-bold text-royal-darkgold bg-royal-sand px-2 py-0.5 rounded text-[10px]';
+                    totalValEl.innerText = (baseSubtotal + finalCost);
+
+                    kmBadge.classList.remove('hidden');
+                    kmText.innerHTML = `المسافة من متجرنا: <strong>${dist} كم</strong>`;
+                    if (dist <= 1.0) {
+                        kmNote.innerHTML = `تكلفة التوصيل: <strong>${finalCost} ج.م</strong> (سعر فتح المسافة لأول 1 كم: ${kmConfig.baseMin} ج.م)`;
+                    } else {
+                        kmNote.innerHTML = `تكلفة التوصيل: <strong>${finalCost} ج.م</strong> (أول 1 كم: ${kmConfig.baseMin} ج.م + ${extraDist.toFixed(1)} كم إضافي × ${kmConfig.rate} ج.م)`;
+                    }
+                    return;
                 }
-
-                shippingValEl.innerText = finalCost + ' ج.م';
-                shippingValEl.className = 'font-bold text-royal-darkgold bg-royal-sand px-2 py-0.5 rounded text-[10px]';
-                totalValEl.innerText = (baseSubtotal + finalCost);
-
-                kmBadge.classList.remove('hidden');
-                kmText.innerHTML = `المسافة من متجرنا: <strong>${dist} كم</strong>`;
-                if (dist <= 1.0) {
-                    kmNote.innerHTML = `تكلفة التوصيل: <strong>${finalCost} ج.م</strong> (سعر فتح المسافة لأول 1 كم: ${kmConfig.baseMin} ج.م)`;
-                } else {
-                    kmNote.innerHTML = `تكلفة التوصيل: <strong>${finalCost} ج.م</strong> (أول 1 كم: ${kmConfig.baseMin} ج.م + ${extraDist.toFixed(1)} كم إضافي × ${kmConfig.rate} ج.م)`;
-                }
-            } else {
-                typeInput.value = 'flat';
-                shippingValEl.innerText = flatCost + ' ج.م';
-                shippingValEl.className = 'font-bold text-royal-darkgold bg-royal-sand px-2 py-0.5 rounded text-[10px]';
-                totalValEl.innerText = (baseSubtotal + flatCost);
-                kmBadge.classList.add('hidden');
             }
+
+            // الرجوع للشحن الثابت للمحافظة إذا كان خارج النطاق أو بدون GPS
+            typeInput.value = 'flat';
+            shippingValEl.innerText = flatCost + ' ج.م';
+            shippingValEl.className = 'font-bold text-royal-darkgold bg-royal-sand px-2 py-0.5 rounded text-[10px]';
+            totalValEl.innerText = (baseSubtotal + flatCost);
+            kmBadge.classList.add('hidden');
         }
 
         window.recalcShipping = updateShippingDisplay;
@@ -998,34 +1035,68 @@ include 'header.php';
         const select = document.getElementById('gov-select');
         if (!select) return;
 
-        const targetText = `${stateName} ${fullAddressText}`.toLowerCase();
+        const target = `${stateName} ${fullAddressText}`.toLowerCase();
+        let matchedName = '';
 
-        // فحص الكلمات المفتاحية للمناطق الشهيرة أولاً
-        let matchedIndex = -1;
+        // قاموس المناطق المصرية والمحافظات
+        const govKeywords = {
+            'الشيخ زايد': ['الشيخ زايد', 'زايد', 'sheikh zayed', 'zayed'],
+            '6 أكتوبر': ['6 أكتوبر', 'أكتوبر', 'السادس من أكتوبر', 'october', 'الحصري', 'حدائق أكتوبر', 'القرية الذكية'],
+            'القاهرة': ['القاهرة', 'cairo', 'مدينة نصر', 'nasr city', 'المعادي', 'maadi', 'التجمع', 'tagamoa', 'مصر الجديدة', 'heliopolis', 'القاهرة الجديدة', 'new cairo', 'المقطم', 'mokattam', 'الشروق', 'shorouk', 'بدر', 'badr', 'الرحاب', 'rehab', 'مدينتي', 'madinaty', 'الزمالك', 'zamalek', 'شبرا', 'حلوان', 'عين شمس', 'المرج', 'الزيتون', 'الوايلي', 'النزهة', 'السلام', 'المنيل', 'وسط البلد'],
+            'الجيزة': ['الجيزة', 'giza', 'الدقي', 'dokki', 'المهندسين', 'mohandessin', 'الهرم', 'haram', 'فيصل', 'faisal', 'العجوزة', 'agouza', 'إمبابة', 'imbaba', 'الوراق', 'warraq', 'العمرانية', 'بولاق الدكرور', 'الحوامدية', 'البدرشين', 'الصف', 'أطفيح', 'العياط'],
+            'القليوبية': ['القليوبية', 'qalyubia', 'بنها', 'banha', 'العبور', 'obour', 'شبرا الخيمة', 'طوخ', 'قها', 'قليوب', 'الخانكة'],
+            'الإسكندرية': ['الإسكندرية', 'alexandria', 'alex', 'سموحة', 'smouha', 'سيدي بشر', 'ميامي', 'العجمي', 'ستانلي', 'المنتزه', 'محرم بك', 'سيدي جابر', 'الرمل', 'لوران', 'العصافرة', 'المندرة', 'المعمورة', 'برج العرب'],
+            'الدقهلية': ['الدقهلية', 'المنصورة', 'mansoura', 'ميت غمر', 'طلخا', 'دكرنس', 'بلقاس', 'سنبلاوين', 'شربين'],
+            'الشرقية': ['الشرقية', 'الزقازيق', 'zagazig', 'العاشر من رمضان', '10th of ramadan', 'بلبيس', 'فاقوس', 'منيا القمح', 'أبو حماد', 'أبو كبير', 'ديرب نجم'],
+            'الغربية': ['الغربية', 'طنطا', 'tanta', 'المحلة', 'mahalla', 'كفر الزيات', 'زفتى', 'السنطة', 'سمنود', 'بسيون'],
+            'المنوفية': ['المنوفية', 'شبين الكوم', 'shibin', 'السادات', 'sadat', 'منوف', 'أشمون', 'قويسنا', 'بركة السبع', 'تلا', 'الشهداء'],
+            'البحيرة': ['البحيرة', 'دمنهور', 'damanhour', 'كفر الدوار', 'إيتاي البارود', 'حوش عيسى', 'أبو المطامير', 'رشيد', 'إدكو'],
+            'كفر الشيخ': ['كفر الشيخ', 'دسوق', 'فوه', 'مطوبس', 'بيلا', 'الحامول', 'بلطيم'],
+            'دمياط': ['دمياط', 'damietta', 'رأس البر', 'دمياط الجديدة', 'فارسكور', 'الزرقا', 'كفر سعد'],
+            'بورسعيد': ['بورسعيد', 'port said', 'بورفؤاد'],
+            'الإسماعيلية': ['الإسماعيلية', 'ismailia', 'فايد', 'القنطرة', 'التل الكبير'],
+            'السويس': ['السويس', 'suez', 'العين السخنة', 'ain sokhna'],
+            'الفيوم': ['الفيوم', 'fayoum', 'faiyum', 'سنورس', 'إطسا', 'طامية', 'يوسف الصديق', 'أبشواي'],
+            'بني سويف': ['بني سويف', 'beni suef', 'الواسطى', 'ناصر', 'إهناسيا', 'ببا', 'سمسطا', 'الفشن'],
+            'المنيا': ['المنيا', 'minya', 'مغاغة', 'بني مزار', 'مطاي', 'سمالوط', 'أبو قرقاص', 'ملوي', 'دير مواس'],
+            'أسيوط': ['أسيوط', 'asyut', 'ديروط', 'القوصية', 'أبنوب', 'منفلوط', 'أبو تيج', 'صدفا', 'الغنايم', 'البداري', 'ساحل سليم'],
+            'سوهاج': ['سوهاج', 'sohag', 'طهطا', 'جرجا', 'المراغة', 'جهينة', 'طما', 'المنشأة', 'ساقلتة', 'أخميم', 'البلينا', 'دار السلام'],
+            'قنا': ['قنا', 'qena', 'نجع حمادي', 'دشنا', 'فرشوط', 'أبو تشت', 'قفط', 'قوص', 'نقادة'],
+            'الأقصر': ['الأقصر', 'luxor', 'إسنا', 'أرمنت'],
+            'أسوان': ['أسوان', 'aswan', 'إدفو', 'كوم أمبو', 'نصر النوبة', 'دراو'],
+            'البحر الأحمر': ['البحر الأحمر', 'الغردقة', 'hurghada', 'الجونة', 'gouna', 'سفاجا', 'القصير', 'مرسى علم', 'رأس غارب'],
+            'مرسى مطروح': ['مرسى مطروح', 'مطروح', 'matrouh', 'الساحل الشمالي', 'sahel', 'العلمين', 'alamein', 'سيدي عبد الرحمن', 'الضبعة', 'سيوة', 'الحمام'],
+            'شمال سيناء': ['شمال سيناء', 'العريش', 'arish', 'الشيخ زويد', 'رفح', 'بئر العبد'],
+            'جنوب سيناء': ['جنوب سيناء', 'شرم الشيخ', 'sharm', 'دهب', 'dahab', 'نويبع', 'طابا', 'طور سيناء', 'رأس سدر', 'سانت كاترين'],
+            'الوادي الجديد': ['الوادي الجديد', 'الخارجة', 'الداخلة', 'الفرافرة', 'باريس']
+        };
 
-        if (targetText.includes('أكتوبر') || targetText.includes('october') || targetText.includes('زايد') || targetText.includes('zayed')) {
-            for (let i = 0; i < select.options.length; i++) {
-                const optName = select.options[i].getAttribute('data-name') || '';
-                if (targetText.includes('زايد') && optName.includes('الشيخ زايد')) { matchedIndex = i; break; }
-                if (targetText.includes('أكتوبر') && optName.includes('6 أكتوبر')) { matchedIndex = i; break; }
+        for (const [gov, keywords] of Object.entries(govKeywords)) {
+            if (keywords.some(k => target.includes(k))) {
+                matchedName = gov;
+                break;
             }
         }
 
-        if (matchedIndex === -1) {
+        if (matchedName) {
             for (let i = 0; i < select.options.length; i++) {
                 const optName = select.options[i].getAttribute('data-name') || '';
-                if (!optName) continue;
-                
-                const cleanGov = optName.replace('محافظة', '').trim();
-                if (targetText.includes(cleanGov.toLowerCase()) || cleanGov.toLowerCase().includes(stateName.toLowerCase())) {
-                    matchedIndex = i;
-                    break;
+                if (optName.includes(matchedName) || matchedName.includes(optName)) {
+                    select.selectedIndex = i;
+                    return;
                 }
             }
         }
 
-        if (matchedIndex > 0) {
-            select.selectedIndex = matchedIndex;
+        // مطابقة عامة بديلة
+        for (let i = 0; i < select.options.length; i++) {
+            const optName = select.options[i].getAttribute('data-name') || '';
+            if (!optName) continue;
+            const cleanGov = optName.replace('محافظة', '').trim();
+            if (target.includes(cleanGov.toLowerCase()) || cleanGov.toLowerCase().includes(stateName.toLowerCase())) {
+                select.selectedIndex = i;
+                return;
+            }
         }
     }
 
