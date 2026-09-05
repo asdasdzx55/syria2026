@@ -412,6 +412,32 @@ try {
                 cash_balance DECIMAL(10,2) DEFAULT 0.00,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )");
+            $pdo->exec("CREATE TABLE IF NOT EXISTS employees (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name VARCHAR(150) NOT NULL,
+                phone VARCHAR(50) DEFAULT NULL,
+                role VARCHAR(100) DEFAULT 'عامل',
+                salary_type VARCHAR(20) DEFAULT 'monthly',
+                base_salary DECIMAL(10,2) DEFAULT 0.00,
+                daily_wage DECIMAL(10,2) DEFAULT 0.00,
+                hire_date VARCHAR(50) DEFAULT NULL,
+                is_active INTEGER DEFAULT 1,
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )");
+            $pdo->exec("CREATE TABLE IF NOT EXISTS employee_payouts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                employee_id INTEGER NOT NULL,
+                employee_name VARCHAR(150) NOT NULL,
+                type VARCHAR(50) NOT NULL,
+                amount DECIMAL(10,2) NOT NULL,
+                payment_method VARCHAR(50) DEFAULT 'كاش من الدرج',
+                date VARCHAR(50) NOT NULL,
+                month_year VARCHAR(20) DEFAULT NULL,
+                notes TEXT,
+                cashier_name VARCHAR(100) DEFAULT 'كاشير المحل',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )");
         } else {
             $pdo->exec("CREATE TABLE IF NOT EXISTS expenses (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -446,6 +472,32 @@ try {
                 pin_code VARCHAR(20) DEFAULT '1234',
                 is_active TINYINT DEFAULT 1,
                 cash_balance DECIMAL(10,2) DEFAULT 0.00,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            $pdo->exec("CREATE TABLE IF NOT EXISTS employees (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(150) NOT NULL,
+                phone VARCHAR(50) DEFAULT NULL,
+                role VARCHAR(100) DEFAULT 'عامل',
+                salary_type VARCHAR(20) DEFAULT 'monthly',
+                base_salary DECIMAL(10,2) DEFAULT 0.00,
+                daily_wage DECIMAL(10,2) DEFAULT 0.00,
+                hire_date DATE DEFAULT NULL,
+                is_active TINYINT DEFAULT 1,
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            $pdo->exec("CREATE TABLE IF NOT EXISTS employee_payouts (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                employee_id INT NOT NULL,
+                employee_name VARCHAR(150) NOT NULL,
+                type VARCHAR(50) NOT NULL,
+                amount DECIMAL(10,2) NOT NULL,
+                payment_method VARCHAR(50) DEFAULT 'كاش من الدرج',
+                date DATE NOT NULL,
+                month_year VARCHAR(20) DEFAULT NULL,
+                notes TEXT,
+                cashier_name VARCHAR(100) DEFAULT 'كاشير المحل',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
         }

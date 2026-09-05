@@ -5,10 +5,12 @@
  */
 require_once 'config.php';
 
-header('Content-Type: application/json; charset=utf-8');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, X-API-KEY');
+if (!headers_sent()) {
+    header('Content-Type: application/json; charset=utf-8');
+    header('Access-Control-Allow-Origin: *');
+    header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+    header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, X-API-KEY');
+}
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
     http_response_code(200);
@@ -16,6 +18,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
 }
 
 // 1. التحقق من مفتاح الأمان (Authentication)
+if (!function_exists('verify_api_auth')) {
 function verify_api_auth() {
     global $settings;
     $configured_key = $settings['api_secret_key'] ?? 'syrian_home_pos_secret_token_2026';
@@ -37,6 +40,7 @@ function verify_api_auth() {
     if (isAdmin()) return true;
     
     return false;
+}
 }
 
 $action = $_GET['action'] ?? $_POST['action'] ?? 'ping';
@@ -70,7 +74,7 @@ if (!verify_api_auth()) {
 }
 
 $raw_input = file_get_contents('php://input');
-$json_payload = json_decode($raw_input, true) ?: [];
+$json_payload = !empty($json_payload) ? $json_payload : (json_decode($raw_input, true) ?: []);
 
 try {
     switch ($action) {
@@ -808,6 +812,494 @@ try {
             echo json_encode([
                 'success' => true,
                 'message' => '✅ تم تصفية عهدة الطيار بنجاح.'
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 2.13 حذف أو تعطيل طيار دليفري (Delete Delivery Driver)
+        // ============================================================
+        case 'delete_delivery_driver':
+            $data = !empty($json_payload) ? $json_payload : $_POST;
+            $driver_id = (int)($data['driver_id'] ?? 0);
+            $name = trim($data['name'] ?? $data['driver_name'] ?? '');
+            $force = !empty($data['force']);
+
+            if ($driver_id > 0) {
+                if ($force) {
+                    $pdo->prepare("DELETE FROM delivery_drivers WHERE id = ?")->execute([$driver_id]);
+                } else {
+                    $pdo->prepare("UPDATE delivery_drivers SET is_active = 0 WHERE id = ?")->execute([$driver_id]);
+                }
+            } elseif (!empty($name)) {
+                if ($force) {
+                    $pdo->prepare("DELETE FROM delivery_drivers WHERE name = ?")->execute([$name]);
+                } else {
+                    $pdo->prepare("UPDATE delivery_drivers SET is_active = 0 WHERE name = ?")->execute([$name]);
+                }
+            } else {
+                echo json_encode(['success' => false, 'error' => 'معرف الطيار أو اسمه مطلوب!']);
+                exit;
+            }
+
+            echo json_encode([
+                'success' => true,
+                'message' => '✅ تم تحديث حالة / حذف الطيار بنجاح.'
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 2.14 إحصائيات وتقرير طيار دليفري (Driver Delivery Stats)
+        // ============================================================
+        case 'get_driver_stats':
+            $driver_name = trim($_GET['driver_name'] ?? $json_payload['driver_name'] ?? $_POST['driver_name'] ?? '');
+            $driver_id = (int)($_GET['driver_id'] ?? $json_payload['driver_id'] ?? $_POST['driver_id'] ?? 0);
+
+            if ($driver_id > 0 && empty($driver_name)) {
+                $chk_drv = $pdo->prepare("SELECT name FROM delivery_drivers WHERE id = ?");
+                $chk_drv->execute([$driver_id]);
+                $driver_name = $chk_drv->fetchColumn() ?: '';
+            }
+
+            if (empty($driver_name)) {
+                echo json_encode(['success' => false, 'error' => 'اسم الطيار مطلوب!']);
+                exit;
+            }
+
+            $bal_stmt = $pdo->prepare("SELECT * FROM delivery_drivers WHERE name = ? LIMIT 1");
+            $bal_stmt->execute([$driver_name]);
+            $driver_info = $bal_stmt->fetch(PDO::FETCH_ASSOC);
+
+            // جلب أوردرات الطيار
+            $orders_stmt = $pdo->prepare("SELECT id, invoice_number, total, delivery_fee, status, created_at FROM orders WHERE delivery_person = ? ORDER BY id DESC LIMIT 50");
+            $orders_stmt->execute([$driver_name]);
+            $orders_list = $orders_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $total_delivered = 0;
+            $total_assigned = count($orders_list);
+            $total_delivery_fees = 0;
+
+            foreach ($orders_list as $ord) {
+                if (in_array($ord['status'], ['تم التوصيل', 'مكتمل', 'delivered'])) {
+                    $total_delivered++;
+                    $total_delivery_fees += (float)($ord['delivery_fee'] ?? 0);
+                }
+            }
+
+            echo json_encode([
+                'success' => true,
+                'driver' => $driver_info,
+                'stats' => [
+                    'driver_name' => $driver_name,
+                    'cash_balance' => (float)($driver_info['cash_balance'] ?? 0),
+                    'total_assigned_orders' => $total_assigned,
+                    'total_delivered_orders' => $total_delivered,
+                    'total_delivery_fees' => $total_delivery_fees
+                ],
+                'recent_orders' => $orders_list
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 2.15 جلب قائمة العمال والموظفين (Get Employees)
+        // ============================================================
+        case 'get_employees':
+            try {
+                $pdo->exec("CREATE TABLE IF NOT EXISTS employees (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name VARCHAR(150) NOT NULL,
+                    phone VARCHAR(50) DEFAULT NULL,
+                    role VARCHAR(100) DEFAULT 'عامل',
+                    salary_type VARCHAR(20) DEFAULT 'monthly',
+                    base_salary DECIMAL(10,2) DEFAULT 0.00,
+                    daily_wage DECIMAL(10,2) DEFAULT 0.00,
+                    hire_date VARCHAR(50) DEFAULT NULL,
+                    is_active INTEGER DEFAULT 1,
+                    notes TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )");
+            } catch (Exception $e) {
+                try {
+                    $pdo->exec("CREATE TABLE IF NOT EXISTS employees (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        name VARCHAR(150) NOT NULL,
+                        phone VARCHAR(50) DEFAULT NULL,
+                        role VARCHAR(100) DEFAULT 'عامل',
+                        salary_type VARCHAR(20) DEFAULT 'monthly',
+                        base_salary DECIMAL(10,2) DEFAULT 0.00,
+                        daily_wage DECIMAL(10,2) DEFAULT 0.00,
+                        hire_date DATE DEFAULT NULL,
+                        is_active TINYINT DEFAULT 1,
+                        notes TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+                } catch (Exception $e2) {}
+            }
+
+            $active_only = isset($_GET['active_only']) ? (int)$_GET['active_only'] : 0;
+            $sql = "SELECT * FROM employees" . ($active_only ? " WHERE is_active = 1" : "") . " ORDER BY name ASC";
+            $employees = $pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+
+            // جلب ملخص سلف ورواتب الشهر الحالي لكل موظف
+            $curr_month = date('Y-m');
+            $payouts_stmt = $pdo->prepare("SELECT employee_id, type, SUM(amount) as total_amt FROM employee_payouts WHERE month_year = ? OR date LIKE ? GROUP BY employee_id, type");
+            $payouts_stmt->execute([$curr_month, $curr_month . '%']);
+            $all_payouts = $payouts_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $payouts_map = [];
+            foreach ($all_payouts as $po) {
+                $eid = (int)$po['employee_id'];
+                if (!isset($payouts_map[$eid])) {
+                    $payouts_map[$eid] = ['سلفة' => 0, 'راتب شهري' => 0, 'مكافأة' => 0, 'خصم' => 0, 'يومية' => 0];
+                }
+                $payouts_map[$eid][$po['type']] = (float)$po['total_amt'];
+            }
+
+            foreach ($employees as &$emp) {
+                $eid = (int)$emp['id'];
+                $summary = $payouts_map[$eid] ?? ['سلفة' => 0, 'راتب شهري' => 0, 'مكافأة' => 0, 'خصم' => 0, 'يومية' => 0];
+                $emp['current_month'] = $curr_month;
+                $emp['advances_this_month'] = $summary['سلفة'] ?? 0;
+                $emp['bonuses_this_month'] = $summary['مكافأة'] ?? 0;
+                $emp['deductions_this_month'] = $summary['خصم'] ?? 0;
+                $emp['paid_salary_this_month'] = $summary['راتب شهري'] ?? 0;
+
+                $base = (float)$emp['base_salary'];
+                $emp['net_remaining_salary'] = round($base + ($emp['bonuses_this_month'] ?? 0) - ($emp['deductions_this_month'] ?? 0) - ($emp['advances_this_month'] ?? 0) - ($emp['paid_salary_this_month'] ?? 0), 2);
+            }
+            unset($emp);
+
+            echo json_encode([
+                'success' => true,
+                'count' => count($employees),
+                'current_month' => $curr_month,
+                'employees' => $employees
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 2.16 إضافة أو تعديل بيانات عامل/موظف (Sync / Save Employee)
+        // ============================================================
+        case 'sync_employee':
+            $data = !empty($json_payload) ? $json_payload : $_POST;
+            $emp_id = (int)($data['id'] ?? $data['employee_id'] ?? 0);
+            $name = trim($data['name'] ?? '');
+            $phone = trim($data['phone'] ?? '');
+            $role = trim($data['role'] ?? 'عامل');
+            $salary_type = trim($data['salary_type'] ?? 'monthly');
+            $base_salary = (float)($data['base_salary'] ?? 0);
+            $daily_wage = (float)($data['daily_wage'] ?? 0);
+            $hire_date = !empty($data['hire_date']) ? trim($data['hire_date']) : date('Y-m-d');
+            $is_active = isset($data['is_active']) ? (int)$data['is_active'] : 1;
+            $notes = trim($data['notes'] ?? '');
+
+            if (empty($name)) {
+                echo json_encode(['success' => false, 'error' => 'اسم العامل / الموظف مطلوب!']);
+                exit;
+            }
+
+            try {
+                $pdo->exec("CREATE TABLE IF NOT EXISTS employees (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name VARCHAR(150) NOT NULL,
+                    phone VARCHAR(50) DEFAULT NULL,
+                    role VARCHAR(100) DEFAULT 'عامل',
+                    salary_type VARCHAR(20) DEFAULT 'monthly',
+                    base_salary DECIMAL(10,2) DEFAULT 0.00,
+                    daily_wage DECIMAL(10,2) DEFAULT 0.00,
+                    hire_date VARCHAR(50) DEFAULT NULL,
+                    is_active INTEGER DEFAULT 1,
+                    notes TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )");
+            } catch (Exception $e) {
+                try {
+                    $pdo->exec("CREATE TABLE IF NOT EXISTS employees (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        name VARCHAR(150) NOT NULL,
+                        phone VARCHAR(50) DEFAULT NULL,
+                        role VARCHAR(100) DEFAULT 'عامل',
+                        salary_type VARCHAR(20) DEFAULT 'monthly',
+                        base_salary DECIMAL(10,2) DEFAULT 0.00,
+                        daily_wage DECIMAL(10,2) DEFAULT 0.00,
+                        hire_date DATE DEFAULT NULL,
+                        is_active TINYINT DEFAULT 1,
+                        notes TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+                } catch (Exception $e2) {}
+            }
+
+            // فحص وجود الموظف
+            $chk = null;
+            if ($emp_id > 0) {
+                $chk = $pdo->prepare("SELECT id FROM employees WHERE id = ?");
+                $chk->execute([$emp_id]);
+            } else {
+                $chk = $pdo->prepare("SELECT id FROM employees WHERE name = ?");
+                $chk->execute([$name]);
+            }
+            $existing_id = $chk->fetchColumn();
+
+            if ($existing_id) {
+                $upd = $pdo->prepare("UPDATE employees SET name = ?, phone = ?, role = ?, salary_type = ?, base_salary = ?, daily_wage = ?, hire_date = ?, is_active = ?, notes = ? WHERE id = ?");
+                $upd->execute([$name, $phone, $role, $salary_type, $base_salary, $daily_wage, $hire_date, $is_active, $notes, $existing_id]);
+                $final_id = (int)$existing_id;
+            } else {
+                $ins = $pdo->prepare("INSERT INTO employees (name, phone, role, salary_type, base_salary, daily_wage, hire_date, is_active, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $ins->execute([$name, $phone, $role, $salary_type, $base_salary, $daily_wage, $hire_date, $is_active, $notes]);
+                $final_id = (int)$pdo->lastInsertId();
+            }
+
+            echo json_encode([
+                'success' => true,
+                'employee_id' => $final_id,
+                'name' => $name,
+                'message' => "✅ تمت مزامنة بيانات الموظف ({$name}) بنجاح."
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 2.17 حذف أو تعطيل عامل/موظف (Delete Employee)
+        // ============================================================
+        case 'delete_employee':
+            $data = !empty($json_payload) ? $json_payload : $_POST;
+            $emp_id = (int)($data['id'] ?? $data['employee_id'] ?? 0);
+            $name = trim($data['name'] ?? '');
+            $force = !empty($data['force']);
+
+            if ($emp_id > 0) {
+                if ($force) {
+                    $pdo->prepare("DELETE FROM employees WHERE id = ?")->execute([$emp_id]);
+                } else {
+                    $pdo->prepare("UPDATE employees SET is_active = 0 WHERE id = ?")->execute([$emp_id]);
+                }
+            } elseif (!empty($name)) {
+                if ($force) {
+                    $pdo->prepare("DELETE FROM employees WHERE name = ?")->execute([$name]);
+                } else {
+                    $pdo->prepare("UPDATE employees SET is_active = 0 WHERE name = ?")->execute([$name]);
+                }
+            } else {
+                echo json_encode(['success' => false, 'error' => 'معرف الموظف أو اسمه مطلوب!']);
+                exit;
+            }
+
+            echo json_encode([
+                'success' => true,
+                'message' => '✅ تم تحديث حالة الموظف / حذفه بنجاح.'
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 2.18 تسجيل صرف راتب أو سلفة أو مكافأة (Record Salary Payout)
+        // ============================================================
+        case 'record_salary_payout':
+            $data = !empty($json_payload) ? $json_payload : $_POST;
+            $emp_id = (int)($data['employee_id'] ?? 0);
+            $emp_name = trim($data['employee_name'] ?? '');
+            $type = trim($data['type'] ?? 'راتب شهري'); // راتب شهري / سلفة / مكافأة / خصم / يومية / أوفر تايم
+            $amount = (float)($data['amount'] ?? 0);
+            $payment_method = trim($data['payment_method'] ?? 'كاش من الدرج');
+            $date = !empty($data['date']) ? trim($data['date']) : date('Y-m-d');
+            $month_year = !empty($data['month_year']) ? trim($data['month_year']) : date('Y-m', strtotime($date));
+            $notes = trim($data['notes'] ?? '');
+            $cashier_name = trim($data['cashier_name'] ?? 'كاشير المحل');
+
+            if ($amount <= 0) {
+                echo json_encode(['success' => false, 'error' => 'يجب إدخال مبلغ صحيح أكبر من الصفر!']);
+                exit;
+            }
+
+            // التأكد من اسم ومعرف الموظف
+            if ($emp_id > 0 && empty($emp_name)) {
+                $st = $pdo->prepare("SELECT name FROM employees WHERE id = ?");
+                $st->execute([$emp_id]);
+                $emp_name = $st->fetchColumn() ?: "موظف #{$emp_id}";
+            } elseif (!empty($emp_name) && $emp_id <= 0) {
+                $st = $pdo->prepare("SELECT id FROM employees WHERE name = ?");
+                $st->execute([$emp_name]);
+                $emp_id = (int)$st->fetchColumn();
+            }
+
+            if (empty($emp_name)) {
+                echo json_encode(['success' => false, 'error' => 'اسم الموظف أو رقمه مطلوب!']);
+                exit;
+            }
+
+            try {
+                $pdo->exec("CREATE TABLE IF NOT EXISTS employee_payouts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    employee_id INTEGER NOT NULL,
+                    employee_name VARCHAR(150) NOT NULL,
+                    type VARCHAR(50) NOT NULL,
+                    amount DECIMAL(10,2) NOT NULL,
+                    payment_method VARCHAR(50) DEFAULT 'كاش من الدرج',
+                    date VARCHAR(50) NOT NULL,
+                    month_year VARCHAR(20) DEFAULT NULL,
+                    notes TEXT,
+                    cashier_name VARCHAR(100) DEFAULT 'كاشير المحل',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )");
+            } catch (Exception $e) {
+                try {
+                    $pdo->exec("CREATE TABLE IF NOT EXISTS employee_payouts (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        employee_id INT NOT NULL,
+                        employee_name VARCHAR(150) NOT NULL,
+                        type VARCHAR(50) NOT NULL,
+                        amount DECIMAL(10,2) NOT NULL,
+                        payment_method VARCHAR(50) DEFAULT 'كاش من الدرج',
+                        date DATE NOT NULL,
+                        month_year VARCHAR(20) DEFAULT NULL,
+                        notes TEXT,
+                        cashier_name VARCHAR(100) DEFAULT 'كاشير المحل',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+                } catch (Exception $e2) {}
+            }
+
+            $ins = $pdo->prepare("INSERT INTO employee_payouts (employee_id, employee_name, type, amount, payment_method, date, month_year, notes, cashier_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $ins->execute([$emp_id, $emp_name, $type, $amount, $payment_method, $date, $month_year, $notes, $cashier_name]);
+            $payout_id = (int)$pdo->lastInsertId();
+
+            // تسجيل الحركة كمصروف تلقائياً في expenses إذا كانت صرف نقدي (سلفة، راتب، مكافأة، يومية)
+            if ($type !== 'خصم') {
+                try {
+                    $cat_name = ($type === 'سلفة') ? 'سلف عاملين' : 'رواتب عاملين';
+                    $exp_note = "صرف ({$type}) للعامل ({$emp_name}) لشهر ({$month_year})" . (!empty($notes) ? " - {$notes}" : "");
+                    $pdo->prepare("INSERT INTO expenses (category, amount, note, date, partner_name, payment_method) VALUES (?, ?, ?, ?, ?, ?)")
+                        ->execute([$cat_name, $amount, $exp_note, $date, $cashier_name, $payment_method]);
+                } catch (Exception $e_exp) {}
+            }
+
+            echo json_encode([
+                'success' => true,
+                'payout_id' => $payout_id,
+                'employee_name' => $emp_name,
+                'type' => $type,
+                'amount' => $amount,
+                'month_year' => $month_year,
+                'message' => "✅ تم تسجيل صرف ({$type}) بمبلغ ({$amount} ج.م) للعامل ({$emp_name}) بنجاح."
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 2.19 جلب سجل الرواتب والسلف والمدفوعات (Get Salary Payouts)
+        // ============================================================
+        case 'get_salary_payouts':
+            $emp_id = (int)($_GET['employee_id'] ?? 0);
+            $emp_name = trim($_GET['employee_name'] ?? '');
+            $month_year = trim($_GET['month_year'] ?? '');
+            $type = trim($_GET['type'] ?? '');
+            $limit = min(200, max(1, (int)($_GET['limit'] ?? 100)));
+
+            $conditions = [];
+            $params = [];
+
+            if ($emp_id > 0) {
+                $conditions[] = "employee_id = ?";
+                $params[] = $emp_id;
+            }
+            if (!empty($emp_name)) {
+                $conditions[] = "employee_name LIKE ?";
+                $params[] = "%{$emp_name}%";
+            }
+            if (!empty($month_year)) {
+                $conditions[] = "month_year = ?";
+                $params[] = $month_year;
+            }
+            if (!empty($type)) {
+                $conditions[] = "type = ?";
+                $params[] = $type;
+            }
+
+            $where = !empty($conditions) ? "WHERE " . implode(' AND ', $conditions) : "";
+            $sql = "SELECT * FROM employee_payouts {$where} ORDER BY date DESC, id DESC LIMIT {$limit}";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute($params);
+            $payouts = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $total_sum = 0;
+            foreach ($payouts as $p) {
+                $total_sum += (float)$p['amount'];
+            }
+
+            echo json_encode([
+                'success' => true,
+                'count' => count($payouts),
+                'total_amount' => $total_sum,
+                'payouts' => $payouts
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 2.20 كشف حساب مالي تفصيلي لعامل/موظف (Get Employee Ledger)
+        // ============================================================
+        case 'get_employee_ledger':
+            $emp_id = (int)($_GET['employee_id'] ?? 0);
+            $emp_name = trim($_GET['employee_name'] ?? '');
+            $month_year = trim($_GET['month_year'] ?? date('Y-m'));
+
+            $emp = null;
+            if ($emp_id > 0) {
+                $st = $pdo->prepare("SELECT * FROM employees WHERE id = ?");
+                $st->execute([$emp_id]);
+                $emp = $st->fetch(PDO::FETCH_ASSOC);
+            } elseif (!empty($emp_name)) {
+                $st = $pdo->prepare("SELECT * FROM employees WHERE name = ?");
+                $st->execute([$emp_name]);
+                $emp = $st->fetch(PDO::FETCH_ASSOC);
+            }
+
+            if (!$emp) {
+                echo json_encode(['success' => false, 'error' => 'العامل / الموظف غير موجود!']);
+                exit;
+            }
+
+            $eid = (int)$emp['id'];
+            $st_po = $pdo->prepare("SELECT * FROM employee_payouts WHERE (employee_id = ? OR employee_name = ?) AND (month_year = ? OR date LIKE ?) ORDER BY date ASC, id ASC");
+            $st_po->execute([$eid, $emp['name'], $month_year, $month_year . '%']);
+            $transactions = $st_po->fetchAll(PDO::FETCH_ASSOC);
+
+            $total_advances = 0;
+            $total_bonuses = 0;
+            $total_deductions = 0;
+            $total_paid = 0;
+            $total_daily = 0;
+
+            foreach ($transactions as $t) {
+                $amt = (float)$t['amount'];
+                $tt = trim($t['type']);
+                if ($tt === 'سلفة' || mb_strpos($tt, 'سلف') !== false) {
+                    $total_advances += $amt;
+                } elseif ($tt === 'مكافأة' || $tt === 'أوفر تايم' || mb_strpos($tt, 'مكاف') !== false || mb_strpos($tt, 'أوفر') !== false) {
+                    $total_bonuses += $amt;
+                } elseif ($tt === 'خصم' || mb_strpos($tt, 'خصم') !== false) {
+                    $total_deductions += $amt;
+                } elseif ($tt === 'راتب شهري' || mb_strpos($tt, 'راتب') !== false) {
+                    $total_paid += $amt;
+                } elseif ($tt === 'يومية' || mb_strpos($tt, 'يومي') !== false) {
+                    $total_daily += $amt;
+                }
+            }
+
+            $base_salary = (float)$emp['base_salary'];
+            $net_remaining = round($base_salary + $total_bonuses + $total_daily - $total_deductions - $total_advances - $total_paid, 2);
+
+            echo json_encode([
+                'success' => true,
+                'employee' => $emp,
+                'month_year' => $month_year,
+                'summary' => [
+                    'base_salary' => $base_salary,
+                    'total_advances' => $total_advances,
+                    'total_bonuses' => $total_bonuses,
+                    'total_deductions' => $total_deductions,
+                    'total_paid_salary' => $total_paid,
+                    'total_daily_wages' => $total_daily,
+                    'net_remaining_to_pay' => $net_remaining
+                ],
+                'transactions' => $transactions
             ], JSON_UNESCAPED_UNICODE);
             break;
 
