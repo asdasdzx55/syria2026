@@ -95,8 +95,8 @@ $active_drivers = $stmt_drivers->fetchAll(PDO::FETCH_ASSOC);
             </form>
 
             <div class="pt-2 border-t border-slate-800 text-center">
-                <a href="pos.php" class="text-slate-400 hover:text-white text-[11px] font-bold inline-flex items-center gap-1">
-                    <i class="fa-solid fa-cash-register"></i> العودة لشاشة الكاشير الرئيسية
+                <a href="https://asdasdzx55.github.io/urban-octo-chainsaw/pos/" target="_blank" class="text-slate-400 hover:text-white text-[11px] font-bold inline-flex items-center gap-1">
+                    <i class="fa-solid fa-cash-register"></i> الذهاب لشاشة الكاشير الرئيسية (POS)
                 </a>
             </div>
         </div>

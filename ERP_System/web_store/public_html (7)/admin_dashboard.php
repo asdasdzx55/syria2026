@@ -101,7 +101,7 @@ $top_customers = $pdo->query("
             <p class="text-xs text-gray-500 mt-1 font-medium">مؤشرات الأداء والمبيعات والمخزون المركزي لـ <?php echo htmlspecialchars($settings['store_name'] ?? 'سوبر ماركت المنزل السوري'); ?>.</p>
         </div>
         <div class="flex items-center gap-3">
-            <a href="pos.php" target="_blank" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 rounded-2xl font-black text-sm flex items-center gap-2 shadow-lg shadow-emerald-900/20 transition active:scale-95 border border-emerald-500 animate-pulse">
+            <a href="https://asdasdzx55.github.io/urban-octo-chainsaw/pos/" target="_blank" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 rounded-2xl font-black text-sm flex items-center gap-2 shadow-lg shadow-emerald-900/20 transition active:scale-95 border border-emerald-500 animate-pulse">
                 <i class="fa-solid fa-cash-register text-amber-300 text-lg"></i>
                 <span>فتح كاشير الويب (Web POS) ⚡</span>
             </a>
@@ -121,7 +121,7 @@ $top_customers = $pdo->query("
             </p>
         </div>
         <div class="flex flex-col sm:flex-row items-center gap-3 flex-shrink-0">
-            <a href="pos.php" target="_blank" class="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-6 py-3.5 rounded-2xl text-sm transition shadow-lg flex items-center justify-center gap-2">
+            <a href="https://asdasdzx55.github.io/urban-octo-chainsaw/pos/" target="_blank" class="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-6 py-3.5 rounded-2xl text-sm transition shadow-lg flex items-center justify-center gap-2">
                 <i class="fa-solid fa-play"></i>
                 <span>بدء البيع الآن</span>
             </a>

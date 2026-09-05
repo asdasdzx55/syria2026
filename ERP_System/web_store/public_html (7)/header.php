@@ -308,7 +308,7 @@ if (function_exists('trackVisitor')) {
                 <a href="track.php" class="relative py-1 hover:text-royal-gold transition duration-300">تتبع الطلب</a>
                 
                 <?php if(isAdmin()): ?>
-                    <a href="pos.php" target="_blank" class="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded-full text-xs font-bold transition flex items-center gap-1 shadow-sm"><i class="fa-solid fa-cash-register text-[10px] text-amber-300"></i> كاشير الويب</a>
+                    <a href="https://asdasdzx55.github.io/urban-octo-chainsaw/pos/" target="_blank" class="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded-full text-xs font-bold transition flex items-center gap-1 shadow-sm"><i class="fa-solid fa-cash-register text-[10px] text-amber-300"></i> كاشير الويب</a>
                     <a href="admin_orders.php" class="text-royal-darkgold hover:text-royal-dark transition font-semibold flex items-center gap-1"><i class="fa-solid fa-crown text-xs"></i> لوحة الإدارة</a>
                 <?php endif; ?>
             </nav>

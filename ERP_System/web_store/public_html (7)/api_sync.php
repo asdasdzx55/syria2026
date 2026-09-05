@@ -1550,7 +1550,7 @@ try {
                     ->execute([
                         "📋 تم تطبيق جرد مخزون جديد",
                         "قام ($auditor) بتطبيق جرد شامل وتحديث كميات ($updated_count) صنفاً",
-                        "pos.php"
+                        "https://asdasdzx55.github.io/urban-octo-chainsaw/pos/"
                     ]);
             } catch (Exception $e) {}
 

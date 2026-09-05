@@ -8,7 +8,7 @@ $current_admin_page = basename($_SERVER['PHP_SELF']);
 <div class="bg-white border-b border-royal-gold/10 py-4 px-4 shadow-sm">
     <div class="container mx-auto max-w-6xl">
         <div class="grid grid-cols-2 sm:grid-cols-3 md:flex md:flex-wrap md:justify-center gap-2 text-center text-xs font-bold">
-            <a href="pos.php" target="_blank" class="px-3.5 py-2.5 rounded-xl transition-all bg-emerald-600 hover:bg-emerald-700 text-white shadow-md font-black flex items-center justify-center gap-1.5 border border-emerald-500 animate-pulse">
+            <a href="https://asdasdzx55.github.io/urban-octo-chainsaw/pos/" target="_blank" class="px-3.5 py-2.5 rounded-xl transition-all bg-emerald-600 hover:bg-emerald-700 text-white shadow-md font-black flex items-center justify-center gap-1.5 border border-emerald-500 animate-pulse">
                 <i class="fa-solid fa-cash-register block md:inline mb-1 md:mb-0 text-amber-300"></i> 🛒 كاشير الويب (POS) ⚡
             </a>
             <a href="admin_dashboard.php" class="px-3 py-2.5 rounded-xl transition-all <?php echo $current_admin_page == 'admin_dashboard.php' ? 'bg-royal-charcoal text-white shadow-sm' : 'text-gray-500 hover:text-royal-dark hover:bg-royal-sand border border-gray-100'; ?>">

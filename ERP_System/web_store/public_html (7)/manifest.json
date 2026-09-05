@@ -1,8 +1,8 @@
 {
-  "name": "كاشير سوبر ماركت المنزل السوري",
-  "short_name": "المنزل السوري POS",
-  "description": "نظام الكاشير ونقاط البيع السحابي المتطور لسوبر ماركت المنزل السوري",
-  "start_url": "./pos_app.html",
+  "name": "سوبر ماركت المنزل السوري",
+  "short_name": "المنزل السوري",
+  "description": "سوبر ماركت ومؤونة شامية أصيلة في مصر",
+  "start_url": "./index.php",
   "display": "standalone",
   "background_color": "#070b14",
   "theme_color": "#0b0f19",
