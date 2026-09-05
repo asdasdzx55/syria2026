@@ -53,6 +53,13 @@ $err = '';
 // زر مزامنة واستخراج كافة العملاء من الطلبات السابقة
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sync_from_orders'])) {
     try {
+        try { $pdo->exec("ALTER TABLE orders ADD COLUMN governorate VARCHAR(100) DEFAULT 'القاهرة'"); } catch (Exception $e) {}
+        try { $pdo->exec("ALTER TABLE orders ADD COLUMN customer_address TEXT DEFAULT NULL"); } catch (Exception $e) {}
+        try { $pdo->exec("ALTER TABLE orders ADD COLUMN customer_email VARCHAR(255) DEFAULT NULL"); } catch (Exception $e) {}
+        try { $pdo->exec("ALTER TABLE orders ADD COLUMN delivery_lat VARCHAR(50) DEFAULT NULL"); } catch (Exception $e) {}
+        try { $pdo->exec("ALTER TABLE orders ADD COLUMN delivery_lng VARCHAR(50) DEFAULT NULL"); } catch (Exception $e) {}
+        try { $pdo->exec("ALTER TABLE orders ADD COLUMN delivery_distance_km DECIMAL(10,2) DEFAULT NULL"); } catch (Exception $e) {}
+
         $orders_groups = $pdo->query("
             SELECT customer_phone, COUNT(id) as total_orders, COALESCE(SUM(total_price), 0) as total_spent, MAX(created_at) as last_order_date
             FROM orders
@@ -67,7 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sync_from_orders'])) 
             $ph = trim($og['customer_phone']);
             if (empty($ph)) continue;
 
-            $last_o_stmt = $pdo->prepare("SELECT customer_name, customer_address, governorate, customer_email, delivery_lat, delivery_lng, delivery_distance_km FROM orders WHERE customer_phone = ? ORDER BY id DESC LIMIT 1");
+            $last_o_stmt = $pdo->prepare("SELECT * FROM orders WHERE customer_phone = ? ORDER BY id DESC LIMIT 1");
             $last_o_stmt->execute([$ph]);
             $last_o = $last_o_stmt->fetch(PDO::FETCH_ASSOC);
 

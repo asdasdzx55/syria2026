@@ -73,6 +73,75 @@ if (!function_exists('normalize_egypt_phone_variants')) {
     }
 }
 
+// دالة لضمان وجود وترقية جداول وأعمدة العملاء والطلبات تلقائياً وبشكل ذاتي
+if (!function_exists('ensure_customers_schema')) {
+    function ensure_customers_schema($pdo) {
+        static $done = false;
+        if ($done) return;
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS customers (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(150) NOT NULL,
+                phone VARCHAR(50) NOT NULL UNIQUE,
+                phone2 VARCHAR(50) DEFAULT NULL,
+                address TEXT DEFAULT NULL,
+                governorate VARCHAR(100) DEFAULT 'القاهرة',
+                delivery_lat VARCHAR(50) DEFAULT NULL,
+                delivery_lng VARCHAR(50) DEFAULT NULL,
+                delivery_distance_km DECIMAL(10,2) DEFAULT NULL,
+                email VARCHAR(255) DEFAULT NULL,
+                notes TEXT DEFAULT NULL,
+                total_orders INT DEFAULT 0,
+                total_spent DECIMAL(10,2) DEFAULT 0.00,
+                last_order_date DATETIME DEFAULT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        } catch (Exception $e) {
+            try {
+                $pdo->exec("CREATE TABLE IF NOT EXISTS customers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name VARCHAR(150) NOT NULL,
+                    phone VARCHAR(50) NOT NULL UNIQUE,
+                    phone2 VARCHAR(50) DEFAULT NULL,
+                    address TEXT DEFAULT NULL,
+                    governorate VARCHAR(100) DEFAULT 'القاهرة',
+                    delivery_lat VARCHAR(50) DEFAULT NULL,
+                    delivery_lng VARCHAR(50) DEFAULT NULL,
+                    delivery_distance_km DECIMAL(10,2) DEFAULT NULL,
+                    email VARCHAR(255) DEFAULT NULL,
+                    notes TEXT DEFAULT NULL,
+                    total_orders INTEGER DEFAULT 0,
+                    total_spent DECIMAL(10,2) DEFAULT 0.00,
+                    last_order_date VARCHAR(50) DEFAULT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )");
+            } catch (Exception $e2) {}
+        }
+
+        // ترقية أعمدة جدول العملاء لضمان وجود كافة الحقول
+        try { $pdo->exec("ALTER TABLE customers ADD COLUMN phone2 VARCHAR(50) DEFAULT NULL"); } catch (Exception $e) {}
+        try { $pdo->exec("ALTER TABLE customers ADD COLUMN address TEXT DEFAULT NULL"); } catch (Exception $e) {}
+        try { $pdo->exec("ALTER TABLE customers ADD COLUMN governorate VARCHAR(100) DEFAULT 'القاهرة'"); } catch (Exception $e) {}
+        try { $pdo->exec("ALTER TABLE customers ADD COLUMN delivery_lat VARCHAR(50) DEFAULT NULL"); } catch (Exception $e) {}
+        try { $pdo->exec("ALTER TABLE customers ADD COLUMN delivery_lng VARCHAR(50) DEFAULT NULL"); } catch (Exception $e) {}
+        try { $pdo->exec("ALTER TABLE customers ADD COLUMN delivery_distance_km DECIMAL(10,2) DEFAULT NULL"); } catch (Exception $e) {}
+        try { $pdo->exec("ALTER TABLE customers ADD COLUMN email VARCHAR(255) DEFAULT NULL"); } catch (Exception $e) {}
+        try { $pdo->exec("ALTER TABLE customers ADD COLUMN notes TEXT DEFAULT NULL"); } catch (Exception $e) {}
+        try { $pdo->exec("ALTER TABLE customers ADD COLUMN total_orders INT DEFAULT 0"); } catch (Exception $e) {}
+        try { $pdo->exec("ALTER TABLE customers ADD COLUMN total_spent DECIMAL(10,2) DEFAULT 0.00"); } catch (Exception $e) {}
+        try { $pdo->exec("ALTER TABLE customers ADD COLUMN last_order_date DATETIME DEFAULT NULL"); } catch (Exception $e) {}
+
+        // ترقية أعمدة جدول الطلبات لضمان عدم وجود أخطاء عند القراءة
+        try { $pdo->exec("ALTER TABLE orders ADD COLUMN governorate VARCHAR(100) DEFAULT 'القاهرة'"); } catch (Exception $e) {}
+        try { $pdo->exec("ALTER TABLE orders ADD COLUMN customer_address TEXT DEFAULT NULL"); } catch (Exception $e) {}
+        try { $pdo->exec("ALTER TABLE orders ADD COLUMN customer_email VARCHAR(255) DEFAULT NULL"); } catch (Exception $e) {}
+        try { $pdo->exec("ALTER TABLE orders ADD COLUMN delivery_lat VARCHAR(50) DEFAULT NULL"); } catch (Exception $e) {}
+        try { $pdo->exec("ALTER TABLE orders ADD COLUMN delivery_lng VARCHAR(50) DEFAULT NULL"); } catch (Exception $e) {}
+        try { $pdo->exec("ALTER TABLE orders ADD COLUMN delivery_distance_km DECIMAL(10,2) DEFAULT NULL"); } catch (Exception $e) {}
+        $done = true;
+    }
+}
+
 $action = $_GET['action'] ?? $_POST['action'] ?? 'ping';
 
 // إتاحة ping للفحص السريع
@@ -2095,46 +2164,7 @@ try {
         // أ) استعلام وجلب بيانات العميل بالهاتف (للكاشير الويب وسرعة الإدخال)
         case 'lookup_customer':
         case 'get_customer_by_phone':
-            // ضمان وجود جدول العملاء
-            try {
-                $pdo->exec("CREATE TABLE IF NOT EXISTS customers (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    name VARCHAR(150) NOT NULL,
-                    phone VARCHAR(50) NOT NULL UNIQUE,
-                    phone2 VARCHAR(50) DEFAULT NULL,
-                    address TEXT DEFAULT NULL,
-                    governorate VARCHAR(100) DEFAULT NULL,
-                    delivery_lat VARCHAR(50) DEFAULT NULL,
-                    delivery_lng VARCHAR(50) DEFAULT NULL,
-                    delivery_distance_km DECIMAL(10,2) DEFAULT NULL,
-                    email VARCHAR(255) DEFAULT NULL,
-                    notes TEXT DEFAULT NULL,
-                    total_orders INT DEFAULT 0,
-                    total_spent DECIMAL(10,2) DEFAULT 0.00,
-                    last_order_date DATETIME DEFAULT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-            } catch (Exception $e) {
-                try {
-                    $pdo->exec("CREATE TABLE IF NOT EXISTS customers (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        name VARCHAR(150) NOT NULL,
-                        phone VARCHAR(50) NOT NULL UNIQUE,
-                        phone2 VARCHAR(50) DEFAULT NULL,
-                        address TEXT DEFAULT NULL,
-                        governorate VARCHAR(100) DEFAULT NULL,
-                        delivery_lat VARCHAR(50) DEFAULT NULL,
-                        delivery_lng VARCHAR(50) DEFAULT NULL,
-                        delivery_distance_km DECIMAL(10,2) DEFAULT NULL,
-                        email VARCHAR(255) DEFAULT NULL,
-                        notes TEXT DEFAULT NULL,
-                        total_orders INTEGER DEFAULT 0,
-                        total_spent DECIMAL(10,2) DEFAULT 0.00,
-                        last_order_date VARCHAR(50) DEFAULT NULL,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )");
-                } catch (Exception $e2) {}
-            }
+            ensure_customers_schema($pdo);
 
             $raw_phone = trim($json_payload['phone'] ?? $_GET['phone'] ?? $_POST['phone'] ?? $_REQUEST['phone'] ?? '');
             if (empty($raw_phone)) {
@@ -2258,6 +2288,7 @@ try {
         // ب) بحث وسرد العملاء مع التصفح
         case 'search_customers':
         case 'get_customers':
+            ensure_customers_schema($pdo);
             $q = trim($json_payload['q'] ?? $json_payload['query'] ?? $_GET['q'] ?? $_GET['query'] ?? $_POST['q'] ?? $_POST['query'] ?? $_REQUEST['q'] ?? $_REQUEST['query'] ?? '');
             $limit = min(200, max(1, (int)($json_payload['limit'] ?? $_GET['limit'] ?? $_POST['limit'] ?? $_REQUEST['limit'] ?? 50)));
             $page = max(1, (int)($json_payload['page'] ?? $_GET['page'] ?? $_POST['page'] ?? $_REQUEST['page'] ?? 1));
@@ -2304,6 +2335,8 @@ try {
         // ج) استخراج وتجميع كافة بيانات العملاء من الموقع (أرشيف الطلبات وحسابات المستخدمين)
         case 'sync_all_web_customers':
         case 'aggregate_web_customers':
+            ensure_customers_schema($pdo);
+
             // 1. تجميع الهواتف من جدول الطلبات
             $orders_groups = $pdo->query("
                 SELECT customer_phone, COUNT(id) as total_orders, COALESCE(SUM(total_price), 0) as total_spent, MAX(created_at) as last_order_date
@@ -2320,7 +2353,7 @@ try {
                 if (empty($ph)) continue;
 
                 // أحدث بيانات طلب لهذا الهاتف
-                $last_o_stmt = $pdo->prepare("SELECT customer_name, customer_address, governorate, customer_email, delivery_lat, delivery_lng, delivery_distance_km FROM orders WHERE customer_phone = ? ORDER BY id DESC LIMIT 1");
+                $last_o_stmt = $pdo->prepare("SELECT * FROM orders WHERE customer_phone = ? ORDER BY id DESC LIMIT 1");
                 $last_o_stmt->execute([$ph]);
                 $last_o = $last_o_stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -2386,6 +2419,7 @@ try {
         // د) حفظ أو تحديث بيانات عميل من الكاشير
         case 'save_customer':
         case 'update_customer':
+            ensure_customers_schema($pdo);
             $data = !empty($json_payload) ? $json_payload : $_POST;
             $cust_id = (int)($data['id'] ?? $data['customer_id'] ?? 0);
             $name = trim($data['name'] ?? '');

@@ -576,12 +576,14 @@ try {
     } catch (Exception $e) {}
 
     // ملء بيانات المعرض الافتراضي للمنتجات القديمة
-    $old_prods = $pdo->query("SELECT id, image_url FROM products WHERE id NOT IN (SELECT product_id FROM product_images)")->fetchAll(PDO::FETCH_ASSOC);
-    foreach($old_prods as $op) {
-        if(!empty($op['image_url'])) {
-            $pdo->prepare("INSERT INTO product_images (product_id, image_path, is_main) VALUES (?, ?, 1)")->execute([$op['id'], $op['image_url']]);
+    try {
+        $old_prods = $pdo->query("SELECT id, image_url FROM products WHERE id NOT IN (SELECT product_id FROM product_images)")->fetchAll(PDO::FETCH_ASSOC);
+        foreach($old_prods as $op) {
+            if(!empty($op['image_url'])) {
+                $pdo->prepare("INSERT INTO product_images (product_id, image_path, is_main) VALUES (?, ?, 1)")->execute([$op['id'], $op['image_url']]);
+            }
         }
-    }
+    } catch (Exception $e) {}
 
     // ترقيات الأعمدة إن لم تكن موجودة (لمنع المشاكل في MySQL و SQLite)
     try { $pdo->exec("ALTER TABLE products ADD COLUMN old_price DECIMAL(10,2) DEFAULT NULL"); } catch (Exception $e) {}
@@ -629,6 +631,19 @@ try {
     try { $pdo->exec("ALTER TABLE shipping_zones ADD COLUMN country_name VARCHAR(100) DEFAULT 'مصر'"); } catch (Exception $e) {}
     try { $pdo->exec("ALTER TABLE shipping_zones ADD COLUMN country_code VARCHAR(10) DEFAULT 'EG'"); } catch (Exception $e) {}
     try { $pdo->exec("ALTER TABLE shipping_zones ADD COLUMN currency_symbol VARCHAR(50) DEFAULT 'ج.م'"); } catch (Exception $e) {}
+
+    // ترقيات أعمدة العملاء لضمان التوافق التام مع قواعد البيانات الحالية
+    try { $pdo->exec("ALTER TABLE customers ADD COLUMN phone2 VARCHAR(50) DEFAULT NULL"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE customers ADD COLUMN address TEXT DEFAULT NULL"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE customers ADD COLUMN governorate VARCHAR(100) DEFAULT 'القاهرة'"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE customers ADD COLUMN delivery_lat VARCHAR(50) DEFAULT NULL"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE customers ADD COLUMN delivery_lng VARCHAR(50) DEFAULT NULL"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE customers ADD COLUMN delivery_distance_km DECIMAL(10,2) DEFAULT NULL"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE customers ADD COLUMN email VARCHAR(255) DEFAULT NULL"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE customers ADD COLUMN notes TEXT DEFAULT NULL"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE customers ADD COLUMN total_orders INT DEFAULT 0"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE customers ADD COLUMN total_spent DECIMAL(10,2) DEFAULT 0.00"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE customers ADD COLUMN last_order_date DATETIME DEFAULT NULL"); } catch (Exception $e) {}
 
     // محاولة إنشاء جدول المفضلة بشكل منفصل للتأكد من الهجرة لقاعدة البيانات الحالية
     try {
