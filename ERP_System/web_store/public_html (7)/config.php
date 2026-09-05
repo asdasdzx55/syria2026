@@ -438,6 +438,23 @@ try {
                 cashier_name VARCHAR(100) DEFAULT 'كاشير المحل',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )");
+            $pdo->exec("CREATE TABLE IF NOT EXISTS customers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name VARCHAR(150) NOT NULL,
+                phone VARCHAR(50) NOT NULL UNIQUE,
+                phone2 VARCHAR(50) DEFAULT NULL,
+                address TEXT DEFAULT NULL,
+                governorate VARCHAR(100) DEFAULT NULL,
+                delivery_lat VARCHAR(50) DEFAULT NULL,
+                delivery_lng VARCHAR(50) DEFAULT NULL,
+                delivery_distance_km DECIMAL(10,2) DEFAULT NULL,
+                email VARCHAR(255) DEFAULT NULL,
+                notes TEXT DEFAULT NULL,
+                total_orders INTEGER DEFAULT 0,
+                total_spent DECIMAL(10,2) DEFAULT 0.00,
+                last_order_date VARCHAR(50) DEFAULT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )");
         } else {
             $pdo->exec("CREATE TABLE IF NOT EXISTS expenses (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -498,6 +515,23 @@ try {
                 month_year VARCHAR(20) DEFAULT NULL,
                 notes TEXT,
                 cashier_name VARCHAR(100) DEFAULT 'كاشير المحل',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            $pdo->exec("CREATE TABLE IF NOT EXISTS customers (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(150) NOT NULL,
+                phone VARCHAR(50) NOT NULL UNIQUE,
+                phone2 VARCHAR(50) DEFAULT NULL,
+                address TEXT DEFAULT NULL,
+                governorate VARCHAR(100) DEFAULT NULL,
+                delivery_lat VARCHAR(50) DEFAULT NULL,
+                delivery_lng VARCHAR(50) DEFAULT NULL,
+                delivery_distance_km DECIMAL(10,2) DEFAULT NULL,
+                email VARCHAR(255) DEFAULT NULL,
+                notes TEXT DEFAULT NULL,
+                total_orders INT DEFAULT 0,
+                total_spent DECIMAL(10,2) DEFAULT 0.00,
+                last_order_date DATETIME DEFAULT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
         }

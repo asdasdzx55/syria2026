@@ -175,6 +175,23 @@ if (isset($_POST['submit_order'])) {
 
     $order_id = $pdo->lastInsertId();
 
+    // حفظ وتحديث بيانات العميل في جدول العملاء المركزي (للكاشير والويب)
+    try {
+        $chk_cust = $pdo->prepare("SELECT id, total_orders, total_spent FROM customers WHERE phone = ? LIMIT 1");
+        $chk_cust->execute([$phone]);
+        $existing_cust = $chk_cust->fetch(PDO::FETCH_ASSOC);
+
+        if ($existing_cust) {
+            $new_count = (int)$existing_cust['total_orders'] + 1;
+            $new_spent = (float)$existing_cust['total_spent'] + (float)$total_price;
+            $pdo->prepare("UPDATE customers SET name = ?, address = ?, governorate = ?, email = COALESCE(NULLIF(?, ''), email), delivery_lat = COALESCE(NULLIF(?, ''), delivery_lat), delivery_lng = COALESCE(NULLIF(?, ''), delivery_lng), delivery_distance_km = COALESCE(?, delivery_distance_km), total_orders = ?, total_spent = ?, last_order_date = CURRENT_TIMESTAMP WHERE id = ?")
+                ->execute([$name, $address, $gov_name, $email, $delivery_lat, $delivery_lng, $delivery_distance_km, $new_count, $new_spent, $existing_cust['id']]);
+        } else {
+            $pdo->prepare("INSERT INTO customers (name, phone, address, governorate, email, delivery_lat, delivery_lng, delivery_distance_km, total_orders, total_spent, last_order_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, CURRENT_TIMESTAMP)")
+                ->execute([$name, $phone, $address, $gov_name, $email, $delivery_lat, $delivery_lng, $delivery_distance_km, $total_price]);
+        }
+    } catch (Exception $e_cust) {}
+
     // إرسال إشعار فوري لتطبيق الأندرويد الخاص بالمدير
     try {
         $notif_title = "طلب جديد وارد! 📦 #" . $order_id;
