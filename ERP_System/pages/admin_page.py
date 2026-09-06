@@ -1013,18 +1013,19 @@ class AdminPage(ctk.CTkFrame):
         ctk.CTkLabel(dialog_win, text="يرجى اختيار نوع العملية المطلوبة بدقة:", font=ctk.CTkFont(size=14, weight="bold")).pack(pady=4)
 
         def do_zero_quantities_and_balances():
-            msg = "هل أنت متأكد من تصفير الكميات والأرصدة؟\n\n- سيتم تصفير مخزون جميع المنتجات إلى (0).\n- سيتم تصفير أرصدة الموردين وحسابات الدليفري إلى (0).\n- سيتم الحفاظ على الأصناف والأسعار والباركود والعملاء كما هي دون مسحها.\n- سيتم تطبيق التصفير محلياً وعلى المتجر السحابي."
+            msg = "هل أنت متأكد من تصفير الكميات والأرصدة؟\n\n- سيتم تصفير مخزون جميع المنتجات إلى (0).\n- سيتم تصفير أرصدة الموردين وحسابات الدليفري إلى (0).\n- سيتم تصفير ومسح فواتير المبيعات والمشتريات والمصروفات القديمة.\n- سيتم الحفاظ على قائمة الأصناف والأسعار والباركود والعملاء كما هي دون مسحها.\n- سيتم تطبيق التصفير محلياً وعلى المتجر السحابي."
             if not messagebox.askyesno("تأكيد تصفير الحسابات والكميات", msg, icon="warning"):
                 return
             dialog_win.destroy()
             try:
-                self.cursor.execute("UPDATE products SET stock = 0")
-                try: self.cursor.execute("UPDATE suppliers SET balance = 0")
+                self.cursor.execute("UPDATE products SET stock = 0, synced = 1")
+                try: self.cursor.execute("UPDATE suppliers SET balance = 0, synced = 1")
                 except: pass
                 try: self.cursor.execute("UPDATE employees SET advances = 0, deductions = 0")
                 except: pass
-                try: self.cursor.execute("DELETE FROM sync_queue")
-                except: pass
+                for t in ['sales', 'sale_items', 'expenses', 'purchases', 'purchase_items', 'temp_invoices', 'temp_invoice_items', 'sync_queue']:
+                    try: self.cursor.execute(f"DELETE FROM {t}")
+                    except: pass
                 self.db.commit()
             except Exception as e:
                 messagebox.showerror("خطأ", f"حدث خطأ أثناء التصفير المحلي: {e}")
@@ -1059,7 +1060,7 @@ class AdminPage(ctk.CTkFrame):
             messagebox.showinfo("تم التصفير", "✅ تم تصفير البيانات المحلية بنجاح.\n(يمكنك في أي وقت سحب المنتجات من السحابة بضغطة زر).")
 
         def do_full_reset_everywhere():
-            msg = "🚨 تحذير بالغ الخطورة 🚨\n\nأنت على وشك تصفير وحذف البيانات من:\n1. برنامج الكاشير المحلي على هذا الجهاز.\n2. المتجر الإلكتروني السحابي على Hostinger بالكامل.\n\nهل أنت متأكد بنسبة 100% أنك تريد الحذف من كل مكان؟"
+            msg = "🚨 تحذير بالغ الخطورة 🚨\n\nأنت على وشك تصفير وحذف البيانات بالكامل من:\n1. برنامج الكاشير المحلي على هذا الجهاز (مسح كافة الأصناف والمبيعات والحسابات).\n2. المتجر الإلكتروني السحابي على Hostinger بالكامل (مسح كافة المنتجات والفواتير وضبط المصنع).\n\nهل أنت متأكد بنسبة 100% أنك تريد الحذف الشامل من كل مكان؟"
             if not messagebox.askyesno("تأكيد الحذف الشامل", msg, icon="warning"):
                 return
             dialog_win.destroy()
@@ -1070,10 +1071,10 @@ class AdminPage(ctk.CTkFrame):
                 except: pass
             self.db.commit()
 
-            # 2. تصفير السحابة
+            # 2. تصفير السحابة الشامل
             cloud_msg = ""
             if hasattr(self, 'sync_mgr'):
-                ok, cloud_res = self.sync_mgr.reset_cloud_database(mode="factory_reset_all")
+                ok, cloud_res = self.sync_mgr.reset_cloud_database(mode="factory_reset_all", wipe_products=True)
                 cloud_msg = f"\nالسحابة: {cloud_res}"
 
             self.on_show()
@@ -1082,7 +1083,7 @@ class AdminPage(ctk.CTkFrame):
             if hasattr(self.app, 'frames') and 'pos' in self.app.frames:
                 self.app.frames['pos'].pos_load_products_tree()
 
-            messagebox.showinfo("تم التصفير الشامل", f"✅ تم تصفير وحذف كافة البيانات من الكاشير المحلي ومن المتجر الإلكتروني السحابي معاً بنجاح!{cloud_msg}")
+            messagebox.showinfo("تم التصفير الشامل", f"✅ تم تصفير وحذف كافة البيانات والمنتجات من الكاشير المحلي ومن المتجر الإلكتروني السحابي معاً بنجاح!{cloud_msg}")
 
         btn_f0 = ctk.CTkFrame(dialog_win, fg_color="transparent")
         btn_f0.pack(fill="x", padx=30, pady=6)

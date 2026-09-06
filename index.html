@@ -1381,6 +1381,22 @@
                     </div>
                 </div>
 
+                <!-- قسم تصفير السحابة وحذف البيانات من الكاشير الويب -->
+                <div class="bg-rose-950/30 p-3 rounded-2xl border border-rose-500/30 space-y-2">
+                    <div class="flex items-center gap-2 text-rose-400 font-bold text-[11px]">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        <span>تصفير ومسح البيانات من السحابة والكاشير</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 pt-1">
+                        <button type="button" onclick="triggerWebPosReset('zero_quantities_and_balances')" class="py-2 px-2 bg-blue-600/80 hover:bg-blue-600 text-white rounded-xl font-bold text-[10px] transition text-center leading-tight shadow">
+                            ⚖️ تصفير الحسابات والكميات (0)
+                        </button>
+                        <button type="button" onclick="triggerWebPosReset('factory_reset_all')" class="py-2 px-2 bg-rose-700/80 hover:bg-rose-600 text-white rounded-xl font-bold text-[10px] transition text-center leading-tight shadow">
+                            🚨 ضبط مصنع ومسح شامل
+                        </button>
+                    </div>
+                </div>
+
                 <div class="pt-2 flex gap-2">
                     <button onclick="saveSettingsToStorage()" class="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl text-xs transition">
                         حفظ الإعدادات
@@ -1504,6 +1520,42 @@
             localStorage.removeItem('syrian_home_pos_config');
             loadConfigFromStorage();
             displayToast('تم استعادة الإعدادات الأصلية', 'info');
+        }
+
+        async function triggerWebPosReset(mode) {
+            let confirmMsg = '';
+            if (mode === 'zero_quantities_and_balances') {
+                confirmMsg = '⚠️ هل أنت متأكد من تصفير جميع الكميات (المخزون = 0) وتصفير كافة الحسابات والأرصدة؟\n\n(سيتم الحفاظ على كتالوج الأصناف والأسعار والعملاء).';
+            } else {
+                confirmMsg = '🚨 تحذير خطير جداً:\n\nهل أنت متأكد من مسح كافة المنتجات والفواتير والحسابات واستعادة ضبط المصنع بالكامل؟\nلا يمكن التراجع عن هذه الخطوة!';
+            }
+            if (!confirm(confirmMsg)) return;
+
+            displayToast('جاري تنفيذ التصفير السحابي...', 'info');
+            try {
+                const res = await sendApiRequest('system_reset', {
+                    mode: mode,
+                    wipe_products: 1,
+                    confirm_token: 'CONFIRM_RESET_SYRIA_2026'
+                });
+                if (res && res.success) {
+                    localStorage.removeItem('cached_pos_products');
+                    localStorage.removeItem('pos_saved_audit_counts');
+                    inventoryActualQuantities = {};
+                    currentCart = {};
+                    updateCartDisplayBadge();
+                    await syncFullSystemData(true);
+                    displayToast(res.message || 'تم التصفير بنجاح!', 'success');
+                    playSoundTone('success');
+                    closeModalWindow('settings-modal');
+                } else {
+                    displayToast(res.error || 'فشل التصفير السحابي!', 'error');
+                    playSoundTone('error');
+                }
+            } catch (err) {
+                displayToast('حدث خطأ أثناء الاتصال بالسحابة: ' + err.message, 'error');
+                playSoundTone('error');
+            }
         }
 
         function startLiveClock() {

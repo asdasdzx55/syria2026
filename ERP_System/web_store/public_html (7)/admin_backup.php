@@ -381,6 +381,37 @@ if (isset($_GET['action']) && $_GET['action'] === 'download_server_file' && isse
     }
 }
 
+// -----------------------------------------------------------------------------
+// 8. إجراء: تصفير وحذف بيانات النظام من لوحة الإدارة
+// -----------------------------------------------------------------------------
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'admin_reset_data') {
+    $mode = trim($_POST['reset_mode'] ?? '');
+    $confirm_token = trim($_POST['confirm_token'] ?? '');
+    if ($confirm_token !== 'CONFIRM_RESET_SYRIA_2026') {
+        header("Location: admin_backup.php?error=invalid_token");
+        exit;
+    }
+
+    if ($mode === 'zero_quantities_and_balances') {
+        try { $pdo->exec("UPDATE products SET stock = 0"); } catch (Exception $e) {}
+        try { $pdo->exec("UPDATE suppliers SET balance = 0"); } catch (Exception $e) {}
+        try { $pdo->exec("UPDATE delivery_drivers SET cash_balance = 0"); } catch (Exception $e) {}
+        try { $pdo->exec("UPDATE customers SET total_orders = 0, total_spent = 0"); } catch (Exception $e) {}
+        foreach (['orders', 'purchases', 'expenses', 'employee_payouts', 'abandoned_carts', 'notifications'] as $t) {
+            try { $pdo->exec("DELETE FROM `{$t}`"); } catch (Exception $e) {}
+        }
+        header("Location: admin_backup.php?msg=zero_success");
+        exit;
+    } elseif ($mode === 'factory_reset_all') {
+        foreach (['orders', 'purchases', 'expenses', 'customers', 'suppliers', 'abandoned_carts', 'wishlist', 'notifications', 'employee_payouts', 'products', 'product_images'] as $t) {
+            try { $pdo->exec("DELETE FROM `{$t}`"); } catch (Exception $e) {}
+        }
+        try { $pdo->exec("UPDATE delivery_drivers SET cash_balance = 0"); } catch (Exception $e) {}
+        header("Location: admin_backup.php?msg=factory_reset_success");
+        exit;
+    }
+}
+
 // جلب قائمة ملفات النسخ الاحتياطية الموجودة على السيرفر
 $server_backups = [];
 if (is_dir($backups_dir)) {
@@ -439,6 +470,8 @@ include 'admin_nav.php';
             if ($_GET['msg'] === 'snapshot_created') echo 'تم إنشاء وحفظ نقطة النسخ الاحتياطي على السيرفر بنجاح!';
             elseif ($_GET['msg'] === 'restore_success') echo '🎉 تمت استعادة النسخة الاحتياطية بنجاح وتحديث كافة البيانات والصور!';
             elseif ($_GET['msg'] === 'snapshot_deleted') echo 'تم حذف ملف النسخة الاحتياطية من السيرفر بنجاح.';
+            elseif ($_GET['msg'] === 'zero_success') echo '⚖️ تم تصفير كميات المخزون لكافة المنتجات إلى (0) وتصفير أرصدة الموردين والدليفري بنجاح مع الحفاظ على المنتجات والعملاء!';
+            elseif ($_GET['msg'] === 'factory_reset_success') echo '🚨 تم تنفيذ ضبط المصنع الشامل ومسح كافة المنتجات والفواتير والبيانات من السحابة بنجاح!';
             ?>
         </div>
     <?php endif; ?>
@@ -624,6 +657,61 @@ include 'admin_nav.php';
                 </table>
             </div>
         <?php endif; ?>
+    </div>
+
+    <!-- قسم تصفير وحذف بيانات المتجر السحابي المباشر -->
+    <div class="mt-10 bg-white p-6 md:p-8 rounded-3xl border border-red-200 shadow-sm">
+        <div class="flex items-center gap-3 mb-4 pb-4 border-b border-red-100">
+            <span class="w-10 h-10 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center text-lg font-bold">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+            </span>
+            <div>
+                <h3 class="font-serif font-bold text-lg text-red-700">مركز تصفير وحذف البيانات المباشر (Cloud Data Reset)</h3>
+                <p class="text-xs text-gray-500 font-light">استخدم هذه الخيارات بحذر شديد لتصفير الأرصدة والمخزون أو عمل ضبط مصنع كامل للمتجر السحابي.</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+            <!-- الخيار 1: تصفير الحسابات والكميات فقط -->
+            <div class="bg-blue-50/50 p-5 rounded-2xl border border-blue-200 flex flex-col justify-between">
+                <div>
+                    <h4 class="font-bold text-sm text-blue-900 flex items-center gap-2 mb-2">
+                        <i class="fa-solid fa-scale-balanced text-blue-600"></i> 1. تصفير الحسابات والكميات فقط
+                    </h4>
+                    <p class="text-xs text-gray-600 leading-relaxed">
+                        يقوم بتصفير جميع كميات المخزون إلى <strong>(0)</strong>، وتصفير أرصدة الموردين والدليفري، ومسح سجلات الطلبات القديمة، <strong>مع الحفاظ التام على كتالوج الأصناف والأسعار والعملاء</strong>.
+                    </p>
+                </div>
+                <form method="POST" class="mt-4" onsubmit="return confirm('⚠️ تأكيد تصفير الحسابات والكميات:\n\nهل أنت متأكد من تصفير المخزون إلى (0) وتصفير كافة الحسابات والأرصدة؟\n(سيتم الحفاظ على الأصناف والأسعار وقائمة العملاء).');">
+                    <input type="hidden" name="action" value="admin_reset_data">
+                    <input type="hidden" name="reset_mode" value="zero_quantities_and_balances">
+                    <input type="hidden" name="confirm_token" value="CONFIRM_RESET_SYRIA_2026">
+                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl shadow transition flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-arrows-rotate"></i> تنفيذ تصفير الحسابات والكميات (0)
+                    </button>
+                </form>
+            </div>
+
+            <!-- الخيار 2: ضبط المصنع ومسح شامل -->
+            <div class="bg-red-50/50 p-5 rounded-2xl border border-red-200 flex flex-col justify-between">
+                <div>
+                    <h4 class="font-bold text-sm text-red-900 flex items-center gap-2 mb-2">
+                        <i class="fa-solid fa-dumpster-fire text-red-600"></i> 2. ضبط المصنع ومسح شامل لكل البيانات
+                    </h4>
+                    <p class="text-xs text-gray-600 leading-relaxed">
+                        🚨 <strong>حذف جذري وشامل:</strong> مسح كافة المنتجات، وقوائم الأسعار، والصور، والفواتير، والمصروفات، والعملاء، وإعادة المتجر إلى الصفر تماماً.
+                    </p>
+                </div>
+                <form method="POST" class="mt-4" onsubmit="return confirm('🚨 تحذير بالغ الخطورة!\n\nأنت على وشك حذف كافة المنتجات والبيانات بالكامل من المتجر السحابي واستعادة ضبط المصنع.\n\nهل أنت متأكد بنسبة 100%؟ لا يمكن التراجع عن هذه الخطوة!');">
+                    <input type="hidden" name="action" value="admin_reset_data">
+                    <input type="hidden" name="reset_mode" value="factory_reset_all">
+                    <input type="hidden" name="confirm_token" value="CONFIRM_RESET_SYRIA_2026">
+                    <button type="submit" class="w-full bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl shadow transition flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-trash"></i> تنفيذ ضبط المصنع ومسح شامل
+                    </button>
+                </form>
+            </div>
+        </div>
     </div>
 
 </div>
