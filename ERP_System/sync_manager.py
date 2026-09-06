@@ -520,15 +520,20 @@ class HybridSyncManager:
         finally:
             conn.close()
 
-    def reset_cloud_database(self, api_url=None, api_key=None):
-        """تصفير وحذف جميع بيانات المتجر الإلكتروني السحابي المركزي"""
+    def reset_cloud_database(self, mode="factory_reset_all", api_url=None, api_key=None):
+        """تصفير وحذف جميع بيانات المتجر الإلكتروني السحابي المركزي أو تصفير الحسابات والكميات"""
         settings = self.get_cloud_settings()
         url = api_url or settings.get('cloud_api_url', 'https://supermarkrt.almagd555.com/api_sync.php')
         key = api_key or settings.get('cloud_api_key', 'syrian_home_pos_secret_token_2026')
         
-        ok, res = self._make_request(url, action='reset_all_data', api_key=key, method='POST', timeout=12)
+        payload = {
+            'action': 'system_reset',
+            'mode': mode,
+            'confirm_token': 'CONFIRM_RESET_SYRIA_2026'
+        }
+        ok, res = self._make_request(url, action='system_reset', payload=payload, api_key=key, method='POST', timeout=15)
         if ok and isinstance(res, dict) and res.get('success'):
-            return True, res.get('message', 'تم تصفير وحذف كافة بيانات المتجر الإلكتروني السحابي بنجاح.')
+            return True, res.get('message', 'تم تنفيذ العملية السحابية بنجاح.')
         return False, f"فشل تصفير السحابة: {res}"
 
     def _pull_online_orders(self, api_url, api_key, conn, cur):

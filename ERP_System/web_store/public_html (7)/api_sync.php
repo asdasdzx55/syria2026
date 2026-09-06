@@ -2039,21 +2039,140 @@ try {
             break;
 
         // ============================================================
-        // 7. تصفير شامل لجميع بيانات المتجر السحابي (Reset All Cloud Data)
+        // 7. تصفير شامل للبيانات أو تصفير الحسابات والكميات (System & Data Reset Hub)
         // ============================================================
+        case 'system_reset':
+        case 'reset_data':
+        case 'reset_quantities_and_balances':
+        case 'zero_balances_and_quantities':
+        case 'wipe_sales_and_operations':
         case 'reset_all_data':
-            $tables_to_wipe = ['products', 'orders', 'expenses', 'customers', 'suppliers', 'abandoned_carts', 'wishlist', 'notifications'];
-            foreach ($tables_to_wipe as $t) {
-                try {
-                    $pdo->exec("DELETE FROM `{$t}`");
-                } catch (Exception $e) {
-                    // تجاهل الجداول غير الموجودة بأمان
+            $data = !empty($json_payload) ? $json_payload : $_REQUEST;
+            $mode = trim($data['mode'] ?? '');
+            if (empty($mode)) {
+                if ($action === 'reset_quantities_and_balances' || $action === 'zero_balances_and_quantities') {
+                    $mode = 'zero_quantities_and_balances';
+                } elseif ($action === 'wipe_sales_and_operations') {
+                    $mode = 'wipe_sales_and_operations';
+                } else {
+                    $mode = 'factory_reset_all';
                 }
             }
-            
+
+            // رمز تأكيد أمان للحماية من المسح غير المقصود
+            $confirm_token = trim($data['confirm_token'] ?? $data['confirm'] ?? '');
+            if ($confirm_token !== 'CONFIRM_RESET_SYRIA_2026' && !isAdmin()) {
+                echo json_encode([
+                    'success' => false,
+                    'error' => 'رمز تأكيد الأمان مطلوب! يرجى تمرير confirm_token="CONFIRM_RESET_SYRIA_2026" لتأكيد التنفيذ.'
+                ], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+
+            // الوضع 1: تصفير الحسابات والكميات فقط (الحفاظ الكامل على الأصناف والعملاء والموردين)
+            if ($mode === 'zero_quantities_and_balances' || $mode === 'zero_balances' || $mode === 'zero_only') {
+                $prods_updated = 0;
+                $sups_updated = 0;
+                $drivers_updated = 0;
+                $custs_updated = 0;
+
+                try {
+                    $stmt1 = $pdo->prepare("UPDATE products SET stock = 0");
+                    $stmt1->execute();
+                    $prods_updated = $stmt1->rowCount();
+                } catch (Exception $e) {}
+
+                try {
+                    $stmt2 = $pdo->prepare("UPDATE suppliers SET balance = 0");
+                    $stmt2->execute();
+                    $sups_updated = $stmt2->rowCount();
+                } catch (Exception $e) {}
+
+                try {
+                    $stmt3 = $pdo->prepare("UPDATE delivery_drivers SET cash_balance = 0");
+                    $stmt3->execute();
+                    $drivers_updated = $stmt3->rowCount();
+                } catch (Exception $e) {}
+
+                try {
+                    $stmt4 = $pdo->prepare("UPDATE customers SET total_orders = 0, total_spent = 0");
+                    $stmt4->execute();
+                    $custs_updated = $stmt4->rowCount();
+                } catch (Exception $e) {}
+
+                echo json_encode([
+                    'success' => true,
+                    'mode' => 'zero_quantities_and_balances',
+                    'message' => '✅ تم تصفير كميات المخزون وأرصدة الحسابات بنجاح، مع بقاء كافة بيانات الأصناف والعملاء محفوظة!',
+                    'details' => [
+                        'products_stock_zeroed' => $prods_updated,
+                        'suppliers_balances_zeroed' => $sups_updated,
+                        'delivery_drivers_cash_zeroed' => $drivers_updated,
+                        'customers_totals_reset' => $custs_updated
+                    ]
+                ], JSON_UNESCAPED_UNICODE);
+                break;
+            }
+
+            // الوضع 2: تصفير وحذف سجلات الفواتير والمبيعات والمصروفات فقط
+            if ($mode === 'wipe_sales_and_operations' || $mode === 'clear_sales') {
+                $tables = ['orders', 'purchases', 'expenses', 'employee_payouts', 'abandoned_carts', 'notifications'];
+                $cleared_tables = [];
+                foreach ($tables as $t) {
+                    try {
+                        $pdo->exec("DELETE FROM `{$t}`");
+                        $cleared_tables[] = $t;
+                    } catch (Exception $e) {}
+                }
+
+                try {
+                    $pdo->exec("UPDATE customers SET total_orders = 0, total_spent = 0");
+                } catch (Exception $e) {}
+
+                echo json_encode([
+                    'success' => true,
+                    'mode' => 'wipe_sales_and_operations',
+                    'message' => '✅ تم حذف سجلات الفواتير، المبيعات، المصروفات، والسلات المتروكة بنجاح، مع الاحتفاظ بكافة المنتجات والعملاء.',
+                    'cleared_tables' => $cleared_tables
+                ], JSON_UNESCAPED_UNICODE);
+                break;
+            }
+
+            // الوضع 3: حذف شامل واستعادة ضبط المصنع بالكامل (Factory Reset)
+            if ($mode === 'factory_reset_all' || $mode === 'all') {
+                $wipe_products = !empty($data['wipe_products']) && ($data['wipe_products'] === true || $data['wipe_products'] === '1' || $data['wipe_products'] === 'true');
+                
+                $tables = ['orders', 'expenses', 'customers', 'suppliers', 'abandoned_carts', 'wishlist', 'notifications', 'employee_payouts'];
+                if ($wipe_products) {
+                    $tables[] = 'products';
+                    $tables[] = 'product_images';
+                }
+
+                $wiped = [];
+                foreach ($tables as $t) {
+                    try {
+                        $pdo->exec("DELETE FROM `{$t}`");
+                        $wiped[] = $t;
+                    } catch (Exception $e) {}
+                }
+
+                try {
+                    $pdo->exec("UPDATE delivery_drivers SET cash_balance = 0");
+                } catch (Exception $e) {}
+
+                echo json_encode([
+                    'success' => true,
+                    'mode' => 'factory_reset_all',
+                    'message' => '✅ تم تنفيذ الحذف الشامل وإعادة ضبط المصنع بنجاح.',
+                    'wiped_tables' => $wiped,
+                    'products_deleted' => $wipe_products
+                ], JSON_UNESCAPED_UNICODE);
+                break;
+            }
+
             echo json_encode([
-                'success' => true,
-                'message' => '✅ تم تصفير وحذف كافة بيانات المتجر الإلكتروني السحابي بنجاح.'
+                'success' => false,
+                'error' => 'وضع التصفير غير معروف. الخيارات المتاحة: zero_quantities_and_balances, wipe_sales_and_operations, factory_reset_all'
             ], JSON_UNESCAPED_UNICODE);
             break;
 

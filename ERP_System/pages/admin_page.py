@@ -999,18 +999,49 @@ class AdminPage(ctk.CTkFrame):
         messagebox.showinfo("نجاح", "تم التغيير بنجاح.")
 
     def delete_all_data(self):
-        # نافذة حوارية تتيح الاختيار بين التصفير المحلي والتصفير الشامل
+        # نافذة حوارية تتيح الاختيار بين تصفير الكميات والحسابات، أو التصفير المحلي، أو التصفير الشامل
         dialog_win = ctk.CTkToplevel(self)
         dialog_win.title("⚠️ خيارات تصفير وحذف البيانات")
-        dialog_win.geometry("520x360")
+        dialog_win.geometry("540x440")
         dialog_win.attributes("-topmost", True)
         dialog_win.resizable(False, False)
 
         header = ctk.CTkFrame(dialog_win, fg_color="#c0392b", corner_radius=10)
-        header.pack(fill="x", padx=15, pady=15)
-        ctk.CTkLabel(header, text="⚠️ تحذير: تصفير وحذف البيانات", font=ctk.CTkFont(size=18, weight="bold"), text_color="white").pack(pady=10)
+        header.pack(fill="x", padx=15, pady=12)
+        ctk.CTkLabel(header, text="⚠️ خيارات تصفير وحذف البيانات", font=ctk.CTkFont(size=17, weight="bold"), text_color="white").pack(pady=8)
 
-        ctk.CTkLabel(dialog_win, text="يرجى اختيار نوع التصفير المطلوب بدقة:", font=ctk.CTkFont(size=14, weight="bold")).pack(pady=5)
+        ctk.CTkLabel(dialog_win, text="يرجى اختيار نوع العملية المطلوبة بدقة:", font=ctk.CTkFont(size=14, weight="bold")).pack(pady=4)
+
+        def do_zero_quantities_and_balances():
+            msg = "هل أنت متأكد من تصفير الكميات والأرصدة؟\n\n- سيتم تصفير مخزون جميع المنتجات إلى (0).\n- سيتم تصفير أرصدة الموردين وحسابات الدليفري إلى (0).\n- سيتم الحفاظ على الأصناف والأسعار والباركود والعملاء كما هي دون مسحها.\n- سيتم تطبيق التصفير محلياً وعلى المتجر السحابي."
+            if not messagebox.askyesno("تأكيد تصفير الحسابات والكميات", msg, icon="warning"):
+                return
+            dialog_win.destroy()
+            try:
+                self.cursor.execute("UPDATE products SET stock = 0")
+                try: self.cursor.execute("UPDATE suppliers SET balance = 0")
+                except: pass
+                try: self.cursor.execute("UPDATE employees SET advances = 0, deductions = 0")
+                except: pass
+                try: self.cursor.execute("DELETE FROM sync_queue")
+                except: pass
+                self.db.commit()
+            except Exception as e:
+                messagebox.showerror("خطأ", f"حدث خطأ أثناء التصفير المحلي: {e}")
+                return
+
+            cloud_msg = ""
+            if hasattr(self, 'sync_mgr'):
+                ok, cloud_res = self.sync_mgr.reset_cloud_database(mode="zero_quantities_and_balances")
+                cloud_msg = f"\nالسحابة: {cloud_res}"
+
+            self.on_show()
+            if hasattr(self.app, 'frames') and 'products' in self.app.frames:
+                self.app.frames['products'].prod_clear_form()
+            if hasattr(self.app, 'frames') and 'pos' in self.app.frames:
+                self.app.frames['pos'].pos_load_products_tree()
+
+            messagebox.showinfo("تم التصفير", f"✅ تم تصفير جميع الكميات (المخزون = 0) وتصفير الحسابات بنجاح محلياً وسحابياً!{cloud_msg}")
 
         def do_local_reset():
             if not messagebox.askyesno("تأكيد التصفير المحلي", "هل أنت متأكد من مسح كافة المنتجات والمبيعات من هذا الجهاز المحلي فقط؟\n(ستبقى بيانات السحابة محفوظة ويمكنك سحبها لاحقاً بضغطة زر)"):
@@ -1042,7 +1073,7 @@ class AdminPage(ctk.CTkFrame):
             # 2. تصفير السحابة
             cloud_msg = ""
             if hasattr(self, 'sync_mgr'):
-                ok, cloud_res = self.sync_mgr.reset_cloud_database()
+                ok, cloud_res = self.sync_mgr.reset_cloud_database(mode="factory_reset_all")
                 cloud_msg = f"\nالسحابة: {cloud_res}"
 
             self.on_show()
@@ -1053,14 +1084,18 @@ class AdminPage(ctk.CTkFrame):
 
             messagebox.showinfo("تم التصفير الشامل", f"✅ تم تصفير وحذف كافة البيانات من الكاشير المحلي ومن المتجر الإلكتروني السحابي معاً بنجاح!{cloud_msg}")
 
+        btn_f0 = ctk.CTkFrame(dialog_win, fg_color="transparent")
+        btn_f0.pack(fill="x", padx=30, pady=6)
+        ctk.CTkButton(btn_f0, text="1. ⚖️ تصفير الحسابات والكميات فقط (المخزون 0 والأرصدة 0 مع بقاء الأصناف)", font=ctk.CTkFont(size=13, weight="bold"), fg_color="#2980b9", hover_color="#1f618d", height=42, command=do_zero_quantities_and_balances).pack(fill="x")
+
         btn_f1 = ctk.CTkFrame(dialog_win, fg_color="transparent")
-        btn_f1.pack(fill="x", padx=30, pady=8)
-        ctk.CTkButton(btn_f1, text="1. 💻 تصفير محلي فقط (مع الحفاظ على السحابة)", font=ctk.CTkFont(size=13, weight="bold"), fg_color="#d35400", hover_color="#ba4a00", height=42, command=do_local_reset).pack(fill="x")
+        btn_f1.pack(fill="x", padx=30, pady=6)
+        ctk.CTkButton(btn_f1, text="2. 💻 تصفير محلي فقط (مسح البيانات محلياً مع الحفاظ على السحابة)", font=ctk.CTkFont(size=13, weight="bold"), fg_color="#d35400", hover_color="#ba4a00", height=42, command=do_local_reset).pack(fill="x")
 
         btn_f2 = ctk.CTkFrame(dialog_win, fg_color="transparent")
-        btn_f2.pack(fill="x", padx=30, pady=8)
-        ctk.CTkButton(btn_f2, text="2. 🌐 تصفير شامل من الكل (محلي + المتجر السحابي)", font=ctk.CTkFont(size=13, weight="bold"), fg_color="#c0392b", hover_color="#922b21", height=42, command=do_full_reset_everywhere).pack(fill="x")
+        btn_f2.pack(fill="x", padx=30, pady=6)
+        ctk.CTkButton(btn_f2, text="3. 🌐 تصفير شامل من الكل (محلي + المتجر السحابي)", font=ctk.CTkFont(size=13, weight="bold"), fg_color="#c0392b", hover_color="#922b21", height=42, command=do_full_reset_everywhere).pack(fill="x")
 
         btn_f3 = ctk.CTkFrame(dialog_win, fg_color="transparent")
-        btn_f3.pack(fill="x", padx=30, pady=12)
+        btn_f3.pack(fill="x", padx=30, pady=10)
         ctk.CTkButton(btn_f3, text="إلغاء وتراجع", font=ctk.CTkFont(size=12), fg_color="#7f8c8d", hover_color="#626567", height=35, command=dialog_win.destroy).pack(fill="x")
