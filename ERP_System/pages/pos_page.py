@@ -327,7 +327,13 @@ class POSPage(ctk.CTkFrame):
 
     def pos_load_products_tree(self, search_term=""):
         for item in self.pos_tree.get_children(): self.pos_tree.delete(item)
-        query = "SELECT id, name, price, stock FROM products WHERE name LIKE ? OR local_code LIKE ? OR ',' || COALESCE(all_barcodes, '') || ',' LIKE ?"
+        query = """
+            SELECT id, 
+                   CASE WHEN is_weight_based = 1 OR unit_type IN ('وزن', 'weight') THEN '⚖️ ' || name ELSE name END, 
+                   price, stock 
+            FROM products 
+            WHERE name LIKE ? OR local_code LIKE ? OR ',' || COALESCE(all_barcodes, '') || ',' LIKE ?
+        """
         s = f'%{search_term}%'
         bc_s = f'%,{search_term},%'
         self.cursor.execute(query, (s, s, bc_s))
@@ -433,7 +439,7 @@ class POSPage(ctk.CTkFrame):
 
         search_code, scale_weight, is_scale = self._parse_scale_barcode(code)
 
-        query = "SELECT name, price, stock FROM products WHERE barcode=? OR local_code=? OR barcode2=? OR barcode3=? OR ',' || COALESCE(all_barcodes, '') || ',' LIKE ?"
+        query = "SELECT name, price, stock, is_weight_based, unit_type FROM products WHERE barcode=? OR local_code=? OR barcode2=? OR barcode3=? OR ',' || COALESCE(all_barcodes, '') || ',' LIKE ?"
         bc_s = f'%,{search_code},%'
         self.cursor.execute(query, (search_code, search_code, search_code, search_code, bc_s))
         prod = self.cursor.fetchone()
@@ -445,10 +451,17 @@ class POSPage(ctk.CTkFrame):
                     text_color="#2ecc71"
                 )
             else:
-                self.status_label.configure(
-                    text=f"📦 {prod[0]} - السعر: {prod[1]:g} ج.م | المخزن: {prod[2]:g}",
-                    text_color="#2ecc71"
-                )
+                is_w = (prod[3] == 1 or prod[4] in ['وزن', 'weight'])
+                if is_w:
+                    self.status_label.configure(
+                        text=f"⚖️ {prod[0]} (بالوزن) - السعر: {prod[1]:g} ج.م / كجم | المخزن: {prod[2]:g}",
+                        text_color="#f39c12"
+                    )
+                else:
+                    self.status_label.configure(
+                        text=f"📦 {prod[0]} - السعر: {prod[1]:g} ج.م | المخزن: {prod[2]:g}",
+                        text_color="#2ecc71"
+                    )
 
     def _on_barcode_return(self, event=None):
         scanned_code = self.pos_barcode.get().strip()

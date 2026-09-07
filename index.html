@@ -622,18 +622,47 @@
         <!-- الموديول 6: شؤون العاملين والطيارين (HR & Staff) -->
         <!-- ======================================================== -->
         <section id="page-hr" class="app-page hidden flex flex-col gap-3.5">
+            <!-- 1. موظفو وعمال المتجر -->
             <div class="bg-app-card border border-app-border rounded-3xl p-3.5 sm:p-4 shadow-xl">
-                <div class="flex items-center gap-2.5 pb-3 border-b border-app-border mb-3">
-                    <span class="w-10 h-10 rounded-2xl bg-purple-500/20 text-purple-400 flex items-center justify-center text-lg font-bold">
-                        <i class="fa-solid fa-users"></i>
-                    </span>
-                    <div>
-                        <h2 class="font-black text-base text-white">شؤون العاملين وإدارة عهد الطيارين والدليفري</h2>
-                        <p class="text-xs text-slate-400">متابعة عهدة الطيارين، تصفية الكاش وتسليمه للدرج، وتسجيل السلف</p>
+                <div class="flex items-center justify-between pb-3 border-b border-app-border mb-3">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg font-bold">
+                            <i class="fa-solid fa-user-group"></i>
+                        </span>
+                        <div>
+                            <h2 class="font-black text-base text-white">موظفو وعمال المتجر</h2>
+                            <p class="text-xs text-slate-400">إدارة وتسجيل عمال وكاشير وإدارة المتجر (مزامنة فورية مع الكاشير المكتبي)</p>
+                        </div>
                     </div>
+                    <button onclick="openEmployeeModal()" class="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-neon transition active:scale-95">
+                        <i class="fa-solid fa-user-plus"></i>
+                        <span>إضافة موظف / عامل</span>
+                    </button>
                 </div>
 
-                <h3 class="font-bold text-xs text-slate-300 mb-2">كباتن التوصيل والعهدة النقدية الحالية:</h3>
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3" id="employees-grid">
+                    <div class="col-span-full py-6 text-center text-slate-500 text-xs font-bold">جاري تحميل بيانات الموظفين والعمال...</div>
+                </div>
+            </div>
+
+            <!-- 2. كباتن التوصيل وعهد الدليفري -->
+            <div class="bg-app-card border border-app-border rounded-3xl p-3.5 sm:p-4 shadow-xl">
+                <div class="flex items-center justify-between pb-3 border-b border-app-border mb-3">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-10 h-10 rounded-2xl bg-purple-500/20 text-purple-400 flex items-center justify-center text-lg font-bold">
+                            <i class="fa-solid fa-motorcycle"></i>
+                        </span>
+                        <div>
+                            <h2 class="font-black text-base text-white">كباتن التوصيل والدليفري والعهدة النقدية</h2>
+                            <p class="text-xs text-slate-400">متابعة عهدة الطيارين، تصفية الكاش وتسليمه للدرج</p>
+                        </div>
+                    </div>
+                    <button onclick="openDriverModal()" class="px-3.5 py-2 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-neon-purple transition active:scale-95">
+                        <i class="fa-solid fa-plus"></i>
+                        <span>إضافة طيار دليفري</span>
+                    </button>
+                </div>
+
                 <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3" id="delivery-drivers-grid"></div>
             </div>
         </section>
@@ -1193,6 +1222,7 @@
             </div>
 
             <form onsubmit="handleProductSyncSubmit(event)" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                <input type="hidden" id="prod-id-field" value="">
                 <div class="sm:col-span-2">
                     <label class="block font-bold text-slate-400 mb-1">اسم الصنف:</label>
                     <input type="text" id="prod-name-field" required placeholder="مثال: جبنة حلوم سوري ممتاز..." class="w-full bg-app-bg border border-slate-700 text-white font-bold rounded-xl px-3 py-2 focus:outline-none focus:border-emerald-500">
@@ -1337,6 +1367,109 @@
         </div>
     </div>
 
+    <!-- 7.1 نافذة إضافة وتعديل موظف / عامل (Employee Modal) -->
+    <div id="employee-modal" class="fixed inset-0 z-[65] bg-black/85 backdrop-blur-sm hidden flex items-center justify-center p-3">
+        <div class="bg-app-card border border-app-border w-full max-w-md rounded-3xl overflow-hidden shadow-2xl p-4 space-y-3.5 fade-in-modal">
+            <div class="flex items-center justify-between border-b border-app-border pb-2.5">
+                <div class="flex items-center gap-2">
+                    <span class="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">
+                        <i class="fa-solid fa-user-plus"></i>
+                    </span>
+                    <div>
+                        <h3 class="font-black text-sm text-white" id="employee-modal-title">إضافة موظف / عامل جديد</h3>
+                        <p class="text-[10px] text-slate-400">مزامنة فورية مع السيرفر والكاشير المكتبي</p>
+                    </div>
+                </div>
+                <button onclick="closeModalWindow('employee-modal')" class="w-7 h-7 rounded-full bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <form onsubmit="handleEmployeeSubmit(event)" class="space-y-2.5 text-xs">
+                <input type="hidden" id="emp-id-field" value="">
+
+                <div>
+                    <label class="block font-bold text-slate-400 mb-1">اسم العامل / الموظف:</label>
+                    <input type="text" id="emp-name-field" required placeholder="مثال: أحمد مصطفى" class="w-full bg-app-bg border border-slate-700 text-white font-bold rounded-xl px-3 py-2 focus:outline-none focus:border-emerald-500">
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block font-bold text-slate-400 mb-1">الوظيفة / الدور:</label>
+                        <select id="emp-role-field" class="w-full bg-app-bg border border-slate-700 text-emerald-400 font-bold rounded-xl px-3 py-2 focus:outline-none">
+                            <option value="عامل">عامل</option>
+                            <option value="كاشير">كاشير</option>
+                            <option value="مدير">مدير</option>
+                            <option value="محاسب">محاسب</option>
+                            <option value="دليفري">دليفري (طيار)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-400 mb-1">رقم الهاتف:</label>
+                        <input type="text" id="emp-phone-field" placeholder="01xxxxxxxxx" class="w-full bg-app-bg border border-slate-700 text-white rounded-xl px-3 py-2 focus:outline-none font-mono">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block font-bold text-slate-400 mb-1">الراتب الأساسي (ج.م):</label>
+                        <input type="number" id="emp-salary-field" step="50" min="0" placeholder="0.00" class="w-full bg-app-bg border border-slate-700 text-white rounded-xl px-3 py-2 focus:outline-none font-mono">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-400 mb-1">نظام الراتب:</label>
+                        <select id="emp-salarytype-field" class="w-full bg-app-bg border border-slate-700 text-white rounded-xl px-3 py-2 focus:outline-none">
+                            <option value="monthly">شهري</option>
+                            <option value="daily">يومي</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button type="submit" id="emp-submit-btn" class="w-full py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white font-black text-xs sm:text-sm rounded-2xl shadow-neon active:scale-95 transition flex items-center justify-center gap-2 mt-2">
+                    <i class="fa-solid fa-floppy-disk"></i>
+                    <span>حفظ ومزامنة الموظف فوراً</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 7.2 نافذة إضافة طيار دليفري (Driver Modal) -->
+    <div id="driver-add-modal" class="fixed inset-0 z-[65] bg-black/85 backdrop-blur-sm hidden flex items-center justify-center p-3">
+        <div class="bg-app-card border border-app-border w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl p-4 space-y-3.5 fade-in-modal">
+            <div class="flex items-center justify-between border-b border-app-border pb-2.5">
+                <div class="flex items-center gap-2">
+                    <span class="w-8 h-8 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center font-bold">
+                        <i class="fa-solid fa-motorcycle"></i>
+                    </span>
+                    <div>
+                        <h3 class="font-black text-sm text-white">إضافة كابتن توصيل (دليفري)</h3>
+                        <p class="text-[10px] text-slate-400">مزامنة فورية مع السيرفر والكاشير</p>
+                    </div>
+                </div>
+                <button onclick="closeModalWindow('driver-add-modal')" class="w-7 h-7 rounded-full bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <form onsubmit="handleDriverSubmit(event)" class="space-y-2.5 text-xs">
+                <div>
+                    <label class="block font-bold text-slate-400 mb-1">اسم الكابتن:</label>
+                    <input type="text" id="drv-add-name" required placeholder="مثال: كابتن حسام" class="w-full bg-app-bg border border-slate-700 text-white font-bold rounded-xl px-3 py-2 focus:outline-none focus:border-purple-500">
+                </div>
+
+                <div>
+                    <label class="block font-bold text-slate-400 mb-1">رقم الهاتف:</label>
+                    <input type="text" id="drv-add-phone" placeholder="01xxxxxxxxx" class="w-full bg-app-bg border border-slate-700 text-white rounded-xl px-3 py-2 focus:outline-none font-mono">
+                </div>
+
+                <div>
+                    <label class="block font-bold text-slate-400 mb-1">رمز الدخول PIN (افتراضي 1234):</label>
+                    <input type="text" id="drv-add-pin" value="1234" maxlength="6" class="w-full bg-app-bg border border-slate-700 text-white rounded-xl px-3 py-2 focus:outline-none font-mono text-center">
+                </div>
+
+                <button type="submit" id="drv-add-submit-btn" class="w-full py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white font-black text-xs sm:text-sm rounded-2xl shadow-neon-purple active:scale-95 transition flex items-center justify-center gap-2 mt-2">
+                    <i class="fa-solid fa-motorcycle"></i>
+                    <span>حفظ ومزامنة الطيار فوراً</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
     <!-- 8. نافذة الإعدادات السحابية (Settings Modal) -->
     <div id="settings-modal" class="fixed inset-0 z-[80] bg-black/85 backdrop-blur-sm hidden flex items-center justify-center p-3">
         <div class="bg-app-card border border-app-border w-full max-w-md rounded-3xl overflow-hidden shadow-2xl p-4 space-y-3.5 fade-in-modal max-h-[92vh] overflow-y-auto">
@@ -1424,6 +1557,7 @@
         let catalogProducts = [];
         let suppliersData = [];
         let deliveryDriversData = [];
+        let employeesData = [];
         let currentCart = {};
         let currentPaymentMethod = 'كاش';
         let activeWeighedProduct = null;
@@ -1650,7 +1784,7 @@
                     renderInventoryAuditRows();
                 }
 
-                // 2. get_pos_meta (suppliers & delivery drivers)
+                // 2. get_pos_meta (suppliers & delivery drivers & employees)
                 try {
                     const metaData = await sendApiRequest('get_pos_meta');
                     if (metaData && metaData.success) {
@@ -1661,6 +1795,10 @@
                         if (Array.isArray(metaData.delivery_drivers)) {
                             deliveryDriversData = metaData.delivery_drivers;
                             renderDeliveryDriversList(deliveryDriversData);
+                        }
+                        if (Array.isArray(metaData.employees)) {
+                            employeesData = metaData.employees;
+                            renderEmployeesList(employeesData);
                         }
                     }
                 } catch (e) {}
@@ -1716,6 +1854,10 @@
             if (pageKey === 'reports') loadShiftReportsData();
             if (pageKey === 'inventory') renderInventoryAuditRows();
             if (pageKey === 'products') renderProductsManagementTable();
+            if (pageKey === 'hr') {
+                renderEmployeesList(employeesData);
+                renderDeliveryDriversList(deliveryDriversData);
+            }
         }
 
         // ========================================================
@@ -2521,7 +2663,10 @@
                 return `
                     <tr class="hover:bg-app-bg transition">
                         <td class="p-3 text-center font-mono text-cyan-400 font-bold">${p.local_code || p.id}</td>
-                        <td class="p-3 font-black text-slate-100">${p.name}</td>
+                        <td class="p-3 font-black text-slate-100">
+                            ${(p.is_weight_based == 1 || p.unit_type === 'وزن' || p.unit_type === 'weight') ? '<span class="text-amber-400 font-bold ml-1 text-xs">⚖️</span>' : '<span class="text-slate-500 font-normal ml-1 text-xs">📦</span>'}
+                            ${p.name}
+                        </td>
                         <td class="p-3 text-center text-slate-400">${p.category || 'عام'}</td>
                         <td class="p-3 text-center font-mono text-slate-400">${p.barcode || '-'}</td>
                         <td class="p-3 text-center font-mono font-bold text-emerald-400">${price.toFixed(2)} ج.م</td>
@@ -2539,12 +2684,14 @@
         }
 
         function openNewProductModal() {
+            document.getElementById('prod-id-field').value = '';
             document.getElementById('prod-name-field').value = '';
             document.getElementById('prod-category-field').value = '';
             document.getElementById('prod-price-field').value = '';
             document.getElementById('prod-cost-field').value = '';
             document.getElementById('prod-stock-field').value = '50';
             document.getElementById('prod-barcode-field').value = '';
+            document.getElementById('prod-unittype-field').value = 'piece';
             generateRandomLocalCode();
             document.getElementById('product-modal').classList.remove('hidden');
         }
@@ -2552,6 +2699,7 @@
         function openEditProductModal(prodId) {
             const p = catalogProducts.find(x => x.id === prodId);
             if (!p) return;
+            document.getElementById('prod-id-field').value = p.id;
             document.getElementById('prod-name-field').value = p.name;
             document.getElementById('prod-category-field').value = p.category || '';
             document.getElementById('prod-price-field').value = p.price;
@@ -2559,11 +2707,14 @@
             document.getElementById('prod-stock-field').value = p.stock || 0;
             document.getElementById('prod-barcode-field').value = p.barcode || '';
             document.getElementById('prod-localcode-field').value = p.local_code || p.id;
+            const isWeight = (p.is_weight_based == 1 || p.unit_type === 'وزن' || p.unit_type === 'weight');
+            document.getElementById('prod-unittype-field').value = isWeight ? 'weight' : 'piece';
             document.getElementById('product-modal').classList.remove('hidden');
         }
 
         async function handleProductSyncSubmit(e) {
             e.preventDefault();
+            const id = document.getElementById('prod-id-field').value.trim();
             const name = document.getElementById('prod-name-field').value.trim();
             const category = document.getElementById('prod-category-field').value.trim() || 'عام';
             const price = parseFloat(document.getElementById('prod-price-field').value || 0);
@@ -2572,8 +2723,21 @@
             const barcode = document.getElementById('prod-barcode-field').value.trim();
             const localCode = document.getElementById('prod-localcode-field').value.trim();
             const unitType = document.getElementById('prod-unittype-field').value;
+            const isWeightBased = (unitType === 'weight' || unitType === 'وزن') ? 1 : 0;
+            const unitTypeVal = isWeightBased ? 'وزن' : 'قطعة';
 
-            const payload = { name, category, price, cost, stock, barcode, local_code: localCode, unit_type: unitType };
+            const payload = { 
+                id: id ? parseInt(id) : undefined, 
+                name, 
+                category, 
+                price, 
+                cost, 
+                stock, 
+                barcode, 
+                local_code: localCode, 
+                unit_type: unitTypeVal,
+                is_weight_based: isWeightBased
+            };
             const btn = document.getElementById('save-prod-btn');
             btn.disabled = true;
             btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> جاري المزامنة...`;
@@ -2940,6 +3104,180 @@
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = `<i class="fa-solid fa-hand-holding-dollar"></i><span>استلام الكاش وتصفية العهدة</span>`;
+            }
+        }
+
+        function renderEmployeesList(employees) {
+            const grid = document.getElementById('employees-grid');
+            if (!grid) return;
+
+            if (!employees || employees.length === 0) {
+                grid.innerHTML = `
+                    <div class="col-span-full py-8 text-center text-slate-500 text-xs font-bold bg-app-bg/50 border border-dashed border-app-border rounded-2xl">
+                        <i class="fa-solid fa-users-slash text-2xl mb-2 text-slate-600 block"></i>
+                        لا يوجد موظفون أو عمال مسجلون حالياً. اضغط "إضافة موظف / عامل" للإضافة الفورية.
+                    </div>
+                `;
+                return;
+            }
+
+            grid.innerHTML = employees.map(emp => {
+                const salary = parseFloat(emp.salary || 0);
+                let roleColor = 'bg-emerald-500/15 text-emerald-400';
+                let roleIcon = 'fa-user';
+                if (emp.role === 'دليفري' || emp.role === 'طيار') {
+                    roleColor = 'bg-purple-500/15 text-purple-400';
+                    roleIcon = 'fa-motorcycle';
+                } else if (emp.role === 'كاشير') {
+                    roleColor = 'bg-amber-500/15 text-amber-400';
+                    roleIcon = 'fa-cash-register';
+                } else if (emp.role === 'مدير') {
+                    roleColor = 'bg-rose-500/15 text-rose-400';
+                    roleIcon = 'fa-user-tie';
+                } else if (emp.role === 'محاسب') {
+                    roleColor = 'bg-blue-500/15 text-blue-400';
+                    roleIcon = 'fa-calculator';
+                } else {
+                    roleColor = 'bg-cyan-500/15 text-cyan-400';
+                    roleIcon = 'fa-user-gear';
+                }
+
+                return `
+                    <div class="bg-app-bg border border-app-border rounded-2xl p-3 flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2">
+                                    <span class="w-7 h-7 rounded-lg ${roleColor} flex items-center justify-center text-xs">
+                                        <i class="fa-solid ${roleIcon}"></i>
+                                    </span>
+                                    <h4 class="font-black text-sm text-slate-100">${emp.name}</h4>
+                                </div>
+                                <span class="text-[10px] px-2 py-0.5 rounded-md ${roleColor} font-bold">${emp.role || 'عامل'}</span>
+                            </div>
+                            <p class="text-xs text-slate-400 font-mono mt-2 flex items-center gap-1.5">
+                                <i class="fa-solid fa-phone text-[10px] text-slate-500"></i>
+                                ${emp.phone || 'بدون هاتف'}
+                            </p>
+                        </div>
+
+                        <div class="pt-3 mt-3 border-t border-app-border flex items-center justify-between">
+                            <div>
+                                <span class="text-[10px] text-slate-400 block font-bold">الراتب الأساسي:</span>
+                                <b class="text-xs font-black text-emerald-400 font-mono">
+                                    ${salary.toFixed(2)} ج.م
+                                    <span class="text-[10px] font-normal text-slate-400">(${emp.salary_type === 'daily' ? 'يومي' : 'شهري'})</span>
+                                </b>
+                            </div>
+
+                            <button onclick="openEditEmployeeModal(${emp.id})" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded-xl text-xs font-bold border border-slate-700 transition active:scale-95 flex items-center gap-1">
+                                <i class="fa-solid fa-pen-to-square"></i>
+                                تعديل
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function openEmployeeModal() {
+            document.getElementById('employee-modal-title').textContent = 'إضافة موظف / عامل جديد';
+            document.getElementById('emp-id-field').value = '';
+            document.getElementById('emp-name-field').value = '';
+            document.getElementById('emp-role-field').value = 'عامل';
+            document.getElementById('emp-phone-field').value = '';
+            document.getElementById('emp-salary-field').value = '';
+            document.getElementById('emp-salarytype-field').value = 'monthly';
+            document.getElementById('employee-modal').classList.remove('hidden');
+        }
+
+        function openEditEmployeeModal(empId) {
+            const emp = employeesData.find(x => x.id === empId || x.id == empId);
+            if (!emp) return;
+            document.getElementById('employee-modal-title').textContent = `تعديل بيانات الموظف: ${emp.name}`;
+            document.getElementById('emp-id-field').value = emp.id;
+            document.getElementById('emp-name-field').value = emp.name;
+            document.getElementById('emp-role-field').value = emp.role || 'عامل';
+            document.getElementById('emp-phone-field').value = emp.phone || '';
+            document.getElementById('emp-salary-field').value = emp.salary || 0;
+            document.getElementById('emp-salarytype-field').value = emp.salary_type || 'monthly';
+            document.getElementById('employee-modal').classList.remove('hidden');
+        }
+
+        async function handleEmployeeSubmit(e) {
+            e.preventDefault();
+            const id = document.getElementById('emp-id-field').value.trim();
+            const name = document.getElementById('emp-name-field').value.trim();
+            const role = document.getElementById('emp-role-field').value;
+            const phone = document.getElementById('emp-phone-field').value.trim();
+            const salary = parseFloat(document.getElementById('emp-salary-field').value || 0);
+            const salaryType = document.getElementById('emp-salarytype-field').value;
+
+            const payload = {
+                id: id ? parseInt(id) : undefined,
+                name,
+                role,
+                phone,
+                salary,
+                salary_type: salaryType
+            };
+
+            const btn = document.getElementById('emp-submit-btn');
+            btn.disabled = true;
+            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> جاري الحفظ...`;
+
+            try {
+                const res = await sendApiRequest('sync_employee', payload);
+                if (res && res.success) {
+                    playSoundTone('success');
+                    displayToast(`✅ ${res.message || 'تم حفظ ومزامنة الموظف بنجاح!'}`, 'success');
+                    closeModalWindow('employee-modal');
+                    syncFullSystemData(false);
+                } else {
+                    throw new Error(res.error || 'فشل حفظ الموظف');
+                }
+            } catch (err) {
+                displayToast(`خطأ: ${err.message}`, 'error');
+                playSoundTone('error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `<i class="fa-solid fa-floppy-disk"></i><span>حفظ ومزامنة الموظف فوراً</span>`;
+            }
+        }
+
+        function openDriverModal() {
+            document.getElementById('drv-add-name').value = '';
+            document.getElementById('drv-add-phone').value = '';
+            document.getElementById('drv-add-pin').value = '1234';
+            document.getElementById('driver-add-modal').classList.remove('hidden');
+        }
+
+        async function handleDriverSubmit(e) {
+            e.preventDefault();
+            const name = document.getElementById('drv-add-name').value.trim();
+            const phone = document.getElementById('drv-add-phone').value.trim();
+            const pin = document.getElementById('drv-add-pin').value.trim() || '1234';
+
+            const payload = { name, phone, pin };
+            const btn = document.getElementById('drv-add-submit-btn');
+            btn.disabled = true;
+            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> جاري الحفظ...`;
+
+            try {
+                const res = await sendApiRequest('sync_delivery_driver', payload);
+                if (res && res.success) {
+                    playSoundTone('success');
+                    displayToast(`✅ ${res.message || 'تم تسجيل كابتن التوصيل بنجاح!'}`, 'success');
+                    closeModalWindow('driver-add-modal');
+                    syncFullSystemData(false);
+                } else {
+                    throw new Error(res.error || 'فشل تسجيل الطيار');
+                }
+            } catch (err) {
+                displayToast(`خطأ: ${err.message}`, 'error');
+                playSoundTone('error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `<i class="fa-solid fa-motorcycle"></i><span>حفظ ومزامنة الطيار فوراً</span>`;
             }
         }
 

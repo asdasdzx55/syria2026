@@ -56,19 +56,23 @@ class HRPage(ctk.CTkFrame):
         grid_f.pack(fill="x", padx=10, pady=10)
 
         ctk.CTkLabel(grid_f, text="اسم الموظف/الطيار:", font=ctk.CTkFont(weight="bold")).pack(side="right", padx=5)
-        self.hr_name = ctk.CTkEntry(grid_f, placeholder_text="اسم الموظف الكامل", width=180, font=("Arial", 14))
+        self.hr_name = ctk.CTkEntry(grid_f, placeholder_text="اسم الموظف الكامل", width=160, font=("Arial", 14))
         self.hr_name.pack(side="right", padx=5)
+
+        ctk.CTkLabel(grid_f, text="الهاتف:", font=ctk.CTkFont(weight="bold")).pack(side="right", padx=5)
+        self.hr_phone = ctk.CTkEntry(grid_f, placeholder_text="رقم الهاتف", width=120, justify="center", font=("Arial", 14))
+        self.hr_phone.pack(side="right", padx=5)
         
         ctk.CTkLabel(grid_f, text="الوظيفة:", font=ctk.CTkFont(weight="bold")).pack(side="right", padx=5)
-        self.hr_role = ctk.CTkComboBox(grid_f, values=["عامل", "دليفري", "كاشير", "مدير"], width=130, font=("Arial", 14))
+        self.hr_role = ctk.CTkComboBox(grid_f, values=["عامل", "دليفري", "كاشير", "مدير", "محاسب"], width=110, font=("Arial", 14))
         self.hr_role.pack(side="right", padx=5)
         
         ctk.CTkLabel(grid_f, text="الراتب الأساسي:", font=ctk.CTkFont(weight="bold")).pack(side="right", padx=5)
-        self.hr_salary = ctk.CTkEntry(grid_f, placeholder_text="0.00", width=110, justify="center", font=("Arial", 14))
+        self.hr_salary = ctk.CTkEntry(grid_f, placeholder_text="0.00", width=95, justify="center", font=("Arial", 14))
         self.hr_salary.pack(side="right", padx=5)
         
         ctk.CTkLabel(grid_f, text="ساعات العمل:", font=ctk.CTkFont(weight="bold")).pack(side="right", padx=5)
-        self.hr_hours = ctk.CTkEntry(grid_f, placeholder_text="8", width=70, justify="center", font=("Arial", 14))
+        self.hr_hours = ctk.CTkEntry(grid_f, placeholder_text="8", width=60, justify="center", font=("Arial", 14))
         self.hr_hours.pack(side="right", padx=5)
         
         self.btn_add_emp = ctk.CTkButton(grid_f, text="➕ تسجيل موظف", font=ctk.CTkFont(weight="bold"), fg_color="#27ae60", hover_color="#1e8449", command=self.add_employee)
@@ -81,10 +85,11 @@ class HRPage(ctk.CTkFrame):
         tree_frame = ctk.CTkFrame(tab, corner_radius=12, fg_color="#2c3e50")
         tree_frame.pack(expand=True, fill="both", padx=10, pady=10)
         
-        self.emp_tree = ttk.Treeview(tree_frame, columns=('id', 'name', 'role', 'salary', 'hours', 'advances', 'deductions'), show='headings')
+        self.emp_tree = ttk.Treeview(tree_frame, columns=('id', 'name', 'role', 'phone', 'salary', 'hours', 'advances', 'deductions'), show='headings')
         self.emp_tree.heading('id', text='الكود')
         self.emp_tree.heading('name', text='الاسم')
         self.emp_tree.heading('role', text='الوظيفة')
+        self.emp_tree.heading('phone', text='الهاتف')
         self.emp_tree.heading('salary', text='الراتب الأساسي')
         self.emp_tree.heading('hours', text='ساعات العمل')
         self.emp_tree.heading('advances', text='إجمالي السلف')
@@ -358,7 +363,7 @@ class HRPage(ctk.CTkFrame):
     # ==========================================
     def load_employees(self):
         for item in self.emp_tree.get_children(): self.emp_tree.delete(item)
-        self.cursor.execute("SELECT id, name, role, salary, hours, advances, deductions FROM employees")
+        self.cursor.execute("SELECT id, name, role, salary, hours, advances, deductions, phone FROM employees")
         emps = self.cursor.fetchall()
         
         emp_list = [f"{e[0]} - {e[1]} ({e[2]})" for e in emps]
@@ -368,7 +373,8 @@ class HRPage(ctk.CTkFrame):
             self.pay_emp_combo.configure(values=emp_list)
 
         for e in emps:
-            self.emp_tree.insert("", "end", values=(e[0], e[1], e[2], f"{e[3]:g}", e[4], f"{e[5]:g}", f"{e[6]:g}"))
+            phone_display = e[7] if e[7] else "---"
+            self.emp_tree.insert("", "end", values=(e[0], e[1], e[2], phone_display, f"{e[3]:g}", e[4], f"{e[5]:g}", f"{e[6]:g}"))
 
     def on_employee_double_click(self, event):
         selected = self.emp_tree.selection()
@@ -377,12 +383,15 @@ class HRPage(ctk.CTkFrame):
         
         self.current_edit_emp_id = item[0]
         self.hr_name.delete(0, 'end')
-        self.hr_name.insert(0, item[1])
-        self.hr_role.set(item[2])
+        self.hr_name.insert(0, str(item[1]))
+        self.hr_role.set(str(item[2]))
+        self.hr_phone.delete(0, 'end')
+        if len(item) > 3 and str(item[3]) != "---":
+            self.hr_phone.insert(0, str(item[3]))
         self.hr_salary.delete(0, 'end')
-        self.hr_salary.insert(0, str(item[3]))
+        self.hr_salary.insert(0, str(item[4]))
         self.hr_hours.delete(0, 'end')
-        self.hr_hours.insert(0, str(item[4]))
+        self.hr_hours.insert(0, str(item[5]))
         
         self.btn_add_emp.configure(state="disabled")
         self.btn_edit_emp.configure(state="normal")
@@ -390,41 +399,54 @@ class HRPage(ctk.CTkFrame):
     def add_employee(self):
         name = self.hr_name.get().strip()
         role = self.hr_role.get()
+        phone = self.hr_phone.get().strip()
         if not name: return
         try:
             salary = float(self.hr_salary.get() or 0)
             hours = int(self.hr_hours.get() or 0)
-            self.cursor.execute("INSERT INTO employees (name, role, salary, hours) VALUES (?, ?, ?, ?)", (name, role, salary, hours))
+            self.cursor.execute("INSERT INTO employees (name, role, salary, hours, phone, synced) VALUES (?, ?, ?, ?, ?, 0)", (name, role, salary, hours, phone))
             self.db.commit()
-            messagebox.showinfo("نجاح", f"تم تسجيل {name} كوظيفة ({role}) بنجاح!")
+            
+            # تشغيل المزامنة اللحظية مع السحابة
+            if hasattr(self.app, 'sync_mgr'):
+                self.app.sync_mgr.trigger_instant_sync()
+
+            messagebox.showinfo("نجاح", f"تم تسجيل {name} كوظيفة ({role}) وبدء المزامنة بنجاح!")
             self.load_employees()
             self.load_delivery_drivers_combo()
             self._clear_form()
-        except:
-            messagebox.showerror("خطأ", "تأكد من إدخال الأرقام بشكل صحيح.")
+        except Exception as e:
+            messagebox.showerror("خطأ", f"تأكد من إدخال البيانات بشكل صحيح: {e}")
 
     def update_employee(self):
         if not self.current_edit_emp_id: return
         name = self.hr_name.get().strip()
         role = self.hr_role.get()
+        phone = self.hr_phone.get().strip()
         try:
             salary = float(self.hr_salary.get() or 0)
             hours = int(self.hr_hours.get() or 0)
-            self.cursor.execute("UPDATE employees SET name=?, role=?, salary=?, hours=? WHERE id=?", 
-                                (name, role, salary, hours, self.current_edit_emp_id))
+            self.cursor.execute("UPDATE employees SET name=?, role=?, salary=?, hours=?, phone=?, synced=0 WHERE id=?", 
+                                (name, role, salary, hours, phone, self.current_edit_emp_id))
             self.db.commit()
-            messagebox.showinfo("نجاح", "تم تحديث بيانات الموظف بنجاح.")
+            
+            # تشغيل المزامنة اللحظية مع السحابة
+            if hasattr(self.app, 'sync_mgr'):
+                self.app.sync_mgr.trigger_instant_sync()
+
+            messagebox.showinfo("نجاح", "تم تحديث بيانات الموظف والمزامنة بنجاح.")
             self.load_employees()
             self.load_delivery_drivers_combo()
             self._clear_form()
             self.btn_add_emp.configure(state="normal")
             self.btn_edit_emp.configure(state="disabled")
             self.current_edit_emp_id = None
-        except:
-            messagebox.showerror("خطأ", "تأكد من إدخال الأرقام بشكل صحيح.")
+        except Exception as e:
+            messagebox.showerror("خطأ", f"تأكد من إدخال البيانات بشكل صحيح: {e}")
 
     def _clear_form(self):
         self.hr_name.delete(0, 'end')
+        self.hr_phone.delete(0, 'end')
         self.hr_salary.delete(0, 'end')
         self.hr_hours.delete(0, 'end')
         self.hr_role.set("عامل")

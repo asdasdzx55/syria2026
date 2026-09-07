@@ -79,20 +79,25 @@ class ProductsPage(ctk.CTkFrame):
         self.ent_p_stock.pack(side="right", padx=5)
 
         # ==================================
-        # 2.1 التصنيف الأساسي والفرعي
+        # 2.1 التصنيف الأساسي والفرعي ونوع الصنف (قطعة / وزن)
         # ==================================
         row_cat = ctk.CTkFrame(form_frame, fg_color="#1a252f", corner_radius=8)
         row_cat.pack(fill="x", pady=6, padx=10)
 
         ctk.CTkLabel(row_cat, text="🏷️ التصنيف الأساسي:", font=ctk.CTkFont(weight="bold"), text_color="#2ecc71").pack(side="right", padx=(10, 4), pady=6)
-        self.combo_main_cat = ctk.CTkComboBox(row_cat, width=170, command=self._on_main_category_selected)
+        self.combo_main_cat = ctk.CTkComboBox(row_cat, width=140, command=self._on_main_category_selected)
         self.combo_main_cat.pack(side="right", padx=4, pady=6)
 
         ctk.CTkLabel(row_cat, text="📂 التصنيف الفرعي:", font=ctk.CTkFont(weight="bold"), text_color="#3498db").pack(side="right", padx=(10, 4), pady=6)
-        self.combo_sub_cat = ctk.CTkComboBox(row_cat, width=170)
+        self.combo_sub_cat = ctk.CTkComboBox(row_cat, width=140)
         self.combo_sub_cat.pack(side="right", padx=4, pady=6)
 
-        ctk.CTkButton(row_cat, text="➕ إضافة / إدارة التصنيفات", width=160, fg_color="#16a085", hover_color="#117864", font=ctk.CTkFont(weight="bold"), command=self.open_categories_manager).pack(side="left", padx=10, pady=6)
+        ctk.CTkLabel(row_cat, text="⚖️ نوع الصنف:", font=ctk.CTkFont(weight="bold"), text_color="#f1c40f").pack(side="right", padx=(10, 4), pady=6)
+        self.combo_unit_type = ctk.CTkComboBox(row_cat, width=115, values=["قطعة 📦", "بالوزن ⚖️"], font=("Arial", 12, "bold"))
+        self.combo_unit_type.set("قطعة 📦")
+        self.combo_unit_type.pack(side="right", padx=4, pady=6)
+
+        ctk.CTkButton(row_cat, text="➕ إدارة التصنيفات", width=130, fg_color="#16a085", hover_color="#117864", font=ctk.CTkFont(weight="bold"), command=self.open_categories_manager).pack(side="left", padx=10, pady=6)
 
         # ==================================
         # 3. نظام الباركود الدولي والفرعي
@@ -381,12 +386,13 @@ class ProductsPage(ctk.CTkFrame):
         tree_scroll = ttk.Scrollbar(tree_frame)
         tree_scroll.pack(side="left", fill="y")
         
-        tree = ttk.Treeview(tree_frame, columns=('id', 'local_code', 'name', 'main_cat', 'sub_cat', 'price', 'cost', 'stock'), show='headings', yscrollcommand=tree_scroll.set)
+        tree = ttk.Treeview(tree_frame, columns=('id', 'local_code', 'name', 'unit', 'main_cat', 'sub_cat', 'price', 'cost', 'stock'), show='headings', yscrollcommand=tree_scroll.set)
         tree_scroll.config(command=tree.yview)
         
         tree.heading('id', text='ID')
         tree.heading('local_code', text='كود محلي')
         tree.heading('name', text='اسم المنتج')
+        tree.heading('unit', text='النوع')
         tree.heading('main_cat', text='التصنيف الأساسي')
         tree.heading('sub_cat', text='التصنيف الفرعي')
         tree.heading('price', text='سعر البيع')
@@ -395,9 +401,10 @@ class ProductsPage(ctk.CTkFrame):
         
         tree.column('id', width=40, stretch=False, anchor='center')
         tree.column('local_code', width=80, anchor='center')
-        tree.column('name', width=180, anchor='center')
-        tree.column('main_cat', width=120, anchor='center')
-        tree.column('sub_cat', width=120, anchor='center')
+        tree.column('name', width=170, anchor='center')
+        tree.column('unit', width=65, anchor='center')
+        tree.column('main_cat', width=110, anchor='center')
+        tree.column('sub_cat', width=110, anchor='center')
         tree.column('price', width=75, anchor='center')
         tree.column('cost', width=75, anchor='center')
         tree.column('stock', width=75, anchor='center')
@@ -407,7 +414,9 @@ class ProductsPage(ctk.CTkFrame):
             term = search_var.get().lower()
             for item in tree.get_children(): tree.delete(item)
             query = """
-                SELECT id, local_code, name, COALESCE(main_category, category, 'عام'), COALESCE(sub_category, 'عام'), price, cost, stock 
+                SELECT id, local_code, name, 
+                       CASE WHEN is_weight_based = 1 OR unit_type IN ('وزن', 'weight') THEN '⚖️ وزن' ELSE '📦 قطعة' END,
+                       COALESCE(main_category, category, 'عام'), COALESCE(sub_category, 'عام'), price, cost, stock 
                 FROM products 
                 WHERE name LIKE ? OR local_code LIKE ? OR barcode LIKE ? OR barcode2 LIKE ? OR barcode3 LIKE ? 
                 OR main_category LIKE ? OR sub_category LIKE ? OR category LIKE ? OR ',' || COALESCE(all_barcodes, '') || ',' LIKE ?
@@ -490,7 +499,7 @@ class ProductsPage(ctk.CTkFrame):
         self.all_product_ids = [r[0] for r in self.cursor.fetchall()]
 
     def load_product_by_id(self, p_id):
-        self.cursor.execute("SELECT id, barcode, barcode2, barcode3, name, price, cost, stock, all_barcodes, local_code, main_category, sub_category, category FROM products WHERE id=?", (p_id,))
+        self.cursor.execute("SELECT id, barcode, barcode2, barcode3, name, price, cost, stock, all_barcodes, local_code, main_category, sub_category, category, is_weight_based, unit_type FROM products WHERE id=?", (p_id,))
         row = self.cursor.fetchone()
         if row:
             self.prod_clear_form()
@@ -509,6 +518,9 @@ class ProductsPage(ctk.CTkFrame):
             self.combo_main_cat.set(main_c)
             self._on_main_category_selected()
             self.combo_sub_cat.set(sub_c)
+
+            is_w = (row[13] == 1 or row[14] in ['وزن', 'weight'])
+            self.combo_unit_type.set("بالوزن ⚖️" if is_w else "قطعة 📦")
             
             all_bcs = row[8]
             self.current_barcodes_list = []
@@ -594,10 +606,13 @@ class ProductsPage(ctk.CTkFrame):
             b2 = b_others[1] if len(b_others) > 1 else None
             b3 = b_others[2] if len(b_others) > 2 else None
             
+            is_weight = 1 if "وزن" in self.combo_unit_type.get() else 0
+            unit_t = "وزن" if is_weight else "قطعة"
+
             self.cursor.execute("""
-                INSERT INTO products (barcode, local_code, barcode2, barcode3, name, price, cost, stock, all_barcodes, category, main_category, sub_category, synced) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
-            """, (b1, loc_code, b2, b3, name, price, cost, stock, all_bcs_str, main_cat, main_cat, sub_cat))
+                INSERT INTO products (barcode, local_code, barcode2, barcode3, name, price, cost, stock, all_barcodes, category, main_category, sub_category, is_weight_based, unit_type, synced) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+            """, (b1, loc_code, b2, b3, name, price, cost, stock, all_bcs_str, main_cat, main_cat, sub_cat, is_weight, unit_t))
             new_id = self.cursor.lastrowid
             self.db.commit()
             
@@ -608,7 +623,7 @@ class ProductsPage(ctk.CTkFrame):
             self.refresh_nav_ids()
             self.prod_clear_form()
             
-            self.show_status(f"✅ تم إضافة ({name}) في قسم [{main_cat} > {sub_cat}] والمزامنة بنجاح!", "#2ecc71")
+            self.show_status(f"✅ تم إضافة ({name}) [{unit_t}] في قسم [{main_cat} > {sub_cat}] والمزامنة بنجاح!", "#2ecc71")
             self.ent_p_name.focus() 
             
         except sqlite3.IntegrityError:
@@ -656,11 +671,14 @@ class ProductsPage(ctk.CTkFrame):
             b2 = b_others[1] if len(b_others) > 1 else None
             b3 = b_others[2] if len(b_others) > 2 else None
             
+            is_weight = 1 if "وزن" in self.combo_unit_type.get() else 0
+            unit_t = "وزن" if is_weight else "قطعة"
+
             self.cursor.execute("""
                 UPDATE products 
-                SET barcode=?, local_code=?, barcode2=?, barcode3=?, name=?, price=?, cost=?, stock=?, all_barcodes=?, category=?, main_category=?, sub_category=?, synced=0 
+                SET barcode=?, local_code=?, barcode2=?, barcode3=?, name=?, price=?, cost=?, stock=?, all_barcodes=?, category=?, main_category=?, sub_category=?, is_weight_based=?, unit_type=?, synced=0 
                 WHERE id=?
-            """, (b1, loc_code, b2, b3, name, price, cost, stock, all_bcs_str, main_cat, main_cat, sub_cat, self.current_edit_id))
+            """, (b1, loc_code, b2, b3, name, price, cost, stock, all_bcs_str, main_cat, main_cat, sub_cat, is_weight, unit_t, self.current_edit_id))
 
             self.db.commit()
             
@@ -669,7 +687,7 @@ class ProductsPage(ctk.CTkFrame):
                 self.app.sync_mgr.trigger_instant_sync()
 
             self.prod_clear_form()
-            self.show_status("✅ تم التعديل وحفظ التصنيف والمزامنة بنجاح!", "#2ecc71")
+            self.show_status(f"✅ تم التعديل وحفظ النوع [{unit_t}] والمزامنة بنجاح!", "#2ecc71")
         except sqlite3.IntegrityError:
             messagebox.showerror("خطأ", "أحد الباركودات مستخدم بالفعل لمنتج آخر!")
         except Exception as e: 
@@ -709,6 +727,9 @@ class ProductsPage(ctk.CTkFrame):
         self.current_barcodes_list = []
         self.render_barcodes_list()
         
+        if hasattr(self, 'combo_unit_type'):
+            self.combo_unit_type.set("قطعة 📦")
+
         # إعادة تعيين التصنيفات للوضع الافتراضي
         try:
             mains = self.combo_main_cat.cget("values")

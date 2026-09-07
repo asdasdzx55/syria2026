@@ -208,8 +208,13 @@ class HybridSyncManager:
 
                 # 6. مزامنة طياري ومندوبي الدليفري ثنائياً
                 self._sync_delivery_drivers(url, key, conn, cur)
+                self._pull_cloud_delivery_drivers(url, key, conn, cur)
 
-                # 7. سحب الطلبات الجديدة القادمة من المتجر الإلكتروني
+                # 7. مزامنة موظفي وعمال المتجر ثنائياً
+                self._sync_pending_employees(url, key, conn, cur)
+                self._pull_cloud_employees(url, key, conn, cur)
+
+                # 8. سحب الطلبات الجديدة القادمة من المتجر الإلكتروني
                 self._pull_online_orders(url, key, conn, cur)
 
             except Exception as e:
@@ -275,10 +280,16 @@ class HybridSyncManager:
 
     def _sync_pending_products(self, api_url, api_key, conn, cur):
         try:
-            cur.execute("SELECT id, barcode, barcode2, barcode3, all_barcodes, local_code, name, price, cost, stock, category, sub_category, remote_id FROM products WHERE synced = 0 LIMIT 50")
+            cur.execute("""
+                SELECT id, barcode, barcode2, barcode3, all_barcodes, local_code, name, price, cost, stock, category, sub_category, remote_id, is_weight_based, unit_type 
+                FROM products 
+                WHERE synced = 0 LIMIT 50
+            """)
             rows = cur.fetchall()
             for r in rows:
                 p_id = r[0]
+                is_weight = 1 if (r[13] or (r[14] in ['وزن', 'weight'])) else 0
+                unit_t = r[14] or ('وزن' if is_weight else 'قطعة')
                 payload = {
                     'local_product_id': p_id,
                     'remote_id': r[12] or '',
@@ -292,7 +303,9 @@ class HybridSyncManager:
                     'cost': r[8] or 0,
                     'stock': r[9] or 0,
                     'category': r[10] or 'عام',
-                    'sub_category': r[11] or ''
+                    'sub_category': r[11] or '',
+                    'is_weight_based': is_weight,
+                    'unit_type': unit_t
                 }
 
                 ok, resp = self._make_request(api_url, action='sync_product', payload=payload, api_key=api_key, method='POST')
@@ -304,20 +317,109 @@ class HybridSyncManager:
         except Exception as e:
             print(f"Sync products error: {e}")
 
-
     def _sync_delivery_drivers(self, api_url, api_key, conn, cur):
+        """مزامنة طياري ومندوبي الدليفري فقط (فصل حاسم عن العمال والموظفين)"""
         try:
-            cur.execute("SELECT id, name FROM employees WHERE role IN ('دليفري', 'طيار', 'سائق', 'عامل') OR role LIKE '%دليفري%' OR role LIKE '%طيار%'")
+            cur.execute("""
+                SELECT id, name, phone, remote_id 
+                FROM employees 
+                WHERE (role IN ('دليفري', 'طيار', 'سائق') OR role LIKE '%دليفري%' OR role LIKE '%طيار%' OR role LIKE '%سائق%')
+                AND (synced = 0 OR synced IS NULL)
+            """)
             rows = cur.fetchall()
             for r in rows:
                 payload = {
                     'name': r[1] or '',
-                    'phone': '',
+                    'phone': r[2] or '',
                     'pin_code': '1234'
                 }
-                self._make_request(api_url, action='sync_delivery_driver', payload=payload, api_key=api_key, method='POST')
+                ok, resp = self._make_request(api_url, action='sync_delivery_driver', payload=payload, api_key=api_key, method='POST')
+                if ok and isinstance(resp, dict) and resp.get('success'):
+                    d_id = resp.get('driver_id', '')
+                    cur.execute("UPDATE employees SET synced=1, remote_id=? WHERE id=?", (str(d_id), r[0]))
+                    conn.commit()
         except Exception as e:
             print(f"Sync delivery drivers error: {e}")
+
+    def _sync_pending_employees(self, api_url, api_key, conn, cur):
+        """مزامنة عمال وموظفي المتجر إلى السحابة فوراً (غير طياري الدليفري)"""
+        try:
+            cur.execute("""
+                SELECT id, name, role, salary, phone, remote_id 
+                FROM employees 
+                WHERE (role NOT IN ('دليفري', 'طيار', 'سائق') AND role NOT LIKE '%دليفري%' AND role NOT LIKE '%طيار%' AND role NOT LIKE '%سائق%')
+                AND (synced = 0 OR synced IS NULL)
+                LIMIT 50
+            """)
+            rows = cur.fetchall()
+            for r in rows:
+                e_id = r[0]
+                payload = {
+                    'employee_id': r[5] or '',
+                    'name': r[1] or '',
+                    'role': r[2] or 'عامل',
+                    'salary': r[3] or 0,
+                    'base_salary': r[3] or 0,
+                    'phone': r[4] or '',
+                    'is_active': 1
+                }
+                ok, resp = self._make_request(api_url, action='sync_employee', payload=payload, api_key=api_key, method='POST')
+                if ok and isinstance(resp, dict) and resp.get('success'):
+                    rem_id = resp.get('employee_id', '')
+                    cur.execute("UPDATE employees SET synced=1, remote_id=? WHERE id=?", (str(rem_id), e_id))
+                    conn.commit()
+        except Exception as e:
+            print(f"Sync pending employees error: {e}")
+
+    def _pull_cloud_employees(self, api_url, api_key, conn, cur):
+        """سحب عمال وموظفي المتجر المضافين أو المحدثين من كاشير الويب إلى الكاشير المكتبي"""
+        try:
+            ok, resp = self._make_request(api_url, action='get_employees', api_key=api_key, method='GET', timeout=8)
+            if ok and isinstance(resp, dict) and resp.get('success'):
+                emps = resp.get('employees', [])
+                for e in emps:
+                    name = (e.get('name') or '').strip()
+                    if not name: continue
+                    role = (e.get('role') or 'عامل').strip()
+                    phone = (e.get('phone') or '').strip()
+                    sal = float(e.get('base_salary') or 0)
+                    rem_id = str(e.get('id') or '')
+
+                    # تخطي كباتن التوصيل هنا لأنهم يُدارون في دالة _pull_cloud_delivery_drivers
+                    if role in ('دليفري', 'طيار', 'سائق') or 'دليفري' in role or 'طيار' in role:
+                        continue
+
+                    cur.execute("SELECT id, role FROM employees WHERE remote_id = ? OR name = ? LIMIT 1", (rem_id, name))
+                    row = cur.fetchone()
+                    if row:
+                        cur.execute("UPDATE employees SET name=?, role=?, salary=?, phone=?, synced=1, remote_id=? WHERE id=?", (name, role, sal, phone, rem_id, row[0]))
+                    else:
+                        cur.execute("INSERT INTO employees (name, role, salary, phone, hours, synced, remote_id) VALUES (?, ?, ?, ?, 8, 1, ?)", (name, role, sal, phone, rem_id))
+                conn.commit()
+        except Exception as e:
+            print(f"Pull cloud employees error: {e}")
+
+    def _pull_cloud_delivery_drivers(self, api_url, api_key, conn, cur):
+        """سحب كباتن التوصيل والدليفري المضافين من كاشير الويب إلى الكاشير المكتبي"""
+        try:
+            ok, resp = self._make_request(api_url, action='get_delivery_drivers', api_key=api_key, method='GET', timeout=8)
+            if ok and isinstance(resp, dict) and resp.get('success'):
+                drivers = resp.get('delivery_drivers', [])
+                for d in drivers:
+                    name = (d.get('name') or '').strip()
+                    if not name: continue
+                    phone = (d.get('phone') or '').strip()
+                    rem_id = str(d.get('id') or '')
+
+                    cur.execute("SELECT id FROM employees WHERE remote_id = ? OR name = ? LIMIT 1", (rem_id, name))
+                    row = cur.fetchone()
+                    if row:
+                        cur.execute("UPDATE employees SET role='دليفري', phone=?, synced=1, remote_id=? WHERE id=?", (phone, rem_id, row[0]))
+                    else:
+                        cur.execute("INSERT INTO employees (name, role, salary, phone, hours, synced, remote_id) VALUES (?, 'دليفري', 0, ?, 8, 1, ?)", (name, phone, rem_id))
+                conn.commit()
+        except Exception as e:
+            print(f"Pull cloud delivery drivers error: {e}")
 
     def _sync_pending_suppliers(self, api_url, api_key, conn, cur):
         try:
@@ -465,6 +567,8 @@ class HybridSyncManager:
                 p_cat = (cp.get('category') or 'عام').strip()
                 p_sub = (cp.get('sub_category') or '').strip()
                 p_rem_id = str(cp.get('id', ''))
+                p_is_weight = 1 if (cp.get('is_weight_based') or cp.get('unit_type') in ['weight', 'وزن']) else 0
+                p_unit_type = cp.get('unit_type') or ('وزن' if p_is_weight else 'قطعة')
 
                 # البحث عن المنتج محلياً بالباركود أو الكود المحلي أو الاسم
                 local_row = None
@@ -481,15 +585,15 @@ class HybridSyncManager:
                 if local_row:
                     loc_id = local_row[0]
                     cur.execute("""
-                        UPDATE products SET name=?, price=?, cost=?, stock=?, barcode=?, barcode2=?, barcode3=?, all_barcodes=?, local_code=?, category=?, main_category=?, sub_category=?, synced=1, remote_id=? 
+                        UPDATE products SET name=?, price=?, cost=?, stock=?, barcode=?, barcode2=?, barcode3=?, all_barcodes=?, local_code=?, category=?, main_category=?, sub_category=?, is_weight_based=?, unit_type=?, synced=1, remote_id=? 
                         WHERE id=?
-                    """, (p_name, p_price, p_cost, p_stock, p_barcode, p_bc2, p_bc3, p_all_bc, p_loc, p_cat, p_cat, p_sub, p_rem_id, loc_id))
+                    """, (p_name, p_price, p_cost, p_stock, p_barcode, p_bc2, p_bc3, p_all_bc, p_loc, p_cat, p_cat, p_sub, p_is_weight, p_unit_type, p_rem_id, loc_id))
                     updated_count += 1
                 else:
                     cur.execute("""
-                        INSERT INTO products (barcode, barcode2, barcode3, all_barcodes, local_code, name, price, cost, stock, category, main_category, sub_category, synced, remote_id) 
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
-                    """, (p_barcode, p_bc2, p_bc3, p_all_bc, p_loc, p_name, p_price, p_cost, p_stock, p_cat, p_cat, p_sub, p_rem_id))
+                        INSERT INTO products (barcode, barcode2, barcode3, all_barcodes, local_code, name, price, cost, stock, category, main_category, sub_category, is_weight_based, unit_type, synced, remote_id) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+                    """, (p_barcode, p_bc2, p_bc3, p_all_bc, p_loc, p_name, p_price, p_cost, p_stock, p_cat, p_cat, p_sub, p_is_weight, p_unit_type, p_rem_id))
                     inserted_count += 1
 
                 # تسجيل وتحديث الأقسام والتصنيفات تلقائياً محلياً

@@ -234,6 +234,8 @@ try {
                 $p['barcode'] = $p['barcode'] ?? '';
                 $p['local_code'] = $p['local_code'] ?? '';
                 $p['all_barcodes'] = $p['all_barcodes'] ?? ($p['barcode'] ?: '');
+                $p['is_weight_based'] = (!empty($p['is_weight_based']) || ($p['unit_type'] ?? '') === 'weight' || ($p['unit_type'] ?? '') === 'وزن') ? 1 : 0;
+                $p['unit_type'] = !empty($p['unit_type']) ? $p['unit_type'] : ($p['is_weight_based'] ? 'وزن' : 'قطعة');
             }
             unset($p);
             
@@ -882,6 +884,18 @@ try {
                 $driver_id = (int)$pdo->lastInsertId();
             }
 
+            // مزامنة الموظف في جدول employees ليكون دوره 'دليفري'
+            try {
+                $chk_emp = $pdo->prepare("SELECT id FROM employees WHERE name = ? LIMIT 1");
+                $chk_emp->execute([$name]);
+                $emp_id_found = $chk_emp->fetchColumn();
+                if ($emp_id_found) {
+                    $pdo->prepare("UPDATE employees SET role = 'دليفري', phone = ? WHERE id = ?")->execute([$phone, $emp_id_found]);
+                } else {
+                    $pdo->prepare("INSERT INTO employees (name, phone, role, salary_type, base_salary, is_active) VALUES (?, ?, 'دليفري', 'monthly', 0, ?)")->execute([$name, $phone, $active]);
+                }
+            } catch (Exception $e) {}
+
             echo json_encode([
                 'success' => true,
                 'driver_id' => $driver_id,
@@ -1119,7 +1133,7 @@ try {
             $phone = trim($data['phone'] ?? '');
             $role = trim($data['role'] ?? 'عامل');
             $salary_type = trim($data['salary_type'] ?? 'monthly');
-            $base_salary = (float)($data['base_salary'] ?? 0);
+            $base_salary = (float)($data['base_salary'] ?? $data['salary'] ?? 0);
             $daily_wage = (float)($data['daily_wage'] ?? 0);
             $hire_date = !empty($data['hire_date']) ? trim($data['hire_date']) : date('Y-m-d');
             $is_active = isset($data['is_active']) ? (int)$data['is_active'] : 1;
@@ -1183,10 +1197,32 @@ try {
                 $final_id = (int)$pdo->lastInsertId();
             }
 
+            // التمييز الحاسم بين الطيار والعامل العادي
+            $is_driver = (in_array($role, ['دليفري', 'طيار', 'سائق']) || mb_strpos($role, 'دليفري') !== false || mb_strpos($role, 'طيار') !== false);
+            if ($is_driver) {
+                try {
+                    $chk_d = $pdo->prepare("SELECT id FROM delivery_drivers WHERE name = ? LIMIT 1");
+                    $chk_d->execute([$name]);
+                    $d_id = $chk_d->fetchColumn();
+                    if ($d_id) {
+                        $pdo->prepare("UPDATE delivery_drivers SET phone = ?, is_active = ? WHERE id = ?")->execute([$phone, $is_active, $d_id]);
+                    } else {
+                        $pdo->prepare("INSERT INTO delivery_drivers (name, phone, pin_code, cash_balance, is_active) VALUES (?, ?, '1234', 0, ?)")->execute([$name, $phone, $is_active]);
+                    }
+                } catch (Exception $e) {}
+            } else {
+                // إذا لم يكن طياراً، نحذفه فوراً من جدول delivery_drivers لتصحيح أي إضافة خاطئة سابقة
+                try {
+                    $del_d = $pdo->prepare("DELETE FROM delivery_drivers WHERE name = ?");
+                    $del_d->execute([$name]);
+                } catch (Exception $e) {}
+            }
+
             echo json_encode([
                 'success' => true,
                 'employee_id' => $final_id,
                 'name' => $name,
+                'is_delivery' => $is_driver,
                 'message' => "✅ تمت مزامنة بيانات الموظف ({$name}) بنجاح."
             ], JSON_UNESCAPED_UNICODE);
             break;
@@ -1455,7 +1491,8 @@ try {
             $local_code = trim($data['local_code'] ?? '');
             $description = trim($data['description'] ?? '');
             $image_url = trim($data['image_url'] ?? '');
-            $is_weight_based = !empty($data['is_weight_based']) ? 1 : 0;
+            $is_weight_based = (!empty($data['is_weight_based']) || ($data['unit_type'] ?? '') === 'weight' || ($data['unit_type'] ?? '') === 'وزن') ? 1 : 0;
+            $unit_type = trim($data['unit_type'] ?? ($is_weight_based ? 'وزن' : 'قطعة'));
             
             if (empty($name)) {
                 echo json_encode(['success' => false, 'error' => 'اسم المنتج مطلوب!']);
@@ -1503,15 +1540,17 @@ try {
             try { $pdo->exec("ALTER TABLE products ADD COLUMN barcode3 VARCHAR(100) DEFAULT NULL"); } catch (Exception $e) {}
             try { $pdo->exec("ALTER TABLE products ADD COLUMN all_barcodes TEXT DEFAULT NULL"); } catch (Exception $e) {}
             try { $pdo->exec("ALTER TABLE products ADD COLUMN local_code VARCHAR(50) DEFAULT NULL"); } catch (Exception $e) {}
+            try { $pdo->exec("ALTER TABLE products ADD COLUMN is_weight_based TINYINT DEFAULT 0"); } catch (Exception $e) {}
+            try { $pdo->exec("ALTER TABLE products ADD COLUMN unit_type VARCHAR(50) DEFAULT 'قطعة'"); } catch (Exception $e) {}
 
             if ($existing_id) {
-                $upd = $pdo->prepare("UPDATE products SET name = ?, category = ?, sub_category = ?, price = ?, cost = ?, stock = ?, barcode = ?, barcode2 = ?, barcode3 = ?, all_barcodes = ?, local_code = ? WHERE id = ?");
-                $upd->execute([$name, $category, $sub_category, $price, $cost, $stock, $barcode, $barcode2, $barcode3, $all_barcodes, $local_code, $existing_id]);
+                $upd = $pdo->prepare("UPDATE products SET name = ?, category = ?, sub_category = ?, price = ?, cost = ?, stock = ?, barcode = ?, barcode2 = ?, barcode3 = ?, all_barcodes = ?, local_code = ?, is_weight_based = ?, unit_type = ? WHERE id = ?");
+                $upd->execute([$name, $category, $sub_category, $price, $cost, $stock, $barcode, $barcode2, $barcode3, $all_barcodes, $local_code, $is_weight_based, $unit_type, $existing_id]);
                 $final_id = $existing_id;
                 $action_done = 'updated';
             } else {
-                $ins = $pdo->prepare("INSERT INTO products (name, category, sub_category, price, cost, stock, barcode, barcode2, barcode3, all_barcodes, local_code, description, image_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                $ins->execute([$name, $category, $sub_category, $price, $cost, $stock, $barcode, $barcode2, $barcode3, $all_barcodes, $local_code, $description, $image_url]);
+                $ins = $pdo->prepare("INSERT INTO products (name, category, sub_category, price, cost, stock, barcode, barcode2, barcode3, all_barcodes, local_code, description, image_url, is_weight_based, unit_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $ins->execute([$name, $category, $sub_category, $price, $cost, $stock, $barcode, $barcode2, $barcode3, $all_barcodes, $local_code, $description, $image_url, $is_weight_based, $unit_type]);
                 $final_id = $pdo->lastInsertId();
                 $action_done = 'inserted';
             }
@@ -1853,11 +1892,23 @@ try {
             $categories = $pdo->query("SELECT name FROM expense_categories ORDER BY name ASC")->fetchAll(PDO::FETCH_COLUMN);
             $partners = $pdo->query("SELECT name FROM partners ORDER BY name ASC")->fetchAll(PDO::FETCH_COLUMN);
             
+            $drivers = [];
+            try {
+                $drivers = $pdo->query("SELECT id, name, phone, cash_balance, is_active FROM delivery_drivers WHERE is_active = 1 ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
+            } catch (Exception $e) {}
+
+            $employees = [];
+            try {
+                $employees = $pdo->query("SELECT id, name, phone, role, salary_type, base_salary, daily_wage, is_active FROM employees WHERE is_active = 1 ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
+            } catch (Exception $e) {}
+
             echo json_encode([
                 'success' => true,
                 'suppliers' => $suppliers,
                 'expense_categories' => $categories,
-                'partners' => $partners
+                'partners' => $partners,
+                'delivery_drivers' => $drivers,
+                'employees' => $employees
             ], JSON_UNESCAPED_UNICODE);
             break;
 

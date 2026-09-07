@@ -121,7 +121,13 @@ def setup_database():
         ("purchase_items", "barcode TEXT"),
         ("purchase_items", "name TEXT"),
         ("purchase_items", "unit TEXT DEFAULT 'قطعة'"),
-        ("purchase_items", "selling_price REAL DEFAULT 0")
+        ("purchase_items", "selling_price REAL DEFAULT 0"),
+        ("products", "is_weight_based INTEGER DEFAULT 0"),
+        ("products", "unit_type TEXT DEFAULT 'قطعة'"),
+        ("products", "weight_unit TEXT DEFAULT 'كجم'"),
+        ("employees", "phone TEXT"),
+        ("employees", "synced INTEGER DEFAULT 0"),
+        ("employees", "remote_id TEXT")
     ]
 
     for table, col_def in migrations:
