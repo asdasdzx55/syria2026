@@ -327,18 +327,33 @@ class POSPage(ctk.CTkFrame):
 
     def pos_load_products_tree(self, search_term=""):
         for item in self.pos_tree.get_children(): self.pos_tree.delete(item)
+        s = f'%{search_term}%'
+        bc_s = f'%,{search_term},%'
+        
+        # 1. المنتجات الأساسية
         query = """
             SELECT id, 
                    CASE WHEN is_weight_based = 1 OR unit_type IN ('وزن', 'weight') THEN '⚖️ ' || name ELSE name END, 
                    price, stock 
             FROM products 
-            WHERE name LIKE ? OR local_code LIKE ? OR ',' || COALESCE(all_barcodes, '') || ',' LIKE ?
+            WHERE name LIKE ? OR local_code LIKE ? OR barcode LIKE ? OR barcode2 LIKE ? OR barcode3 LIKE ? OR ',' || COALESCE(all_barcodes, '') || ',' LIKE ?
         """
-        s = f'%{search_term}%'
-        bc_s = f'%,{search_term},%'
-        self.cursor.execute(query, (s, s, bc_s))
+        self.cursor.execute(query, (s, s, s, s, s, bc_s))
         for row in self.cursor.fetchall():
-            self.pos_tree.insert("", "end", values=row)
+            self.pos_tree.insert("", "end", values=(str(row[0]), row[1], f"{row[2]:g}", f"{row[3]:g}"))
+
+        # 2. الدست والكراتين التابعة للأصناف القابلة للبيع ككرتونة/دستة
+        pack_query = """
+            SELECT id,
+                   '📦 ' || COALESCE(NULLIF(pack_name, ''), 'دستة/كرتونة ' || name) || ' (' || pack_qty || ' ' || COALESCE(weight_unit, 'قطعة') || ')',
+                   pack_price,
+                   ROUND(stock / CASE WHEN pack_qty > 0 THEN pack_qty ELSE 1 END, 1)
+            FROM products
+            WHERE has_pack = 1 AND (pack_name LIKE ? OR pack_barcode LIKE ? OR name LIKE ?)
+        """
+        self.cursor.execute(pack_query, (s, s, s))
+        for row in self.cursor.fetchall():
+            self.pos_tree.insert("", "end", values=(f"{row[0]}_pack", row[1], f"{row[2]:g}", f"{row[3]:g}"))
 
     def pos_live_search(self, *args):
         self.pos_load_products_tree(self.pos_search_var.get())
@@ -346,22 +361,22 @@ class POSPage(ctk.CTkFrame):
     def open_advanced_search(self):
         win = ctk.CTkToplevel(self)
         win.title("بحث متقدم عن أصناف الكاشير (F1)")
-        win.geometry("680x450")
+        win.geometry("720x460")
         win.attributes("-topmost", True)
 
         search_var = ctk.StringVar()
-        ent_search = ctk.CTkEntry(win, textvariable=search_var, placeholder_text="ابحث بالاسم، الباركود المحلي 5 أرقام، أو الباركود الدولي...", font=("Arial", 16))
+        ent_search = ctk.CTkEntry(win, textvariable=search_var, placeholder_text="ابحث بالاسم، باركود الدستة/الكرتونة، الباركود المحلي 5 أرقام، أو الدولي...", font=("Arial", 16))
         ent_search.pack(fill="x", padx=10, pady=10)
 
         tree = ttk.Treeview(win, columns=('id', 'local_code', 'name', 'price', 'stock'), show='headings')
         tree.heading('id', text='ID')
-        tree.heading('local_code', text='كود محلي')
-        tree.heading('name', text='الاسم')
+        tree.heading('local_code', text='كود/باركود')
+        tree.heading('name', text='الاسم / الوحدة')
         tree.heading('price', text='السعر')
         tree.heading('stock', text='المخزن')
-        tree.column('id', width=40, anchor='center')
-        tree.column('local_code', width=90, anchor='center')
-        tree.column('name', width=220, anchor='center')
+        tree.column('id', width=50, anchor='center')
+        tree.column('local_code', width=110, anchor='center')
+        tree.column('name', width=260, anchor='center')
         tree.column('price', width=80, anchor='center')
         tree.column('stock', width=80, anchor='center')
         tree.pack(expand=True, fill="both", padx=10, pady=5)
@@ -369,12 +384,20 @@ class POSPage(ctk.CTkFrame):
         def do_search(*args):
             term = search_var.get().lower()
             for item in tree.get_children(): tree.delete(item)
-            query = "SELECT id, local_code, name, price, stock FROM products WHERE name LIKE ? OR local_code LIKE ? OR barcode LIKE ? OR barcode2 LIKE ? OR barcode3 LIKE ? OR ',' || COALESCE(all_barcodes, '') || ',' LIKE ?"
             s = f"%{term}%"
             bc_s = f"%,{term},%"
+            
+            # العادي
+            query = "SELECT id, local_code, name, price, stock FROM products WHERE name LIKE ? OR local_code LIKE ? OR barcode LIKE ? OR barcode2 LIKE ? OR barcode3 LIKE ? OR ',' || COALESCE(all_barcodes, '') || ',' LIKE ?"
             self.cursor.execute(query, (s, s, s, s, s, bc_s))
             for row in self.cursor.fetchall():
                 tree.insert("", "end", values=row)
+
+            # الدست والكراتين
+            p_query = "SELECT id, COALESCE(NULLIF(pack_barcode, ''), 'دستة'), '📦 ' || COALESCE(NULLIF(pack_name, ''), 'كرتونة ' || name) || ' (' || pack_qty || ' ' || COALESCE(weight_unit, 'قطعة') || ')', pack_price, ROUND(stock / CASE WHEN pack_qty > 0 THEN pack_qty ELSE 1 END, 1) FROM products WHERE has_pack = 1 AND (pack_name LIKE ? OR pack_barcode LIKE ? OR name LIKE ?)"
+            self.cursor.execute(p_query, (s, s, s))
+            for row in self.cursor.fetchall():
+                tree.insert("", "end", values=(f"{row[0]}_pack", row[1], row[2], row[3], row[4]))
 
         search_var.trace("w", do_search)
         do_search()
@@ -383,11 +406,18 @@ class POSPage(ctk.CTkFrame):
             selected = tree.selection()
             if not selected: return
             item = tree.item(selected[0])['values']
-            p_id = item[0]
+            raw_val = str(item[0])
             qty = self._get_qty_input()
-            self.cursor.execute("SELECT id, name, price, stock FROM products WHERE id=?", (p_id,))
-            prod = self.cursor.fetchone()
-            if prod: self._add_to_cart_logic(prod, qty)
+            if "_pack" in raw_val:
+                p_id = int(raw_val.replace("_pack", ""))
+                self.cursor.execute("SELECT id, name, price, stock, is_weight_based, unit_type, has_pack, pack_name, pack_barcode, pack_price, pack_qty, weight_unit FROM products WHERE id=?", (p_id,))
+                prod = self.cursor.fetchone()
+                if prod: self._add_to_cart_pack(prod, qty)
+            else:
+                p_id = int(raw_val)
+                self.cursor.execute("SELECT id, name, price, stock, is_weight_based, unit_type, has_pack, pack_name, pack_barcode, pack_price, pack_qty, weight_unit FROM products WHERE id=?", (p_id,))
+                prod = self.cursor.fetchone()
+                if prod: self._add_to_cart_logic(prod, qty)
             win.destroy()
 
         tree.bind("<Double-1>", select_item)
@@ -439,27 +469,36 @@ class POSPage(ctk.CTkFrame):
 
         search_code, scale_weight, is_scale = self._parse_scale_barcode(code)
 
-        query = "SELECT name, price, stock, is_weight_based, unit_type FROM products WHERE barcode=? OR local_code=? OR barcode2=? OR barcode3=? OR ',' || COALESCE(all_barcodes, '') || ',' LIKE ?"
+        query = """SELECT id, name, price, stock, is_weight_based, unit_type, has_pack, pack_name, pack_barcode, pack_price, pack_qty, weight_unit 
+                   FROM products 
+                   WHERE barcode=? OR local_code=? OR barcode2=? OR barcode3=? OR pack_barcode=? OR ',' || COALESCE(all_barcodes, '') || ',' LIKE ?"""
         bc_s = f'%,{search_code},%'
-        self.cursor.execute(query, (search_code, search_code, search_code, search_code, bc_s))
+        self.cursor.execute(query, (search_code, search_code, search_code, search_code, search_code, bc_s))
         prod = self.cursor.fetchone()
         if prod:
             if is_scale:
-                total_val = prod[1] * scale_weight
+                total_val = prod[2] * scale_weight
                 self.status_label.configure(
-                    text=f"⚖️ {prod[0]} | وزن: {scale_weight:g} كجم | السعر: {prod[1]:g} ج.م | الإجمالي: {total_val:.2f} ج.م",
+                    text=f"⚖️ {prod[1]} | وزن: {scale_weight:g} كجم | السعر: {prod[2]:g} ج.م | الإجمالي: {total_val:.2f} ج.م",
                     text_color="#2ecc71"
                 )
+            elif prod[6] == 1 and search_code == prod[8]:
+                p_name_pack = prod[7] or f"دستة/كرتونة {prod[1]}"
+                avail_packs = round(prod[3] / (prod[10] if prod[10] > 0 else 1), 1)
+                self.status_label.configure(
+                    text=f"📦 [دستة/كرتونة] {p_name_pack} - السعر: {prod[9]:g} ج.م | متاح: {avail_packs:g} (تخصم {prod[10]:g} من الرصيد)",
+                    text_color="#3498db"
+                )
             else:
-                is_w = (prod[3] == 1 or prod[4] in ['وزن', 'weight'])
+                is_w = (prod[4] == 1 or prod[5] in ['وزن', 'weight'])
                 if is_w:
                     self.status_label.configure(
-                        text=f"⚖️ {prod[0]} (بالوزن) - السعر: {prod[1]:g} ج.م / كجم | المخزن: {prod[2]:g}",
+                        text=f"⚖️ {prod[1]} (بالوزن) - السعر: {prod[2]:g} ج.م / كجم | المخزن: {prod[3]:g}",
                         text_color="#f39c12"
                     )
                 else:
                     self.status_label.configure(
-                        text=f"📦 {prod[0]} - السعر: {prod[1]:g} ج.م | المخزن: {prod[2]:g}",
+                        text=f"📦 {prod[1]} - السعر: {prod[2]:g} ج.م | المخزن: {prod[3]:g}",
                         text_color="#2ecc71"
                     )
 
@@ -479,21 +518,67 @@ class POSPage(ctk.CTkFrame):
             self.pos_barcode.focus()
 
     def _add_to_cart_logic(self, prod, qty):
-        p_id, p_name, p_price, p_stock = prod
-        current_qty = self.pos_cart.get(p_id, {}).get('qty', 0.0)
+        p_id = prod[0]
+        p_name = prod[1]
+        p_price = float(prod[2]) if prod[2] is not None else 0.0
+        p_stock = float(prod[3]) if prod[3] is not None else 0.0
         
+        cart_key = str(p_id)
+        current_qty = self.pos_cart.get(cart_key, {}).get('qty', 0.0)
+        
+        if cart_key in self.pos_cart: 
+            self.pos_cart[cart_key]['qty'] += qty
+        else: 
+            self.pos_cart[cart_key] = {
+                'product_id': p_id,
+                'name': p_name,
+                'price': p_price,
+                'qty': qty,
+                'pack_multiplier': 1.0,
+                'is_pack': 0
+            }
+            
         if p_stock >= (current_qty + qty): 
-            if p_id in self.pos_cart: self.pos_cart[p_id]['qty'] += qty
-            else: self.pos_cart[p_id] = {'name': p_name, 'price': p_price, 'qty': qty}
             self.show_status(f"✅ تمت إضافة ({p_name}) - كمية: {qty:g}", "#2ecc71")
         else:
-            if p_id in self.pos_cart: self.pos_cart[p_id]['qty'] += qty
-            else: self.pos_cart[p_id] = {'name': p_name, 'price': p_price, 'qty': qty}
-            self.show_status(f"⚠️ تمت الإضافة (لكن المخزون لا يكفي: {p_stock})", "#f39c12")
+            self.show_status(f"⚠️ تمت الإضافة (لكن المخزون لا يكفي: {p_stock:g})", "#f39c12")
             
         self.update_pos_cart()
         self._reset_qty_inputs()
 
+    def _add_to_cart_pack(self, prod, qty):
+        p_id = prod[0]
+        p_name = prod[1]
+        p_stock = float(prod[3]) if prod[3] is not None else 0.0
+        pack_name = prod[7] if len(prod) > 7 and prod[7] else f"دستة {p_name}"
+        pack_price = float(prod[9]) if len(prod) > 9 and prod[9] else 0.0
+        pack_qty = float(prod[10]) if len(prod) > 10 and prod[10] and float(prod[10]) > 0 else 1.0
+        
+        cart_key = f"{p_id}_pack"
+        total_deduct_qty = qty * pack_qty
+        current_cart_qty = self.pos_cart.get(cart_key, {}).get('qty', 0.0)
+        
+        if cart_key in self.pos_cart:
+            self.pos_cart[cart_key]['qty'] += qty
+        else:
+            self.pos_cart[cart_key] = {
+                'product_id': p_id,
+                'name': f"📦 {pack_name}",
+                'price': pack_price,
+                'qty': qty,
+                'pack_multiplier': pack_qty,
+                'is_pack': 1,
+                'pack_name': pack_name
+            }
+        
+        needed_total_deduct = (current_cart_qty + qty) * pack_qty
+        if p_stock < needed_total_deduct:
+            self.show_status(f"⚠️ تمت إضافة ({pack_name}) - رصيد المخزن قليل ({p_stock:g})", "#f39c12")
+        else:
+            self.show_status(f"✅ تمت إضافة ({pack_name}) - عدد: {qty:g} (تخصم {total_deduct_qty:g} من الرصيد)", "#2ecc71")
+            
+        self.update_pos_cart()
+        self._reset_qty_inputs()
 
     def pos_add_by_barcode(self, event=None):
         scanned_code = self.pos_barcode.get().strip()
@@ -507,9 +592,11 @@ class POSPage(ctk.CTkFrame):
         else:
             qty = self._get_qty_input()
             
-        query = "SELECT id, name, price, stock FROM products WHERE barcode=? OR local_code=? OR barcode2=? OR barcode3=? OR ',' || COALESCE(all_barcodes, '') || ',' LIKE ?"
+        query = """SELECT id, name, price, stock, is_weight_based, unit_type, has_pack, pack_name, pack_barcode, pack_price, pack_qty, weight_unit 
+                   FROM products 
+                   WHERE barcode=? OR local_code=? OR barcode2=? OR barcode3=? OR pack_barcode=? OR ',' || COALESCE(all_barcodes, '') || ',' LIKE ?"""
         exact_bc_search = f'%,{search_code},%'
-        self.cursor.execute(query, (search_code, search_code, search_code, search_code, exact_bc_search))
+        self.cursor.execute(query, (search_code, search_code, search_code, search_code, search_code, exact_bc_search))
         prod = self.cursor.fetchone()
 
         if prod:
@@ -517,7 +604,12 @@ class POSPage(ctk.CTkFrame):
                 self.show_status("❌ الكمية أو الوزن غير صحيح!", "#e74c3c")
                 self.pos_barcode.focus()
                 return
-            self._add_to_cart_logic(prod, qty)
+            
+            # إذا كان الباركود الممسوح يطابق باركود الدستة والمنتج مفعل به نظام الدستة
+            if prod[6] == 1 and search_code == prod[8]:
+                self._add_to_cart_pack(prod, qty)
+            else:
+                self._add_to_cart_logic(prod, qty)
         else: 
             self.show_status(f"❌ باركود / كود صنف غير مسجل: {search_code}", "#e74c3c")
             self.pos_barcode.focus()
@@ -525,12 +617,22 @@ class POSPage(ctk.CTkFrame):
     def pos_add_from_tree(self, event):
         selected = self.pos_tree.selection()
         if not selected: return
-        p_id = self.pos_tree.item(selected[0])['values'][0]
+        raw_val = str(self.pos_tree.item(selected[0])['values'][0])
         qty = self._get_qty_input()
         if qty <= 0: return
-        self.cursor.execute("SELECT id, name, price, stock FROM products WHERE id=?", (p_id,))
-        prod = self.cursor.fetchone()
-        if prod: self._add_to_cart_logic(prod, qty)
+        
+        if "_pack" in raw_val:
+            p_id = int(raw_val.replace("_pack", ""))
+            self.cursor.execute("SELECT id, name, price, stock, is_weight_based, unit_type, has_pack, pack_name, pack_barcode, pack_price, pack_qty, weight_unit FROM products WHERE id=?", (p_id,))
+            prod = self.cursor.fetchone()
+            if prod:
+                self._add_to_cart_pack(prod, qty)
+        else:
+            p_id = int(raw_val)
+            self.cursor.execute("SELECT id, name, price, stock, is_weight_based, unit_type, has_pack, pack_name, pack_barcode, pack_price, pack_qty, weight_unit FROM products WHERE id=?", (p_id,))
+            prod = self.cursor.fetchone()
+            if prod:
+                self._add_to_cart_logic(prod, qty)
 
     def edit_cart_item(self, event=None):
         selected = self.cart_tree.selection()
@@ -539,11 +641,11 @@ class POSPage(ctk.CTkFrame):
             return
         
         try:
-            p_id = int(self.cart_tree.item(selected[0])['values'][0])
-        except (IndexError, ValueError):
+            cart_key = str(self.cart_tree.item(selected[0])['values'][0])
+        except IndexError:
             return
 
-        item = self.pos_cart.get(p_id)
+        item = self.pos_cart.get(cart_key)
         if not item: return
 
         curr_qty = float(item['qty'])
@@ -560,7 +662,7 @@ class POSPage(ctk.CTkFrame):
 
         header_frame = ctk.CTkFrame(edit_win, fg_color="#1f538d", corner_radius=10)
         header_frame.pack(fill="x", padx=15, pady=15)
-        ctk.CTkLabel(header_frame, text=f"📦 {item['name']}", font=ctk.CTkFont(size=18, weight="bold"), text_color="white").pack(pady=10)
+        ctk.CTkLabel(header_frame, text=f"{item['name']}", font=ctk.CTkFont(size=18, weight="bold"), text_color="white").pack(pady=10)
 
         quick_frame = ctk.CTkFrame(edit_win, fg_color="transparent")
         quick_frame.pack(fill="x", padx=15, pady=5)
@@ -632,8 +734,8 @@ class POSPage(ctk.CTkFrame):
                 new_price = float(ent_price.get() or 0)
                 if new_qty <= 0 or new_price < 0: raise ValueError
                 
-                self.pos_cart[p_id]['qty'] = new_qty
-                self.pos_cart[p_id]['price'] = new_price
+                self.pos_cart[cart_key]['qty'] = new_qty
+                self.pos_cart[cart_key]['price'] = new_price
                 self.update_pos_cart()
                 
                 self.show_status(f"🔄 تم تعديل ({item['name']}) -> {new_qty:g}", "#2ecc71")
@@ -652,9 +754,9 @@ class POSPage(ctk.CTkFrame):
     def remove_selected_item(self):
         selected = self.cart_tree.selection()
         if not selected: return
-        p_id = self.cart_tree.item(selected[0])['values'][0] 
-        if p_id in self.pos_cart:
-            del self.pos_cart[p_id]
+        cart_key = str(self.cart_tree.item(selected[0])['values'][0]) 
+        if cart_key in self.pos_cart:
+            del self.pos_cart[cart_key]
             self.update_pos_cart()
         self.pos_barcode.focus()
 
@@ -666,10 +768,10 @@ class POSPage(ctk.CTkFrame):
     def update_pos_cart(self):
         for item in self.cart_tree.get_children(): self.cart_tree.delete(item)
         self.pos_total = 0.0
-        for p_id, item in self.pos_cart.items():
+        for cart_key, item in self.pos_cart.items():
             subtotal = item['price'] * item['qty']
             self.pos_total += subtotal
-            self.cart_tree.insert("", "end", values=(p_id, item['name'], f"{item['qty']:g}", f"{item['price']:g}", f"{subtotal:g}"))
+            self.cart_tree.insert("", "end", values=(cart_key, item['name'], f"{item['qty']:g}", f"{item['price']:g}", f"{subtotal:g}"))
         self.calculate_change()
 
     def calculate_change(self, *args):
@@ -770,9 +872,14 @@ class POSPage(ctk.CTkFrame):
 
         if self.current_viewed_invoice is not None:
             # 1. التراجع عن أثر المخزون السابق للفاتورة المعنية للتعديل الآمن
-            self.cursor.execute("SELECT product_id, qty FROM sale_items WHERE sale_id=?", (self.current_viewed_invoice,))
-            for o_pid, o_qty in self.cursor.fetchall():
-                self.cursor.execute("UPDATE products SET stock = stock + ? WHERE id=?", (o_qty, o_pid))
+            try:
+                self.cursor.execute("SELECT product_id, COALESCE(deduct_qty, qty * COALESCE(pack_multiplier, 1.0)) FROM sale_items WHERE sale_id=?", (self.current_viewed_invoice,))
+                for o_pid, o_qty in self.cursor.fetchall():
+                    self.cursor.execute("UPDATE products SET stock = stock + ? WHERE id=?", (o_qty, o_pid))
+            except Exception:
+                self.cursor.execute("SELECT product_id, qty FROM sale_items WHERE sale_id=?", (self.current_viewed_invoice,))
+                for o_pid, o_qty in self.cursor.fetchall():
+                    self.cursor.execute("UPDATE products SET stock = stock + ? WHERE id=?", (o_qty, o_pid))
 
             # 2. تحديث الفاتورة ومسح العناصر القديمة
             self.cursor.execute("UPDATE sales SET total=?, date=?, customer=?, phone=?, address=?, delivery_person=?, status='مكتملة', payment_method=?, payment_fee=?, discount=?, delivery_fee=? WHERE id=?",
@@ -786,24 +893,43 @@ class POSPage(ctk.CTkFrame):
             sale_id = self.cursor.lastrowid
         
         formatted_items = []
-        for p_id, item in self.pos_cart.items():
-            self.cursor.execute("INSERT INTO sale_items (sale_id, product_id, qty) VALUES (?, ?, ?)", (sale_id, p_id, item['qty']))
-            self.cursor.execute("UPDATE products SET stock = stock - ?, synced = 0 WHERE id=?", (item['qty'], p_id))
+        for cart_key, item in self.pos_cart.items():
+            p_id = item.get('product_id')
+            if not p_id:
+                try: p_id = int(str(cart_key).split('_')[0])
+                except: p_id = 0
             
-            self.cursor.execute("SELECT barcode, local_code, remote_id FROM products WHERE id=?", (p_id,))
+            sold_qty = float(item['qty'])
+            multiplier = float(item.get('pack_multiplier', 1.0))
+            deduct_qty = sold_qty * multiplier
+            is_pack = int(item.get('is_pack', 0))
+            
+            try:
+                self.cursor.execute("INSERT INTO sale_items (sale_id, product_id, qty, unit_price, item_name, pack_multiplier, deduct_qty, is_pack) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", 
+                                    (sale_id, p_id, sold_qty, float(item['price']), item['name'], multiplier, deduct_qty, is_pack))
+            except Exception:
+                self.cursor.execute("INSERT INTO sale_items (sale_id, product_id, qty) VALUES (?, ?, ?)", (sale_id, p_id, deduct_qty))
+                
+            self.cursor.execute("UPDATE products SET stock = stock - ?, synced = 0 WHERE id=?", (deduct_qty, p_id))
+            
+            self.cursor.execute("SELECT barcode, local_code, remote_id, pack_barcode FROM products WHERE id=?", (p_id,))
             p_info = self.cursor.fetchone()
             p_bc = p_info[0] if p_info else ''
             p_loc = p_info[1] if p_info else ''
             p_rem = p_info[2] if p_info else ''
+            p_pack_bc = p_info[3] if p_info and len(p_info) > 3 else ''
 
             formatted_items.append({
                 "product_id": p_rem or p_id,
                 "local_product_id": p_id,
-                "barcode": p_bc or '',
+                "barcode": p_pack_bc if is_pack and p_pack_bc else (p_bc or ''),
                 "local_code": p_loc or '',
                 "name": item['name'],
-                "qty": float(item['qty']),
-                "price": float(item['price'])
+                "qty": sold_qty,
+                "price": float(item['price']),
+                "pack_multiplier": multiplier,
+                "deduct_qty": deduct_qty,
+                "is_pack": is_pack
             })
             
         self.db.commit()
@@ -888,7 +1014,7 @@ class POSPage(ctk.CTkFrame):
         grand_total_for_customer = shop_final_total + d_fee 
         
         formatted_items = []
-        for p_id, item in self.pos_cart.items():
+        for cart_key, item in self.pos_cart.items():
             formatted_items.append({"name": item['name'], "qty": float(item['qty']), "price": float(item['price'])})
 
         invoice_data = {
@@ -936,14 +1062,33 @@ class POSPage(ctk.CTkFrame):
 
         # تحميل الأصناف إلى السلة للتصفح والتعديل والطباعة
         self.pos_cart.clear()
-        self.cursor.execute("SELECT s.product_id, p.name, s.qty, p.price FROM sale_items s JOIN products p ON s.product_id = p.id WHERE s.sale_id = ?", (sale[0],))
-        items = self.cursor.fetchall()
-        for item in items:
-            self.pos_cart[item[0]] = {
-                'name': item[1],
-                'qty': float(item[2]),
-                'price': float(item[3])
-            }
+        try:
+            self.cursor.execute("SELECT s.product_id, COALESCE(s.item_name, p.name), s.qty, COALESCE(s.unit_price, p.price), COALESCE(s.pack_multiplier, 1.0), COALESCE(s.is_pack, 0) FROM sale_items s LEFT JOIN products p ON s.product_id = p.id WHERE s.sale_id = ?", (sale[0],))
+            items = self.cursor.fetchall()
+            for item in items:
+                p_id = item[0]
+                is_p = int(item[5])
+                cart_key = f"{p_id}_pack" if is_p else str(p_id)
+                self.pos_cart[cart_key] = {
+                    'product_id': p_id,
+                    'name': item[1] or 'صنف',
+                    'qty': float(item[2]),
+                    'price': float(item[3]),
+                    'pack_multiplier': float(item[4]),
+                    'is_pack': is_p
+                }
+        except Exception:
+            self.cursor.execute("SELECT s.product_id, p.name, s.qty, p.price FROM sale_items s JOIN products p ON s.product_id = p.id WHERE s.sale_id = ?", (sale[0],))
+            items = self.cursor.fetchall()
+            for item in items:
+                self.pos_cart[str(item[0])] = {
+                    'product_id': item[0],
+                    'name': item[1],
+                    'qty': float(item[2]),
+                    'price': float(item[3]),
+                    'pack_multiplier': 1.0,
+                    'is_pack': 0
+                }
 
         # ملء بيانات العميل والدليفري
         if sale[5]:
@@ -990,7 +1135,7 @@ class POSPage(ctk.CTkFrame):
                 "delivery_fee": d_fee,
                 "paid": grand_tot
             }
-            formatted_items = [{"name": it[1], "qty": float(it[2]), "price": float(it[3])} for it in items]
+            formatted_items = [{"name": it['name'], "qty": float(it['qty']), "price": float(it['price'])} for it in self.pos_cart.values()]
             
             from receipt_printer import print_salas_receipt
             print_salas_receipt(invoice_data, formatted_items)
@@ -1000,13 +1145,6 @@ class POSPage(ctk.CTkFrame):
 
     def pos_nav_invoice(self, direction):
         curr = self.current_viewed_invoice
-        if curr is None: self.cursor.execute("SELECT MAX(id) FROM sales")
-        else:
-            op, order = ("<", "DESC") if direction == -1 else (">", "ASC")
-            self.cursor.execute(f"SELECT id FROM sales WHERE id {op} ? ORDER BY id {order} LIMIT 1", (curr,))
-        res = self.cursor.fetchone()
-        if res and res[0]: self.pos_show_invoice(res[0])
-
         if curr is None: self.cursor.execute("SELECT MAX(id) FROM sales")
         else:
             op, order = ("<", "DESC") if direction == -1 else (">", "ASC")
@@ -1025,8 +1163,17 @@ class POSPage(ctk.CTkFrame):
         self.cursor.execute("INSERT INTO temp_invoices (note, date, customer, phone, address, delivery_person, discount, payment_method, delivery_fee) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                             (note, date_now, self.pos_cust_name.get(), self.pos_cust_phone.get(), self.pos_cust_address.get(), self.pos_delivery_combo.get(), self.pos_discount_val, self.pos_payment_combo.get(), d_fee))
         temp_id = self.cursor.lastrowid
-        for p_id, item in self.pos_cart.items():
-            self.cursor.execute("INSERT INTO temp_invoice_items (temp_id, product_id, name, price, qty) VALUES (?, ?, ?, ?, ?)", (temp_id, p_id, item['name'], item['price'], item['qty']))
+        for cart_key, item in self.pos_cart.items():
+            p_id = item.get('product_id', 0)
+            if not p_id:
+                try: p_id = int(str(cart_key).split('_')[0])
+                except: p_id = 0
+            try:
+                self.cursor.execute("INSERT INTO temp_invoice_items (temp_id, product_id, name, price, qty, pack_multiplier, is_pack) VALUES (?, ?, ?, ?, ?, ?, ?)", 
+                                    (temp_id, p_id, item['name'], item['price'], item['qty'], item.get('pack_multiplier', 1.0), item.get('is_pack', 0)))
+            except Exception:
+                self.cursor.execute("INSERT INTO temp_invoice_items (temp_id, product_id, name, price, qty) VALUES (?, ?, ?, ?, ?)", 
+                                    (temp_id, p_id, item['name'], item['price'], item['qty']))
         self.db.commit()
         self.show_status(f"⏳ تم تعليق الفاتورة رقم ({temp_id})", "#f39c12")
         self.clear_cart(ask=False)
@@ -1072,8 +1219,25 @@ class POSPage(ctk.CTkFrame):
 
             except sqlite3.OperationalError: pass
             
-            self.cursor.execute("SELECT product_id, name, price, qty FROM temp_invoice_items WHERE temp_id=?", (temp_id,))
-            for item in self.cursor.fetchall(): self.pos_cart[item[0]] = {'name': item[1], 'price': item[2], 'qty': item[3]}
+            try:
+                self.cursor.execute("SELECT product_id, name, price, qty, COALESCE(pack_multiplier, 1.0), COALESCE(is_pack, 0) FROM temp_invoice_items WHERE temp_id=?", (temp_id,))
+                for item in self.cursor.fetchall():
+                    p_id = item[0]
+                    is_p = int(item[5])
+                    cart_key = f"{p_id}_pack" if is_p else str(p_id)
+                    self.pos_cart[cart_key] = {
+                        'product_id': p_id,
+                        'name': item[1],
+                        'price': float(item[2]),
+                        'qty': float(item[3]),
+                        'pack_multiplier': float(item[4]),
+                        'is_pack': is_p
+                    }
+            except Exception:
+                self.cursor.execute("SELECT product_id, name, price, qty FROM temp_invoice_items WHERE temp_id=?", (temp_id,))
+                for item in self.cursor.fetchall():
+                    self.pos_cart[str(item[0])] = {'product_id': item[0], 'name': item[1], 'price': float(item[2]), 'qty': float(item[3]), 'pack_multiplier': 1.0, 'is_pack': 0}
+                    
             self.update_pos_cart()
             
             self.cursor.execute("DELETE FROM temp_invoices WHERE id=?", (temp_id,))

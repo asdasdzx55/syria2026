@@ -100,6 +100,31 @@ class ProductsPage(ctk.CTkFrame):
         ctk.CTkButton(row_cat, text="➕ إدارة التصنيفات", width=130, fg_color="#16a085", hover_color="#117864", font=ctk.CTkFont(weight="bold"), command=self.open_categories_manager).pack(side="left", padx=10, pady=6)
 
         # ==================================
+        # 2.2 نظام الدستة / الكرتونة والجملة
+        # ==================================
+        row_pack = ctk.CTkFrame(form_frame, fg_color="#1e2b37", corner_radius=8)
+        row_pack.pack(fill="x", pady=4, padx=10)
+
+        self.chk_has_pack = ctk.CTkCheckBox(row_pack, text="📦 بيع كرتونة/دستة", font=ctk.CTkFont(weight="bold"), text_color="#f39c12")
+        self.chk_has_pack.pack(side="right", padx=(10, 8), pady=6)
+
+        ctk.CTkLabel(row_pack, text="اسم الكرتونة:").pack(side="right", padx=2, pady=6)
+        self.ent_pack_name = ctk.CTkEntry(row_pack, width=130, placeholder_text="مثال: كرتونة 12ق...")
+        self.ent_pack_name.pack(side="right", padx=4, pady=6)
+
+        ctk.CTkLabel(row_pack, text="باركود الكرتونة:").pack(side="right", padx=2, pady=6)
+        self.ent_pack_barcode = ctk.CTkEntry(row_pack, width=130, placeholder_text="باركود الكرتونة...")
+        self.ent_pack_barcode.pack(side="right", padx=4, pady=6)
+
+        ctk.CTkLabel(row_pack, text="كمية الخصم:").pack(side="right", padx=2, pady=6)
+        self.ent_pack_qty = ctk.CTkEntry(row_pack, width=65, justify="center", placeholder_text="12")
+        self.ent_pack_qty.pack(side="right", padx=4, pady=6)
+
+        ctk.CTkLabel(row_pack, text="سعر الكرتونة:").pack(side="right", padx=2, pady=6)
+        self.ent_pack_price = ctk.CTkEntry(row_pack, width=75, justify="center", placeholder_text="0.0")
+        self.ent_pack_price.pack(side="right", padx=4, pady=6)
+
+        # ==================================
         # 3. نظام الباركود الدولي والفرعي
         # ==================================
         bc_frame = ctk.CTkFrame(form_frame, fg_color="#2b2b2b", corner_radius=10)
@@ -419,11 +444,12 @@ class ProductsPage(ctk.CTkFrame):
                        COALESCE(main_category, category, 'عام'), COALESCE(sub_category, 'عام'), price, cost, stock 
                 FROM products 
                 WHERE name LIKE ? OR local_code LIKE ? OR barcode LIKE ? OR barcode2 LIKE ? OR barcode3 LIKE ? 
+                OR pack_name LIKE ? OR pack_barcode LIKE ?
                 OR main_category LIKE ? OR sub_category LIKE ? OR category LIKE ? OR ',' || COALESCE(all_barcodes, '') || ',' LIKE ?
             """
             s = f"%{term}%"
             bc_s = f"%,{term},%"
-            self.cursor.execute(query, (s, s, s, s, s, s, s, s, bc_s))
+            self.cursor.execute(query, (s, s, s, s, s, s, s, s, s, s, bc_s))
             for row in self.cursor.fetchall():
                 tree.insert("", "end", values=row)
 
@@ -499,7 +525,7 @@ class ProductsPage(ctk.CTkFrame):
         self.all_product_ids = [r[0] for r in self.cursor.fetchall()]
 
     def load_product_by_id(self, p_id):
-        self.cursor.execute("SELECT id, barcode, barcode2, barcode3, name, price, cost, stock, all_barcodes, local_code, main_category, sub_category, category, is_weight_based, unit_type FROM products WHERE id=?", (p_id,))
+        self.cursor.execute("SELECT id, barcode, barcode2, barcode3, name, price, cost, stock, all_barcodes, local_code, main_category, sub_category, category, is_weight_based, unit_type, has_pack, pack_name, pack_barcode, pack_price, pack_qty FROM products WHERE id=?", (p_id,))
         row = self.cursor.fetchone()
         if row:
             self.prod_clear_form()
@@ -521,6 +547,20 @@ class ProductsPage(ctk.CTkFrame):
 
             is_w = (row[13] == 1 or row[14] in ['وزن', 'weight'])
             self.combo_unit_type.set("بالوزن ⚖️" if is_w else "قطعة 📦")
+
+            has_p = (row[15] == 1)
+            if has_p:
+                self.chk_has_pack.select()
+            else:
+                self.chk_has_pack.deselect()
+            self.ent_pack_name.delete(0, 'end')
+            self.ent_pack_name.insert(0, str(row[16] or ""))
+            self.ent_pack_barcode.delete(0, 'end')
+            self.ent_pack_barcode.insert(0, str(row[17] or ""))
+            self.ent_pack_qty.delete(0, 'end')
+            self.ent_pack_qty.insert(0, str(row[19] or 1.0))
+            self.ent_pack_price.delete(0, 'end')
+            self.ent_pack_price.insert(0, str(row[18] or 0.0))
             
             all_bcs = row[8]
             self.current_barcodes_list = []
@@ -609,10 +649,19 @@ class ProductsPage(ctk.CTkFrame):
             is_weight = 1 if "وزن" in self.combo_unit_type.get() else 0
             unit_t = "وزن" if is_weight else "قطعة"
 
+            has_pack = 1 if self.chk_has_pack.get() == 1 else 0
+            pack_name = self.ent_pack_name.get().strip()
+            pack_bc = self.ent_pack_barcode.get().strip()
+            p_pack_price_txt = self.ent_pack_price.get().strip()
+            pack_price = float(p_pack_price_txt) if p_pack_price_txt else 0.0
+            p_pack_qty_txt = self.ent_pack_qty.get().strip()
+            pack_qty = float(p_pack_qty_txt) if p_pack_qty_txt else 1.0
+            if pack_qty <= 0: pack_qty = 1.0
+
             self.cursor.execute("""
-                INSERT INTO products (barcode, local_code, barcode2, barcode3, name, price, cost, stock, all_barcodes, category, main_category, sub_category, is_weight_based, unit_type, synced) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
-            """, (b1, loc_code, b2, b3, name, price, cost, stock, all_bcs_str, main_cat, main_cat, sub_cat, is_weight, unit_t))
+                INSERT INTO products (barcode, local_code, barcode2, barcode3, name, price, cost, stock, all_barcodes, category, main_category, sub_category, is_weight_based, unit_type, has_pack, pack_name, pack_barcode, pack_price, pack_qty, synced) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+            """, (b1, loc_code, b2, b3, name, price, cost, stock, all_bcs_str, main_cat, main_cat, sub_cat, is_weight, unit_t, has_pack, pack_name, pack_bc, pack_price, pack_qty))
             new_id = self.cursor.lastrowid
             self.db.commit()
             
@@ -674,11 +723,20 @@ class ProductsPage(ctk.CTkFrame):
             is_weight = 1 if "وزن" in self.combo_unit_type.get() else 0
             unit_t = "وزن" if is_weight else "قطعة"
 
+            has_pack = 1 if self.chk_has_pack.get() == 1 else 0
+            pack_name = self.ent_pack_name.get().strip()
+            pack_bc = self.ent_pack_barcode.get().strip()
+            p_pack_price_txt = self.ent_pack_price.get().strip()
+            pack_price = float(p_pack_price_txt) if p_pack_price_txt else 0.0
+            p_pack_qty_txt = self.ent_pack_qty.get().strip()
+            pack_qty = float(p_pack_qty_txt) if p_pack_qty_txt else 1.0
+            if pack_qty <= 0: pack_qty = 1.0
+
             self.cursor.execute("""
                 UPDATE products 
-                SET barcode=?, local_code=?, barcode2=?, barcode3=?, name=?, price=?, cost=?, stock=?, all_barcodes=?, category=?, main_category=?, sub_category=?, is_weight_based=?, unit_type=?, synced=0 
+                SET barcode=?, local_code=?, barcode2=?, barcode3=?, name=?, price=?, cost=?, stock=?, all_barcodes=?, category=?, main_category=?, sub_category=?, is_weight_based=?, unit_type=?, has_pack=?, pack_name=?, pack_barcode=?, pack_price=?, pack_qty=?, synced=0 
                 WHERE id=?
-            """, (b1, loc_code, b2, b3, name, price, cost, stock, all_bcs_str, main_cat, main_cat, sub_cat, is_weight, unit_t, self.current_edit_id))
+            """, (b1, loc_code, b2, b3, name, price, cost, stock, all_bcs_str, main_cat, main_cat, sub_cat, is_weight, unit_t, has_pack, pack_name, pack_bc, pack_price, pack_qty, self.current_edit_id))
 
             self.db.commit()
             
@@ -729,6 +787,13 @@ class ProductsPage(ctk.CTkFrame):
         
         if hasattr(self, 'combo_unit_type'):
             self.combo_unit_type.set("قطعة 📦")
+
+        if hasattr(self, 'chk_has_pack'):
+            self.chk_has_pack.deselect()
+            self.ent_pack_name.delete(0, 'end')
+            self.ent_pack_barcode.delete(0, 'end')
+            self.ent_pack_qty.delete(0, 'end')
+            self.ent_pack_price.delete(0, 'end')
 
         # إعادة تعيين التصنيفات للوضع الافتراضي
         try:

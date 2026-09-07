@@ -1112,21 +1112,23 @@
                 <button onclick="closeModalWindow('weight-modal')" class="w-7 h-7 rounded-full bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
             </div>
 
-            <div class="grid grid-cols-4 gap-1.5 text-xs font-bold text-center">
-                <button type="button" onclick="setFastWeightPreset(0.125)" class="p-2 bg-app-bg hover:bg-slate-800 text-slate-200 rounded-xl border border-app-border">125غ</button>
-                <button type="button" onclick="setFastWeightPreset(0.250)" class="p-2 bg-app-bg hover:bg-slate-800 text-amber-400 rounded-xl border border-amber-500/30">ربع كجم</button>
-                <button type="button" onclick="setFastWeightPreset(0.500)" class="p-2 bg-app-bg hover:bg-slate-800 text-emerald-400 rounded-xl border border-emerald-500/30">نصف كجم</button>
-                <button type="button" onclick="setFastWeightPreset(1.000)" class="p-2 bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 hover:text-white rounded-xl border border-emerald-500/50">1 كجم</button>
+            <div class="grid grid-cols-6 gap-1 text-[11px] font-bold text-center">
+                <button type="button" onclick="setFastWeightPreset(0.050)" class="py-2 bg-app-bg hover:bg-slate-800 text-slate-200 rounded-xl border border-app-border">50غ</button>
+                <button type="button" onclick="setFastWeightPreset(0.100)" class="py-2 bg-app-bg hover:bg-slate-800 text-slate-200 rounded-xl border border-app-border">100غ</button>
+                <button type="button" onclick="setFastWeightPreset(0.250)" class="py-2 bg-app-bg hover:bg-slate-800 text-amber-400 rounded-xl border border-amber-500/30">250غ</button>
+                <button type="button" onclick="setFastWeightPreset(0.500)" class="py-2 bg-app-bg hover:bg-slate-800 text-emerald-400 rounded-xl border border-emerald-500/30">500غ</button>
+                <button type="button" onclick="setFastWeightPreset(0.750)" class="py-2 bg-app-bg hover:bg-slate-800 text-sky-400 rounded-xl border border-sky-500/30">750غ</button>
+                <button type="button" onclick="setFastWeightPreset(1.000)" class="py-2 bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 hover:text-white rounded-xl border border-emerald-500/50">1 كجم</button>
             </div>
 
             <div class="grid grid-cols-2 gap-2 text-xs">
                 <div>
-                    <label class="block text-slate-400 mb-1 font-bold">الوزن بالكجم (Kg):</label>
-                    <input type="number" id="weight-kg-val" step="0.005" min="0.005" placeholder="1.000" oninput="handleKgInputUpdate()" class="w-full bg-app-bg border border-slate-700 text-emerald-400 font-mono font-black text-center text-sm rounded-xl py-2.5 focus:outline-none focus:border-emerald-500">
+                    <label class="block text-amber-400 mb-1 font-bold">الوزن بالجرام (g) - ادخل واضغط Enter:</label>
+                    <input type="number" id="weight-gram-val" step="5" min="5" placeholder="1000" oninput="handleGramInputUpdate()" onkeydown="if(event.key==='Enter') commitWeightItemToCart()" class="w-full bg-app-bg border border-amber-500/50 text-amber-300 font-mono font-black text-center text-base rounded-xl py-2.5 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400">
                 </div>
                 <div>
-                    <label class="block text-slate-400 mb-1 font-bold">الوزن بالجرام (g):</label>
-                    <input type="number" id="weight-gram-val" step="5" min="5" placeholder="1000" oninput="handleGramInputUpdate()" class="w-full bg-app-bg border border-slate-700 text-white font-mono font-bold text-center text-sm rounded-xl py-2.5 focus:outline-none focus:border-emerald-500">
+                    <label class="block text-slate-400 mb-1 font-bold">الوزن بالكجم (Kg):</label>
+                    <input type="number" id="weight-kg-val" step="0.005" min="0.005" placeholder="1.000" oninput="handleKgInputUpdate()" onkeydown="if(event.key==='Enter') commitWeightItemToCart()" class="w-full bg-app-bg border border-slate-700 text-emerald-400 font-mono font-black text-center text-sm rounded-xl py-2.5 focus:outline-none focus:border-emerald-500">
                 </div>
             </div>
 
@@ -1136,7 +1138,7 @@
             </div>
 
             <button onclick="commitWeightItemToCart()" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs sm:text-sm rounded-2xl shadow-neon active:scale-95 transition">
-                إضافة الوزن إلى السلة 🛒
+                إضافة الوزن إلى السلة 🛒 (Enter)
             </button>
         </div>
     </div>
@@ -1271,6 +1273,38 @@
                 <div class="sm:col-span-2">
                     <label class="block font-bold text-slate-400 mb-1">الرصيد المبدئي بالمخزن:</label>
                     <input type="number" id="prod-stock-field" value="50" step="0.5" class="w-full bg-app-bg border border-slate-700 text-white rounded-xl px-3 py-2 focus:outline-none font-mono">
+                </div>
+
+                <div class="sm:col-span-2 border-t border-dashed border-slate-700 pt-2.5 mt-1">
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" id="prod-haspack-field" onchange="togglePackFieldsVisibility()" class="w-4 h-4 rounded text-amber-500 focus:ring-amber-400 bg-slate-800 border-slate-600">
+                            <span class="font-black text-amber-400 text-xs">📦 تفعيل بيع الدستة / الكرتونة (Multi-Unit Pack)</span>
+                        </label>
+                        <span class="text-[10px] text-slate-400 font-normal">تخصم تلقائياً من رصيد المنتج الأصلي عند البيع</span>
+                    </div>
+
+                    <div id="prod-pack-fields-container" class="grid grid-cols-1 sm:grid-cols-2 gap-2 p-2.5 bg-slate-900/60 rounded-2xl border border-amber-500/30 hidden">
+                        <div>
+                            <label class="block font-bold text-amber-300 mb-1 text-[11px]">اسم الدستة / الكرتونة:</label>
+                            <input type="text" id="prod-packname-field" placeholder="مثال: كرتونة بسكوت (12 قطعة)..." class="w-full bg-app-bg border border-slate-700 text-white font-bold rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-amber-400">
+                        </div>
+                        <div>
+                            <label class="block font-bold text-amber-300 mb-1 text-[11px]">باركود الدستة / الكرتونة:</label>
+                            <div class="flex gap-1">
+                                <input type="text" id="prod-packbarcode-field" placeholder="باركود الكرتونة المطبوع..." class="w-full bg-app-bg border border-slate-700 text-amber-300 font-mono rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-amber-400">
+                                <button type="button" onclick="launchCameraScanner('pack_barcode_field')" class="px-2 py-1.5 bg-amber-600 text-white rounded-xl text-xs"><i class="fa-solid fa-camera"></i></button>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block font-bold text-amber-300 mb-1 text-[11px]">كمية الخصم من الرصيد (قطع/كجم):</label>
+                            <input type="number" id="prod-packqty-field" step="0.05" min="0.05" value="12" placeholder="12" class="w-full bg-app-bg border border-slate-700 text-emerald-400 font-black rounded-xl px-2.5 py-1.5 text-sm focus:outline-none font-mono">
+                        </div>
+                        <div>
+                            <label class="block font-bold text-amber-300 mb-1 text-[11px]">سعر بيع الدستة / الكرتونة (ج.م):</label>
+                            <input type="number" id="prod-packprice-field" step="0.5" min="0" placeholder="0.00" class="w-full bg-app-bg border border-slate-700 text-emerald-400 font-black rounded-xl px-2.5 py-1.5 text-sm focus:outline-none font-mono">
+                        </div>
+                    </div>
                 </div>
 
                 <div class="sm:col-span-2 pt-2">
@@ -1916,6 +1950,7 @@
 
             grid.innerHTML = productsList.map(p => {
                 const isWeight = (p.unit_type === 'weight' || (p.name && (p.name.includes('كيلو') || p.name.includes('كغم') || p.name.includes('جرام'))));
+                const hasPack = (p.has_pack == 1 && parseFloat(p.pack_price || 0) > 0);
                 return `
                     <div onclick="onProductItemClicked(${p.id})" 
                          class="bg-app-card border border-app-border hover:border-emerald-500/60 rounded-2xl p-2.5 sm:p-3 flex flex-col justify-between cursor-pointer active:scale-95 transition-all shadow-md hover:shadow-neon group relative overflow-hidden">
@@ -1923,15 +1958,22 @@
                             <span class="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-app-bg text-slate-400 border border-app-border font-mono">
                                 ${p.local_code || p.id}
                             </span>
-                            ${isWeight ? `
-                                <span class="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30">
-                                    <i class="fa-solid fa-scale-balanced mr-0.5"></i>وزن
-                                </span>
-                            ` : `
-                                <span class="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-400">
-                                    قطعة
-                                </span>
-                            `}
+                            <div class="flex items-center gap-1">
+                                ${hasPack ? `
+                                    <span class="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                                        📦 دستة
+                                    </span>
+                                ` : ''}
+                                ${isWeight ? `
+                                    <span class="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                                        <i class="fa-solid fa-scale-balanced mr-0.5"></i>وزن
+                                    </span>
+                                ` : `
+                                    <span class="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-400">
+                                        قطعة
+                                    </span>
+                                `}
+                            </div>
                         </div>
 
                         <div class="my-1">
@@ -1941,14 +1983,23 @@
                             <p class="text-[10px] text-slate-500 font-bold mt-0.5">${p.category || 'عام'}</p>
                         </div>
 
-                        <div class="pt-2 border-t border-slate-800/80 flex items-center justify-between mt-1">
+                        <div class="pt-2 border-t border-slate-800/80 flex items-center justify-between mt-1 gap-1">
                             <div>
                                 <span class="text-xs sm:text-sm font-black text-emerald-400 font-mono">${parseFloat(p.price).toFixed(2)}</span>
                                 <span class="text-[9px] text-slate-400 font-bold">ج.م</span>
                             </div>
-                            <button type="button" class="w-7 h-7 rounded-xl bg-emerald-600/20 group-hover:bg-emerald-600 text-emerald-400 group-hover:text-white flex items-center justify-center text-xs transition-colors">
-                                <i class="fa-solid fa-plus"></i>
-                            </button>
+                            <div class="flex items-center gap-1">
+                                ${hasPack ? `
+                                    <button type="button" onclick="event.stopPropagation(); addItemToCart(catalogProducts.find(x => x.id === ${p.id}), 1, null, true); playSoundTone('beep'); displayToast('📦 أضيفت كرتونة/دستة للسلة', 'success');" 
+                                            class="px-2 py-1 bg-amber-500/20 hover:bg-amber-500 hover:text-black text-amber-300 font-black rounded-lg text-[10px] border border-amber-500/40 transition" 
+                                            title="بيع كرتونة/دستة (${p.pack_name || ''})">
+                                        📦 ${parseFloat(p.pack_price).toFixed(0)}ج
+                                    </button>
+                                ` : ''}
+                                <button type="button" class="w-7 h-7 rounded-xl bg-emerald-600/20 group-hover:bg-emerald-600 text-emerald-400 group-hover:text-white flex items-center justify-center text-xs transition-colors">
+                                    <i class="fa-solid fa-plus"></i>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 `;
@@ -1968,26 +2019,38 @@
             }
         }
 
-        function addItemToCart(prod, qty = 1, customPrice = null) {
-            const price = customPrice !== null ? customPrice : parseFloat(prod.price || 0);
-            if (currentCart[prod.id]) {
-                currentCart[prod.id].qty += qty;
+        function addItemToCart(prod, qty = 1, customPrice = null, isPack = false) {
+            const cartKey = isPack ? `${prod.id}_pack` : String(prod.id);
+            const price = isPack ? parseFloat(prod.pack_price || 0) : (customPrice !== null ? customPrice : parseFloat(prod.price || 0));
+            const displayName = isPack ? (prod.pack_name || `دستة/كرتونة ${prod.name}`) : prod.name;
+            const packMultiplier = isPack ? parseFloat(prod.pack_qty || 1) : 1.0;
+
+            if (currentCart[cartKey]) {
+                currentCart[cartKey].qty += qty;
             } else {
-                currentCart[prod.id] = { product: prod, qty: qty, price: price };
+                currentCart[cartKey] = {
+                    key: cartKey,
+                    product: prod,
+                    qty: qty,
+                    price: price,
+                    name: displayName,
+                    isPack: isPack,
+                    packMultiplier: packMultiplier
+                };
             }
             renderCartViews();
         }
 
-        function modifyCartItemQuantity(prodId, delta) {
-            if (!currentCart[prodId]) return;
-            currentCart[prodId].qty += delta;
-            if (currentCart[prodId].qty <= 0) delete currentCart[prodId];
+        function modifyCartItemQuantity(cartKey, delta) {
+            if (!currentCart[cartKey]) return;
+            currentCart[cartKey].qty += delta;
+            if (currentCart[cartKey].qty <= 0) delete currentCart[cartKey];
             renderCartViews();
             playSoundTone('beep');
         }
 
-        function deleteCartItem(prodId) {
-            delete currentCart[prodId];
+        function deleteCartItem(cartKey) {
+            delete currentCart[cartKey];
             renderCartViews();
             playSoundTone('beep');
         }
@@ -2018,34 +2081,44 @@
             const html = items.map(it => {
                 const p = it.product;
                 const lineTotal = (it.qty * it.price).toFixed(2);
-                const isWeight = it.qty % 1 !== 0;
+                const isWeight = !it.isPack && (it.qty % 1 !== 0 || p.unit_type === 'weight' || p.is_weight_based == 1);
+                
+                let qtyDisplay = '';
+                if (it.isPack) {
+                    qtyDisplay = `${it.qty} كرتونة/دستة (تخصم ${(it.qty * it.packMultiplier).toFixed(1)} من الرصيد)`;
+                } else if (isWeight) {
+                    const grams = Math.round(it.qty * 1000);
+                    qtyDisplay = `${grams}غ (${it.qty.toFixed(3)} كجم)`;
+                } else {
+                    qtyDisplay = `${it.qty} ق`;
+                }
 
                 return `
-                    <div class="py-2.5 flex items-center justify-between gap-2">
+                    <div class="py-2.5 flex items-center justify-between gap-2 border-b border-slate-800/50 last:border-0">
                         <div class="flex-1 min-w-0">
-                            <h5 class="text-xs font-black text-slate-100 truncate">${p.name}</h5>
+                            <h5 class="text-xs font-black text-slate-100 truncate">${it.isPack ? '📦 ' : ''}${it.name || p.name}</h5>
                             <div class="flex items-center gap-1.5 text-[11px] text-slate-400 font-mono mt-0.5">
                                 <span class="text-emerald-400 font-bold">${it.price.toFixed(2)} ج.م</span>
                                 <span>×</span>
-                                <span>${isWeight ? it.qty.toFixed(3) + ' كجم' : it.qty + ' ق'}</span>
+                                <span class="${it.isPack ? 'text-amber-400 font-bold' : (isWeight ? 'text-cyan-400 font-bold' : '')}">${qtyDisplay}</span>
                                 <span>=</span>
                                 <b class="text-white">${lineTotal} ج.م</b>
                             </div>
                         </div>
 
                         <div class="flex items-center gap-1 bg-app-bg p-1 rounded-xl border border-app-border">
-                            <button onclick="modifyCartItemQuantity(${p.id}, ${isWeight ? -0.25 : -1})" class="w-6 h-6 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-xs active:scale-95">
+                            <button onclick="modifyCartItemQuantity('${it.key}', ${isWeight ? -0.25 : -1})" class="w-6 h-6 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-xs active:scale-95">
                                 <i class="fa-solid fa-minus"></i>
                             </button>
                             <span class="w-8 text-center text-xs font-mono font-black text-emerald-400">
                                 ${isWeight ? it.qty.toFixed(2) : it.qty}
                             </span>
-                            <button onclick="modifyCartItemQuantity(${p.id}, ${isWeight ? 0.25 : 1})" class="w-6 h-6 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-xs active:scale-95">
+                            <button onclick="modifyCartItemQuantity('${it.key}', ${isWeight ? 0.25 : 1})" class="w-6 h-6 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-xs active:scale-95">
                                 <i class="fa-solid fa-plus"></i>
                             </button>
                         </div>
 
-                        <button onclick="deleteCartItem(${p.id})" class="text-slate-500 hover:text-rose-400 p-1 text-xs transition">
+                        <button onclick="deleteCartItem('${it.key}')" class="text-slate-500 hover:text-rose-400 p-1 text-xs transition">
                             <i class="fa-solid fa-trash-can"></i>
                         </button>
                     </div>
@@ -2128,14 +2201,21 @@
             const deliveryFee = parseFloat(document.getElementById('desktop-delivery-input').value || document.getElementById('mobile-delivery-input').value || 0);
             const grandTotal = Math.max(0, subtotal - discount + deliveryFee);
 
-            const payloadItems = itemsList.map(it => ({
-                product_id: it.product.id,
-                name: it.product.name,
-                price: parseFloat(it.price),
-                cost: parseFloat(it.product.cost || 0),
-                qty: parseFloat(it.qty),
-                barcode: it.product.barcode || it.product.local_code || ''
-            }));
+            const payloadItems = itemsList.map(it => {
+                const multiplier = it.isPack ? parseFloat(it.packMultiplier || 1) : 1.0;
+                const deductQty = it.qty * multiplier;
+                return {
+                    product_id: it.product.id,
+                    name: it.isPack ? (it.name || `📦 ${it.product.name}`) : it.product.name,
+                    price: parseFloat(it.price),
+                    cost: parseFloat(it.product.cost || 0),
+                    qty: parseFloat(it.qty),
+                    pack_multiplier: multiplier,
+                    deduct_qty: deductQty,
+                    is_pack: it.isPack ? 1 : 0,
+                    barcode: (it.isPack && it.product.pack_barcode) ? it.product.pack_barcode : (it.product.barcode || it.product.local_code || '')
+                };
+            });
 
             const saleBody = {
                 customer: "عميل نقدي",
@@ -2203,13 +2283,20 @@
             document.getElementById('rcpt-total-val').textContent = total.toFixed(2) + ' ج.م';
 
             const tbody = document.getElementById('rcpt-items-rows');
-            tbody.innerHTML = saleData.items.map(it => `
-                <tr class="border-b border-gray-100">
-                    <td class="py-1">${it.name}</td>
-                    <td class="py-1 text-center font-mono">${it.qty}</td>
-                    <td class="py-1 text-left font-mono">${(it.qty * it.price).toFixed(2)}</td>
-                </tr>
-            `).join('');
+            tbody.innerHTML = saleData.items.map(it => {
+                let qtyStr = it.qty;
+                if (it.is_pack) qtyStr = `${it.qty} كرتونة`;
+                else if (it.qty % 1 !== 0) qtyStr = `${Math.round(it.qty * 1000)}غ (${it.qty.toFixed(3)}كجم)`;
+                else qtyStr = `${it.qty} ق`;
+
+                return `
+                    <tr class="border-b border-gray-100">
+                        <td class="py-1">${it.name}</td>
+                        <td class="py-1 text-center font-mono text-[10px]">${qtyStr}</td>
+                        <td class="py-1 text-left font-mono">${(it.qty * it.price).toFixed(2)}</td>
+                    </tr>
+                `;
+            }).join('');
 
             document.getElementById('receipt-modal').classList.remove('hidden');
         }
@@ -2223,7 +2310,11 @@
             text += `⏰ التاريخ: ${new Date().toLocaleDateString('ar-EG')}\n`;
             text += `--------------------------\n`;
             saleData.items.forEach(it => {
-                text += `• ${it.name} × ${it.qty} = ${(it.qty * it.price).toFixed(2)} ج.م\n`;
+                let qtyStr = it.qty;
+                if (it.is_pack) qtyStr = `${it.qty} كرتونة`;
+                else if (it.qty % 1 !== 0) qtyStr = `${Math.round(it.qty * 1000)}غ (${it.qty.toFixed(3)}كجم)`;
+                else qtyStr = `${it.qty} ق`;
+                text += `• ${it.name} × ${qtyStr} = ${(it.qty * it.price).toFixed(2)} ج.م\n`;
             });
             text += `--------------------------\n`;
             text += `💰 *الإجمالي النهائي: ${total.toFixed(2)} ج.م*\n`;
@@ -2507,8 +2598,11 @@
             } else if (cameraTargetMode === 'product_field') {
                 document.getElementById('prod-barcode-field').value = trimmed;
                 stopCameraScanner();
+            } else if (cameraTargetMode === 'pack_barcode_field') {
+                document.getElementById('prod-packbarcode-field').value = trimmed;
+                stopCameraScanner();
             } else if (cameraTargetMode === 'inventory') {
-                const prod = catalogProducts.find(p => (p.barcode && p.barcode.trim() === trimmed) || (p.local_code && p.local_code.trim() === trimmed));
+                const prod = catalogProducts.find(p => (p.barcode && p.barcode.trim() === trimmed) || (p.local_code && p.local_code.trim() === trimmed) || (p.pack_barcode && p.pack_barcode.trim() === trimmed));
                 if (prod) {
                     const current = inventoryActualQuantities[prod.id] !== undefined ? inventoryActualQuantities[prod.id] : parseFloat(prod.stock || 0);
                     inventoryActualQuantities[prod.id] = current + 1;
@@ -2520,9 +2614,6 @@
                 }
             }
         }
-
-
-
 
         // ========================================================
         // 4. HARDWARE SCANNER & SEARCH
@@ -2547,6 +2638,8 @@
                         p.name.toLowerCase().includes(q) || 
                         (p.barcode && p.barcode.includes(q)) || 
                         (p.local_code && p.local_code.includes(q)) ||
+                        (p.pack_name && p.pack_name.toLowerCase().includes(q)) ||
+                        (p.pack_barcode && p.pack_barcode.includes(q)) ||
                         (p.category && p.category.toLowerCase().includes(q))
                     );
                     renderProductsGrid(filtered);
@@ -2556,6 +2649,17 @@
 
         function processBarcodeLookup(code) {
             if (!code) return;
+
+            // 1. فحص باركود الدستة / الكرتونة أولاً
+            const packProd = catalogProducts.find(p => p.has_pack == 1 && p.pack_barcode && p.pack_barcode.trim() === code);
+            if (packProd) {
+                addItemToCart(packProd, 1, null, true);
+                playSoundTone('beep');
+                displayToast(`📦 أضيفت كرتونة/دستة: ${packProd.pack_name || packProd.name}`, 'success');
+                return;
+            }
+
+            // 2. فحص الباركود العادي
             const prod = catalogProducts.find(p => 
                 (p.barcode && p.barcode.trim() === code) || 
                 (p.local_code && p.local_code.trim() === code) ||
@@ -2588,6 +2692,13 @@
             document.getElementById('weight-gram-val').value = '1000';
             updateWeightCalculation(1.0);
             document.getElementById('weight-modal').classList.remove('hidden');
+            setTimeout(() => {
+                const gInp = document.getElementById('weight-gram-val');
+                if (gInp) {
+                    gInp.focus();
+                    gInp.select();
+                }
+            }, 100);
         }
 
         function setFastWeightPreset(kg) {
@@ -2627,12 +2738,22 @@
             addItemToCart(activeWeighedProduct, kg);
             playSoundTone('beep');
             closeModalWindow('weight-modal');
-            displayToast(`🛒 أضيف: ${activeWeighedProduct.name} (${kg} كجم)`, 'success');
+            const grams = Math.round(kg * 1000);
+            displayToast(`🛒 أضيف: ${activeWeighedProduct.name} (${grams}غ / ${kg.toFixed(3)} كجم)`, 'success');
         }
 
         // ========================================================
         // 6. PRODUCTS MANAGEMENT TABLE
         // ========================================================
+        function togglePackFieldsVisibility() {
+            const chk = document.getElementById('prod-haspack-field');
+            const box = document.getElementById('prod-pack-fields-container');
+            if (chk && box) {
+                if (chk.checked) box.classList.remove('hidden');
+                else box.classList.add('hidden');
+            }
+        }
+
         function renderProductsManagementTable() {
             const tbody = document.getElementById('products-management-table-body');
             if (!tbody) return;
@@ -2643,7 +2764,7 @@
 
             const filtered = catalogProducts.filter(p => {
                 const stock = parseFloat(p.stock || 0);
-                const matchQ = !q || p.name.toLowerCase().includes(q) || (p.barcode && p.barcode.includes(q)) || (p.local_code && p.local_code.includes(q));
+                const matchQ = !q || p.name.toLowerCase().includes(q) || (p.barcode && p.barcode.includes(q)) || (p.local_code && p.local_code.includes(q)) || (p.pack_barcode && p.pack_barcode.includes(q)) || (p.pack_name && p.pack_name.toLowerCase().includes(q));
                 const matchCat = cat === 'all' || p.category === cat;
 
                 let matchStock = true;
@@ -2666,6 +2787,7 @@
                         <td class="p-3 font-black text-slate-100">
                             ${(p.is_weight_based == 1 || p.unit_type === 'وزن' || p.unit_type === 'weight') ? '<span class="text-amber-400 font-bold ml-1 text-xs">⚖️</span>' : '<span class="text-slate-500 font-normal ml-1 text-xs">📦</span>'}
                             ${p.name}
+                            ${p.has_pack == 1 ? `<span class="bg-amber-500/20 text-amber-300 text-[10px] px-1.5 py-0.5 rounded border border-amber-500/40 mr-1 font-bold">📦 كرتونة (${p.pack_price}ج)</span>` : ''}
                         </td>
                         <td class="p-3 text-center text-slate-400">${p.category || 'عام'}</td>
                         <td class="p-3 text-center font-mono text-slate-400">${p.barcode || '-'}</td>
@@ -2692,6 +2814,12 @@
             document.getElementById('prod-stock-field').value = '50';
             document.getElementById('prod-barcode-field').value = '';
             document.getElementById('prod-unittype-field').value = 'piece';
+            document.getElementById('prod-haspack-field').checked = false;
+            document.getElementById('prod-packname-field').value = '';
+            document.getElementById('prod-packbarcode-field').value = '';
+            document.getElementById('prod-packqty-field').value = '12';
+            document.getElementById('prod-packprice-field').value = '';
+            togglePackFieldsVisibility();
             generateRandomLocalCode();
             document.getElementById('product-modal').classList.remove('hidden');
         }
@@ -2709,6 +2837,15 @@
             document.getElementById('prod-localcode-field').value = p.local_code || p.id;
             const isWeight = (p.is_weight_based == 1 || p.unit_type === 'وزن' || p.unit_type === 'weight');
             document.getElementById('prod-unittype-field').value = isWeight ? 'weight' : 'piece';
+
+            const hasPack = (p.has_pack == 1);
+            document.getElementById('prod-haspack-field').checked = hasPack;
+            document.getElementById('prod-packname-field').value = p.pack_name || '';
+            document.getElementById('prod-packbarcode-field').value = p.pack_barcode || '';
+            document.getElementById('prod-packqty-field').value = p.pack_qty || '12';
+            document.getElementById('prod-packprice-field').value = p.pack_price || '';
+            togglePackFieldsVisibility();
+
             document.getElementById('product-modal').classList.remove('hidden');
         }
 
@@ -2726,6 +2863,12 @@
             const isWeightBased = (unitType === 'weight' || unitType === 'وزن') ? 1 : 0;
             const unitTypeVal = isWeightBased ? 'وزن' : 'قطعة';
 
+            const hasPack = document.getElementById('prod-haspack-field').checked ? 1 : 0;
+            const packName = document.getElementById('prod-packname-field').value.trim();
+            const packBarcode = document.getElementById('prod-packbarcode-field').value.trim();
+            const packQty = parseFloat(document.getElementById('prod-packqty-field').value || 1);
+            const packPrice = parseFloat(document.getElementById('prod-packprice-field').value || 0);
+
             const payload = { 
                 id: id ? parseInt(id) : undefined, 
                 name, 
@@ -2736,7 +2879,12 @@
                 barcode, 
                 local_code: localCode, 
                 unit_type: unitTypeVal,
-                is_weight_based: isWeightBased
+                is_weight_based: isWeightBased,
+                has_pack: hasPack,
+                pack_name: packName,
+                pack_barcode: packBarcode,
+                pack_qty: packQty,
+                pack_price: packPrice
             };
             const btn = document.getElementById('save-prod-btn');
             btn.disabled = true;

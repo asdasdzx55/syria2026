@@ -281,7 +281,7 @@ class HybridSyncManager:
     def _sync_pending_products(self, api_url, api_key, conn, cur):
         try:
             cur.execute("""
-                SELECT id, barcode, barcode2, barcode3, all_barcodes, local_code, name, price, cost, stock, category, sub_category, remote_id, is_weight_based, unit_type 
+                SELECT id, barcode, barcode2, barcode3, all_barcodes, local_code, name, price, cost, stock, category, sub_category, remote_id, is_weight_based, unit_type, has_pack, pack_name, pack_barcode, pack_price, pack_qty 
                 FROM products 
                 WHERE synced = 0 LIMIT 50
             """)
@@ -305,7 +305,12 @@ class HybridSyncManager:
                     'category': r[10] or 'عام',
                     'sub_category': r[11] or '',
                     'is_weight_based': is_weight,
-                    'unit_type': unit_t
+                    'unit_type': unit_t,
+                    'has_pack': r[15] or 0,
+                    'pack_name': r[16] or '',
+                    'pack_barcode': r[17] or '',
+                    'pack_price': r[18] or 0,
+                    'pack_qty': r[19] or 1
                 }
 
                 ok, resp = self._make_request(api_url, action='sync_product', payload=payload, api_key=api_key, method='POST')
@@ -569,11 +574,19 @@ class HybridSyncManager:
                 p_rem_id = str(cp.get('id', ''))
                 p_is_weight = 1 if (cp.get('is_weight_based') or cp.get('unit_type') in ['weight', 'وزن']) else 0
                 p_unit_type = cp.get('unit_type') or ('وزن' if p_is_weight else 'قطعة')
+                p_has_pack = 1 if cp.get('has_pack') else 0
+                p_pack_name = (cp.get('pack_name') or '').strip()
+                p_pack_barcode = (cp.get('pack_barcode') or '').strip()
+                p_pack_price = float(cp.get('pack_price', 0))
+                p_pack_qty = float(cp.get('pack_qty', 1))
 
                 # البحث عن المنتج محلياً بالباركود أو الكود المحلي أو الاسم
                 local_row = None
                 if p_barcode:
                     cur.execute("SELECT id FROM products WHERE barcode = ? LIMIT 1", (p_barcode,))
+                    local_row = cur.fetchone()
+                if not local_row and p_pack_barcode:
+                    cur.execute("SELECT id FROM products WHERE pack_barcode = ? LIMIT 1", (p_pack_barcode,))
                     local_row = cur.fetchone()
                 if not local_row and p_loc:
                     cur.execute("SELECT id FROM products WHERE local_code = ? LIMIT 1", (p_loc,))
@@ -585,15 +598,15 @@ class HybridSyncManager:
                 if local_row:
                     loc_id = local_row[0]
                     cur.execute("""
-                        UPDATE products SET name=?, price=?, cost=?, stock=?, barcode=?, barcode2=?, barcode3=?, all_barcodes=?, local_code=?, category=?, main_category=?, sub_category=?, is_weight_based=?, unit_type=?, synced=1, remote_id=? 
+                        UPDATE products SET name=?, price=?, cost=?, stock=?, barcode=?, barcode2=?, barcode3=?, all_barcodes=?, local_code=?, category=?, main_category=?, sub_category=?, is_weight_based=?, unit_type=?, has_pack=?, pack_name=?, pack_barcode=?, pack_price=?, pack_qty=?, synced=1, remote_id=? 
                         WHERE id=?
-                    """, (p_name, p_price, p_cost, p_stock, p_barcode, p_bc2, p_bc3, p_all_bc, p_loc, p_cat, p_cat, p_sub, p_is_weight, p_unit_type, p_rem_id, loc_id))
+                    """, (p_name, p_price, p_cost, p_stock, p_barcode, p_bc2, p_bc3, p_all_bc, p_loc, p_cat, p_cat, p_sub, p_is_weight, p_unit_type, p_has_pack, p_pack_name, p_pack_barcode, p_pack_price, p_pack_qty, p_rem_id, loc_id))
                     updated_count += 1
                 else:
                     cur.execute("""
-                        INSERT INTO products (barcode, barcode2, barcode3, all_barcodes, local_code, name, price, cost, stock, category, main_category, sub_category, is_weight_based, unit_type, synced, remote_id) 
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
-                    """, (p_barcode, p_bc2, p_bc3, p_all_bc, p_loc, p_name, p_price, p_cost, p_stock, p_cat, p_cat, p_sub, p_is_weight, p_unit_type, p_rem_id))
+                        INSERT INTO products (barcode, barcode2, barcode3, all_barcodes, local_code, name, price, cost, stock, category, main_category, sub_category, is_weight_based, unit_type, has_pack, pack_name, pack_barcode, pack_price, pack_qty, synced, remote_id) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+                    """, (p_barcode, p_bc2, p_bc3, p_all_bc, p_loc, p_name, p_price, p_cost, p_stock, p_cat, p_cat, p_sub, p_is_weight, p_unit_type, p_has_pack, p_pack_name, p_pack_barcode, p_pack_price, p_pack_qty, p_rem_id))
                     inserted_count += 1
 
                 # تسجيل وتحديث الأقسام والتصنيفات تلقائياً محلياً

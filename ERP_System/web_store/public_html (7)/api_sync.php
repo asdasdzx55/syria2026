@@ -236,6 +236,11 @@ try {
                 $p['all_barcodes'] = $p['all_barcodes'] ?? ($p['barcode'] ?: '');
                 $p['is_weight_based'] = (!empty($p['is_weight_based']) || ($p['unit_type'] ?? '') === 'weight' || ($p['unit_type'] ?? '') === 'وزن') ? 1 : 0;
                 $p['unit_type'] = !empty($p['unit_type']) ? $p['unit_type'] : ($p['is_weight_based'] ? 'وزن' : 'قطعة');
+                $p['has_pack'] = !empty($p['has_pack']) ? 1 : 0;
+                $p['pack_name'] = $p['pack_name'] ?? '';
+                $p['pack_barcode'] = $p['pack_barcode'] ?? '';
+                $p['pack_price'] = (float)($p['pack_price'] ?? 0);
+                $p['pack_qty'] = (float)($p['pack_qty'] ?? 1);
             }
             unset($p);
             
@@ -257,15 +262,24 @@ try {
                 echo json_encode(['success' => false, 'error' => 'يرجى تحديد الباركود.'], JSON_UNESCAPED_UNICODE);
                 break;
             }
-            $stmt = $pdo->prepare("SELECT id, name, price, cost, stock, barcode, local_code, all_barcodes, image, category_id, description FROM products WHERE barcode = ? OR local_code = ? OR all_barcodes LIKE ? LIMIT 1");
-            $stmt->execute([$barcode, $barcode, '%' . $barcode . '%']);
+            $stmt = $pdo->prepare("SELECT id, name, price, cost, stock, barcode, local_code, all_barcodes, image, category_id, description, has_pack, pack_name, pack_barcode, pack_price, pack_qty FROM products WHERE barcode = ? OR local_code = ? OR pack_barcode = ? OR all_barcodes LIKE ? LIMIT 1");
+            $stmt->execute([$barcode, $barcode, $barcode, '%' . $barcode . '%']);
             $prod = $stmt->fetch(PDO::FETCH_ASSOC);
             if ($prod) {
                 $prod['id'] = (int)$prod['id'];
                 $prod['price'] = (float)$prod['price'];
                 $prod['cost'] = (float)($prod['cost'] ?? 0);
                 $prod['stock'] = (float)($prod['stock'] ?? 0);
-                echo json_encode(['success' => true, 'found' => true, 'product' => $prod], JSON_UNESCAPED_UNICODE);
+                $prod['has_pack'] = !empty($prod['has_pack']) ? 1 : 0;
+                $prod['pack_price'] = (float)($prod['pack_price'] ?? 0);
+                $prod['pack_qty'] = (float)($prod['pack_qty'] ?? 1);
+                $is_pack_match = (!empty($prod['pack_barcode']) && $prod['pack_barcode'] === $barcode);
+                echo json_encode([
+                    'success' => true, 
+                    'found' => true, 
+                    'product' => $prod,
+                    'is_pack_match' => $is_pack_match
+                ], JSON_UNESCAPED_UNICODE);
             } else {
                 echo json_encode(['success' => true, 'found' => false, 'message' => 'المنتج غير موجود'], JSON_UNESCAPED_UNICODE);
             }
@@ -302,6 +316,9 @@ try {
                 $name = $it['name'] ?? ('منتج #' . ($it['product_id'] ?? ''));
                 $qty = (float)($it['qty'] ?? 1);
                 $price = (float)($it['price'] ?? 0);
+                $pack_mult = (float)($it['pack_multiplier'] ?? 1.0);
+                if ($pack_mult <= 0) $pack_mult = 1.0;
+                $deduct_qty = (float)($it['deduct_qty'] ?? ($qty * $pack_mult));
                 $items_text[] = "• {$name} × {$qty} = " . ($qty * $price) . " ج.م";
                 
                 // خصم المخزون المركزي للمنتج في المتجر الإلكتروني
@@ -312,22 +329,22 @@ try {
                 $deducted = false;
                 if ($p_id > 0) {
                     $upd = $pdo->prepare("UPDATE products SET stock = GREATEST(0, stock - ?) WHERE id = ?");
-                    $upd->execute([$qty, $p_id]);
+                    $upd->execute([$deduct_qty, $p_id]);
                     if ($upd->rowCount() > 0) $deducted = true;
                 }
                 if (!$deducted && !empty($p_bc)) {
-                    $upd = $pdo->prepare("UPDATE products SET stock = GREATEST(0, stock - ?) WHERE barcode = ?");
-                    $upd->execute([$qty, $p_bc]);
+                    $upd = $pdo->prepare("UPDATE products SET stock = GREATEST(0, stock - ?) WHERE barcode = ? OR pack_barcode = ?");
+                    $upd->execute([$deduct_qty, $p_bc, $p_bc]);
                     if ($upd->rowCount() > 0) $deducted = true;
                 }
                 if (!$deducted && !empty($p_loc)) {
                     $upd = $pdo->prepare("UPDATE products SET stock = GREATEST(0, stock - ?) WHERE local_code = ?");
-                    $upd->execute([$qty, $p_loc]);
+                    $upd->execute([$deduct_qty, $p_loc]);
                     if ($upd->rowCount() > 0) $deducted = true;
                 }
                 if (!$deducted && !empty($name)) {
-                    $upd = $pdo->prepare("UPDATE products SET stock = GREATEST(0, stock - ?) WHERE name = ?");
-                    $upd->execute([$qty, $name]);
+                    $upd = $pdo->prepare("UPDATE products SET stock = GREATEST(0, stock - ?) WHERE name = ? OR pack_name = ?");
+                    $upd->execute([$deduct_qty, $name, $name]);
                 }
             }
             $details_str = implode("\n", $items_text);
@@ -1493,6 +1510,12 @@ try {
             $image_url = trim($data['image_url'] ?? '');
             $is_weight_based = (!empty($data['is_weight_based']) || ($data['unit_type'] ?? '') === 'weight' || ($data['unit_type'] ?? '') === 'وزن') ? 1 : 0;
             $unit_type = trim($data['unit_type'] ?? ($is_weight_based ? 'وزن' : 'قطعة'));
+            $has_pack = !empty($data['has_pack']) ? 1 : 0;
+            $pack_name = trim($data['pack_name'] ?? '');
+            $pack_barcode = trim($data['pack_barcode'] ?? '');
+            $pack_price = (float)($data['pack_price'] ?? 0);
+            $pack_qty = (float)($data['pack_qty'] ?? 1);
+            if ($pack_qty <= 0) $pack_qty = 1.0;
             
             if (empty($name)) {
                 echo json_encode(['success' => false, 'error' => 'اسم المنتج مطلوب!']);
@@ -1528,6 +1551,11 @@ try {
                 $chk->execute([$local_code]);
                 $existing_id = $chk->fetchColumn();
             }
+            if (!$existing_id && !empty($pack_barcode)) {
+                $chk = $pdo->prepare("SELECT id FROM products WHERE pack_barcode = ? LIMIT 1");
+                $chk->execute([$pack_barcode]);
+                $existing_id = $chk->fetchColumn();
+            }
             if (!$existing_id) {
                 $chk = $pdo->prepare("SELECT id FROM products WHERE name = ? LIMIT 1");
                 $chk->execute([$name]);
@@ -1542,15 +1570,20 @@ try {
             try { $pdo->exec("ALTER TABLE products ADD COLUMN local_code VARCHAR(50) DEFAULT NULL"); } catch (Exception $e) {}
             try { $pdo->exec("ALTER TABLE products ADD COLUMN is_weight_based TINYINT DEFAULT 0"); } catch (Exception $e) {}
             try { $pdo->exec("ALTER TABLE products ADD COLUMN unit_type VARCHAR(50) DEFAULT 'قطعة'"); } catch (Exception $e) {}
+            try { $pdo->exec("ALTER TABLE products ADD COLUMN has_pack TINYINT DEFAULT 0"); } catch (Exception $e) {}
+            try { $pdo->exec("ALTER TABLE products ADD COLUMN pack_name VARCHAR(150) DEFAULT NULL"); } catch (Exception $e) {}
+            try { $pdo->exec("ALTER TABLE products ADD COLUMN pack_barcode VARCHAR(100) DEFAULT NULL"); } catch (Exception $e) {}
+            try { $pdo->exec("ALTER TABLE products ADD COLUMN pack_price DECIMAL(10,2) DEFAULT 0.00"); } catch (Exception $e) {}
+            try { $pdo->exec("ALTER TABLE products ADD COLUMN pack_qty DECIMAL(10,3) DEFAULT 1.000"); } catch (Exception $e) {}
 
             if ($existing_id) {
-                $upd = $pdo->prepare("UPDATE products SET name = ?, category = ?, sub_category = ?, price = ?, cost = ?, stock = ?, barcode = ?, barcode2 = ?, barcode3 = ?, all_barcodes = ?, local_code = ?, is_weight_based = ?, unit_type = ? WHERE id = ?");
-                $upd->execute([$name, $category, $sub_category, $price, $cost, $stock, $barcode, $barcode2, $barcode3, $all_barcodes, $local_code, $is_weight_based, $unit_type, $existing_id]);
+                $upd = $pdo->prepare("UPDATE products SET name = ?, category = ?, sub_category = ?, price = ?, cost = ?, stock = ?, barcode = ?, barcode2 = ?, barcode3 = ?, all_barcodes = ?, local_code = ?, is_weight_based = ?, unit_type = ?, has_pack = ?, pack_name = ?, pack_barcode = ?, pack_price = ?, pack_qty = ? WHERE id = ?");
+                $upd->execute([$name, $category, $sub_category, $price, $cost, $stock, $barcode, $barcode2, $barcode3, $all_barcodes, $local_code, $is_weight_based, $unit_type, $has_pack, $pack_name, $pack_barcode, $pack_price, $pack_qty, $existing_id]);
                 $final_id = $existing_id;
                 $action_done = 'updated';
             } else {
-                $ins = $pdo->prepare("INSERT INTO products (name, category, sub_category, price, cost, stock, barcode, barcode2, barcode3, all_barcodes, local_code, description, image_url, is_weight_based, unit_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                $ins->execute([$name, $category, $sub_category, $price, $cost, $stock, $barcode, $barcode2, $barcode3, $all_barcodes, $local_code, $description, $image_url, $is_weight_based, $unit_type]);
+                $ins = $pdo->prepare("INSERT INTO products (name, category, sub_category, price, cost, stock, barcode, barcode2, barcode3, all_barcodes, local_code, description, image_url, is_weight_based, unit_type, has_pack, pack_name, pack_barcode, pack_price, pack_qty) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $ins->execute([$name, $category, $sub_category, $price, $cost, $stock, $barcode, $barcode2, $barcode3, $all_barcodes, $local_code, $description, $image_url, $is_weight_based, $unit_type, $has_pack, $pack_name, $pack_barcode, $pack_price, $pack_qty]);
                 $final_id = $pdo->lastInsertId();
                 $action_done = 'inserted';
             }
