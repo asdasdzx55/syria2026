@@ -2389,7 +2389,7 @@ try {
                     ->execute([
                         "📋 تم تطبيق جرد مخزون جديد",
                         "قام ($auditor) بتطبيق جرد شامل وتحديث كميات ($updated_count) صنفاً",
-                        "https://asdasdzx55.github.io/urban-octo-chainsaw/pos/"
+                        "https://supermarkrt.almagd555.com/pos/"
                     ]);
             } catch (Exception $e) {}
 

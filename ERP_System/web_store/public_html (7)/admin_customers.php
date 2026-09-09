@@ -222,7 +222,7 @@ require_once 'header.php';
                     </button>
                 </form>
 
-                <a href="https://asdasdzx55.github.io/urban-octo-chainsaw/pos/" target="_blank" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-md transition flex items-center gap-2 text-xs md:text-sm">
+                <a href="/pos/" target="_blank" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-md transition flex items-center gap-2 text-xs md:text-sm">
                     <i class="fa-solid fa-cash-register text-amber-300"></i>
                     كاشير الويب (POS)
                 </a>
