@@ -1672,51 +1672,108 @@ try {
             break;
 
         // ============================================================
-        // 3.4 مزامنة قسم أساسي أو فرعي (Sync Category)
+        // 3.4 مزامنة وإنشاء قسم أساسي أو فرعي (Sync Category)
         // ============================================================
         case 'sync_category':
             $data = !empty($json_payload) ? $json_payload : $_POST;
             $main_name = trim($data['main_category'] ?? $data['name'] ?? '');
             $sub_name = trim($data['sub_category'] ?? '');
+            $parent_id = (int)($data['parent_id'] ?? 0);
             
-            if (empty($main_name)) {
-                echo json_encode(['success' => false, 'error' => 'اسم القسم الأساسي مطلوب!']);
+            if ($parent_id > 0 && empty($main_name)) {
+                $p_chk = $pdo->prepare("SELECT name FROM categories WHERE id = ? LIMIT 1");
+                $p_chk->execute([$parent_id]);
+                $main_name = $p_chk->fetchColumn() ?: '';
+            }
+
+            if (empty($main_name) && empty($sub_name)) {
+                echo json_encode(['success' => false, 'error' => 'يرجى تحديد اسم التصنيف!'], JSON_UNESCAPED_UNICODE);
                 exit;
             }
             
-            // التأكد من وجود القسم الأساسي
-            $chk = $pdo->prepare("SELECT id FROM categories WHERE name = ? LIMIT 1");
-            $chk->execute([$main_name]);
-            $main_id = $chk->fetchColumn();
-            if (!$main_id) {
-                $ins = $pdo->prepare("INSERT INTO categories (name) VALUES (?)");
-                $ins->execute([$main_name]);
-                $main_id = $pdo->lastInsertId();
+            // 1. إذا كان المطلوب إضافة قسم رئيسي فقط
+            if (!empty($main_name) && empty($sub_name)) {
+                $chk = $pdo->prepare("SELECT id FROM categories WHERE name = ? AND (parent_id IS NULL OR parent_id = 0) LIMIT 1");
+                $chk->execute([$main_name]);
+                $main_id = $chk->fetchColumn();
+                if (!$main_id) {
+                    $ins = $pdo->prepare("INSERT INTO categories (name, parent_id) VALUES (?, NULL)");
+                    $ins->execute([$main_name]);
+                    $main_id = $pdo->lastInsertId();
+                }
+                echo json_encode([
+                    'success' => true,
+                    'category_id' => (int)$main_id,
+                    'main_category' => $main_name,
+                    'is_main' => true,
+                    'message' => "✅ تم حفظ القسم الرئيسي ({$main_name}) بنجاح."
+                ], JSON_UNESCAPED_UNICODE);
+                break;
             }
             
-            // إذا كان هناك قسم فرعي
-            if (!empty($sub_name)) {
+            // 2. إذا كان المطلوب إضافة قسم فرعي يتبع رئيساً
+            if (!empty($main_name) && !empty($sub_name)) {
+                // التأكد من وجود القسم الرئيسي
+                $chk = $pdo->prepare("SELECT id FROM categories WHERE name = ? AND (parent_id IS NULL OR parent_id = 0) LIMIT 1");
+                $chk->execute([$main_name]);
+                $main_id = $chk->fetchColumn();
+                if (!$main_id) {
+                    $ins = $pdo->prepare("INSERT INTO categories (name, parent_id) VALUES (?, NULL)");
+                    $ins->execute([$main_name]);
+                    $main_id = $pdo->lastInsertId();
+                }
+                
+                // التأكد من وجود القسم الفرعي تحت هذا الرئيسي
                 $chk_sub = $pdo->prepare("SELECT id FROM categories WHERE name = ? AND parent_id = ? LIMIT 1");
                 $chk_sub->execute([$sub_name, $main_id]);
-                if (!$chk_sub->fetchColumn()) {
+                $sub_id = $chk_sub->fetchColumn();
+                if (!$sub_id) {
                     $ins_sub = $pdo->prepare("INSERT INTO categories (name, parent_id) VALUES (?, ?)");
                     $ins_sub->execute([$sub_name, $main_id]);
+                    $sub_id = $pdo->lastInsertId();
                 }
+                
+                echo json_encode([
+                    'success' => true,
+                    'main_id' => (int)$main_id,
+                    'sub_id' => (int)$sub_id,
+                    'main_category' => $main_name,
+                    'sub_category' => $sub_name,
+                    'message' => "✅ تمت إضافة القسم الفرعي ({$sub_name}) تحت ({$main_name}) بنجاح."
+                ], JSON_UNESCAPED_UNICODE);
+                break;
             }
-            
-            echo json_encode([
-                'success' => true,
-                'message' => "✅ تمت مزامنة التصنيف ({$main_name}) بنجاح."
-            ], JSON_UNESCAPED_UNICODE);
             break;
 
         // ============================================================
-        // 3.5 حذف قسم (Delete Category)
+        // 3.5 حذف قسم أو قسم فرعي (Delete Category)
         // ============================================================
         case 'delete_category':
             $data = !empty($json_payload) ? $json_payload : $_POST;
-            $cat_name = trim($data['name'] ?? '');
-            if (!empty($cat_name)) {
+            $cat_id = (int)($data['id'] ?? 0);
+            $cat_name = trim($data['name'] ?? $data['main_category'] ?? '');
+            $sub_name = trim($data['sub_category'] ?? '');
+
+            if ($cat_id > 0) {
+                $chk = $pdo->prepare("SELECT parent_id FROM categories WHERE id = ? LIMIT 1");
+                $chk->execute([$cat_id]);
+                $pid = $chk->fetchColumn();
+                if ($pid !== false && $pid !== null && (int)$pid > 0) {
+                    $pdo->prepare("DELETE FROM categories WHERE id = ?")->execute([$cat_id]);
+                } else {
+                    $pdo->prepare("DELETE FROM categories WHERE parent_id = ?")->execute([$cat_id]);
+                    $pdo->prepare("DELETE FROM categories WHERE id = ?")->execute([$cat_id]);
+                }
+            } elseif (!empty($sub_name) && !empty($cat_name)) {
+                $chk = $pdo->prepare("SELECT id FROM categories WHERE name = ? AND (parent_id IS NULL OR parent_id = 0) LIMIT 1");
+                $chk->execute([$cat_name]);
+                $p_id = $chk->fetchColumn();
+                if ($p_id) {
+                    $pdo->prepare("DELETE FROM categories WHERE name = ? AND parent_id = ?")->execute([$sub_name, $p_id]);
+                }
+            } elseif (!empty($sub_name)) {
+                $pdo->prepare("DELETE FROM categories WHERE name = ? AND parent_id IS NOT NULL AND parent_id > 0")->execute([$sub_name]);
+            } elseif (!empty($cat_name)) {
                 $chk = $pdo->prepare("SELECT id FROM categories WHERE name = ? LIMIT 1");
                 $chk->execute([$cat_name]);
                 $c_id = $chk->fetchColumn();
@@ -1725,7 +1782,7 @@ try {
                     $pdo->prepare("DELETE FROM categories WHERE id = ?")->execute([$c_id]);
                 }
             }
-            echo json_encode(['success' => true, 'message' => 'تم حذف القسم من المتجر بنجاح.'], JSON_UNESCAPED_UNICODE);
+            echo json_encode(['success' => true, 'message' => 'تم حذف التصنيف بنجاح.'], JSON_UNESCAPED_UNICODE);
             break;
 
         // ============================================================
