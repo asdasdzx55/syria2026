@@ -1,7 +1,6 @@
 <?php
 /**
- * إعادة توجيه فورية إلى نظام كاشير الويب الرسمي على GitHub
- * https://asdasdzx55.github.io/urban-octo-chainsaw/pos/
+ * إعادة توجيه فورية إلى نظام كاشير الويب الرسمي على استضافة هوستنجر
  */
-header("Location: https://asdasdzx55.github.io/urban-octo-chainsaw/pos/", true, 301);
+header("Location: /pos/", true, 301);
 exit;
