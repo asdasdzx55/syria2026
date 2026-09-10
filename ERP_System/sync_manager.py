@@ -1,4 +1,4 @@
-import sqlite3
+﻿import sqlite3
 import datetime
 import json
 import threading
@@ -32,7 +32,7 @@ class HybridSyncManager:
         self._session = None
 
     def _get_db(self):
-        """إنشاء اتصال آمن ومستقل بقاعدة البيانات لكل خيط عمل (Thread-Safe)"""
+        """ط¥ظ†ط´ط§ط، ط§طھطµط§ظ„ ط¢ظ…ظ† ظˆظ…ط³طھظ‚ظ„ ط¨ظ‚ط§ط¹ط¯ط© ط§ظ„ط¨ظٹط§ظ†ط§طھ ظ„ظƒظ„ ط®ظٹط· ط¹ظ…ظ„ (Thread-Safe)"""
         db_path = get_db_path()
         conn = sqlite3.connect(db_path, timeout=15)
         return conn
@@ -55,7 +55,7 @@ class HybridSyncManager:
             if not st.get('cloud_api_key'):
                 st['cloud_api_key'] = st.get('api_secret_key', 'syrian_home_pos_secret_token_2026')
             if not st.get('cloud_api_url'):
-                st['cloud_api_url'] = 'https://supermarkrt.almagd555.com/api_sync.php'
+                st['cloud_api_url'] = 'https://syrianhouse.almagd555.com/api_sync.php'
             return st
         finally:
             conn.close()
@@ -69,7 +69,7 @@ class HybridSyncManager:
                 clean_url = f"{clean_url}/api_sync.php"
         
         settings = {
-            'cloud_api_url': clean_url or 'https://supermarkrt.almagd555.com/api_sync.php',
+            'cloud_api_url': clean_url or 'https://syrianhouse.almagd555.com/api_sync.php',
             'cloud_api_key': api_key.strip() if api_key else 'syrian_home_pos_secret_token_2026',
             'cloud_auto_sync': str(auto_sync),
             'cloud_sync_interval': str(sync_interval)
@@ -100,7 +100,7 @@ class HybridSyncManager:
     def _normalize_url(self, raw_url, action=None):
         url = (raw_url or '').strip().rstrip('/')
         if not url: 
-            url = 'https://supermarkrt.almagd555.com/api_sync.php'
+            url = 'https://syrianhouse.almagd555.com/api_sync.php'
         
         if not url.endswith('api_sync.php'):
             if url.endswith('.php'):
@@ -136,24 +136,24 @@ class HybridSyncManager:
             except Exception:
                 return (resp.status_code in (200, 201)), resp.text
         except requests.exceptions.RequestException as e:
-            return False, f"خطأ في الاتصال بالخادم: {e}"
+            return False, f"ط®ط·ط£ ظپظٹ ط§ظ„ط§طھطµط§ظ„ ط¨ط§ظ„ط®ط§ط¯ظ…: {e}"
         except Exception as e:
-            return False, f"خطأ غير متوقع: {e}"
+            return False, f"ط®ط·ط£ ط؛ظٹط± ظ…طھظˆظ‚ط¹: {e}"
 
     def test_cloud_connection(self, api_url=None, api_key=None):
         settings = self.get_cloud_settings()
-        url = api_url or settings.get('cloud_api_url', 'https://supermarkrt.almagd555.com/api_sync.php')
+        url = api_url or settings.get('cloud_api_url', 'https://syrianhouse.almagd555.com/api_sync.php')
         key = api_key or settings.get('cloud_api_key', 'syrian_home_pos_secret_token_2026')
 
         ok, res = self._make_request(url, action='ping', api_key=key, method='GET', timeout=8)
         if ok and isinstance(res, dict) and res.get('success'):
-            store = res.get('store_name', 'سوبر ماركت المنزل السوري')
+            store = res.get('store_name', 'ط³ظˆط¨ط± ظ…ط§ط±ظƒطھ ط§ظ„ظ…ظ†ط²ظ„ ط§ظ„ط³ظˆط±ظٹ')
             cnt = res.get('total_products', 0)
-            return True, f"✅ متصل بنجاح بسحابة ({store}) ⚡\nإجمالي المنتجات بالسحابة: {cnt} صنف"
+            return True, f"âœ… ظ…طھطµظ„ ط¨ظ†ط¬ط§ط­ ط¨ط³ط­ط§ط¨ط© ({store}) âڑ،\nط¥ط¬ظ…ط§ظ„ظٹ ط§ظ„ظ…ظ†طھط¬ط§طھ ط¨ط§ظ„ط³ط­ط§ط¨ط©: {cnt} طµظ†ظپ"
         elif ok:
-            return True, "✅ تم الاتصال بنجاح بالخادم المركزي!"
+            return True, "âœ… طھظ… ط§ظ„ط§طھطµط§ظ„ ط¨ظ†ط¬ط§ط­ ط¨ط§ظ„ط®ط§ط¯ظ… ط§ظ„ظ…ط±ظƒط²ظٹ!"
         else:
-            return False, f"فشل الاتصال: {res}"
+            return False, f"ظپط´ظ„ ط§ظ„ط§طھطµط§ظ„: {res}"
 
     def trigger_instant_sync(self):
         t = threading.Thread(target=self.run_sync_cycle, daemon=True)
@@ -186,35 +186,35 @@ class HybridSyncManager:
             try:
                 cur.execute("SELECT key, value FROM settings WHERE key LIKE 'cloud_%' OR key LIKE 'hostinger_%' OR key = 'api_secret_key'")
                 settings = dict(cur.fetchall())
-                url = settings.get('cloud_api_url', 'https://supermarkrt.almagd555.com/api_sync.php')
+                url = settings.get('cloud_api_url', 'https://syrianhouse.almagd555.com/api_sync.php')
                 key = settings.get('cloud_api_key', 'syrian_home_pos_secret_token_2026')
 
                 if not url: return
 
-                # 1. دفع الفواتير غير المزامنة من sales إلى الويب سايت
+                # 1. ط¯ظپط¹ ط§ظ„ظپظˆط§طھظٹط± ط؛ظٹط± ط§ظ„ظ…ط²ط§ظ…ظ†ط© ظ…ظ† sales ط¥ظ„ظ‰ ط§ظ„ظˆظٹط¨ ط³ط§ظٹطھ
                 self._sync_pending_sales(url, key, conn, cur)
 
-                # 2. دفع المنتجات المحدثة محلياً إلى الويب سايت
+                # 2. ط¯ظپط¹ ط§ظ„ظ…ظ†طھط¬ط§طھ ط§ظ„ظ…ط­ط¯ط«ط© ظ…ط­ظ„ظٹط§ظ‹ ط¥ظ„ظ‰ ط§ظ„ظˆظٹط¨ ط³ط§ظٹطھ
                 self._sync_pending_products(url, key, conn, cur)
 
-                # 3. مزامنة الأقسام والتصنيفات الأساسية والفرعية
+                # 3. ظ…ط²ط§ظ…ظ†ط© ط§ظ„ط£ظ‚ط³ط§ظ… ظˆط§ظ„طھطµظ†ظٹظپط§طھ ط§ظ„ط£ط³ط§ط³ظٹط© ظˆط§ظ„ظپط±ط¹ظٹط©
                 self._sync_all_categories(url, key, conn, cur)
 
-                # 4. دفع الموردين غير المزامنين محلياً إلى السحابة
+                # 4. ط¯ظپط¹ ط§ظ„ظ…ظˆط±ط¯ظٹظ† ط؛ظٹط± ط§ظ„ظ…ط²ط§ظ…ظ†ظٹظ† ظ…ط­ظ„ظٹط§ظ‹ ط¥ظ„ظ‰ ط§ظ„ط³ط­ط§ط¨ط©
                 self._sync_pending_suppliers(url, key, conn, cur)
 
-                # 5. دفع فواتير المشتريات والتوريد غير المزامنة محلياً إلى السحابة
+                # 5. ط¯ظپط¹ ظپظˆط§طھظٹط± ط§ظ„ظ…ط´طھط±ظٹط§طھ ظˆط§ظ„طھظˆط±ظٹط¯ ط؛ظٹط± ط§ظ„ظ…ط²ط§ظ…ظ†ط© ظ…ط­ظ„ظٹط§ظ‹ ط¥ظ„ظ‰ ط§ظ„ط³ط­ط§ط¨ط©
                 self._sync_pending_purchases(url, key, conn, cur)
 
-                # 6. مزامنة طياري ومندوبي الدليفري ثنائياً
+                # 6. ظ…ط²ط§ظ…ظ†ط© ط·ظٹط§ط±ظٹ ظˆظ…ظ†ط¯ظˆط¨ظٹ ط§ظ„ط¯ظ„ظٹظپط±ظٹ ط«ظ†ط§ط¦ظٹط§ظ‹
                 self._sync_delivery_drivers(url, key, conn, cur)
                 self._pull_cloud_delivery_drivers(url, key, conn, cur)
 
-                # 7. مزامنة موظفي وعمال المتجر ثنائياً
+                # 7. ظ…ط²ط§ظ…ظ†ط© ظ…ظˆط¸ظپظٹ ظˆط¹ظ…ط§ظ„ ط§ظ„ظ…طھط¬ط± ط«ظ†ط§ط¦ظٹط§ظ‹
                 self._sync_pending_employees(url, key, conn, cur)
                 self._pull_cloud_employees(url, key, conn, cur)
 
-                # 8. سحب الطلبات الجديدة القادمة من المتجر الإلكتروني
+                # 8. ط³ط­ط¨ ط§ظ„ط·ظ„ط¨ط§طھ ط§ظ„ط¬ط¯ظٹط¯ط© ط§ظ„ظ‚ط§ط¯ظ…ط© ظ…ظ† ط§ظ„ظ…طھط¬ط± ط§ظ„ط¥ظ„ظƒطھط±ظˆظ†ظٹ
                 self._pull_online_orders(url, key, conn, cur)
 
             except Exception as e:
@@ -240,7 +240,7 @@ class HybridSyncManager:
                     items.append({
                         'product_id': it[6] or it[0],
                         'local_product_id': it[0],
-                        'name': it[1] or f"منتج #{it[0]}",
+                        'name': it[1] or f"ظ…ظ†طھط¬ #{it[0]}",
                         'barcode': it[2] or '',
                         'local_code': it[3] or '',
                         'qty': it[4],
@@ -249,7 +249,7 @@ class HybridSyncManager:
 
                 cur.execute("SELECT value FROM settings WHERE key='default_cashier'")
                 cashier_res = cur.fetchone()
-                cashier_name = cashier_res[0] if cashier_res else 'كاشير محلي'
+                cashier_name = cashier_res[0] if cashier_res else 'ظƒط§ط´ظٹط± ظ…ط­ظ„ظٹ'
 
                 payload = {
                     'local_sale_id': s_id,
@@ -288,8 +288,8 @@ class HybridSyncManager:
             rows = cur.fetchall()
             for r in rows:
                 p_id = r[0]
-                is_weight = 1 if (r[13] or (r[14] in ['وزن', 'weight'])) else 0
-                unit_t = r[14] or ('وزن' if is_weight else 'قطعة')
+                is_weight = 1 if (r[13] or (r[14] in ['ظˆط²ظ†', 'weight'])) else 0
+                unit_t = r[14] or ('ظˆط²ظ†' if is_weight else 'ظ‚ط·ط¹ط©')
                 payload = {
                     'local_product_id': p_id,
                     'remote_id': r[12] or '',
@@ -302,7 +302,7 @@ class HybridSyncManager:
                     'price': r[7] or 0,
                     'cost': r[8] or 0,
                     'stock': r[9] or 0,
-                    'category': r[10] or 'عام',
+                    'category': r[10] or 'ط¹ط§ظ…',
                     'sub_category': r[11] or '',
                     'is_weight_based': is_weight,
                     'unit_type': unit_t,
@@ -323,12 +323,12 @@ class HybridSyncManager:
             print(f"Sync products error: {e}")
 
     def _sync_delivery_drivers(self, api_url, api_key, conn, cur):
-        """مزامنة طياري ومندوبي الدليفري فقط (فصل حاسم عن العمال والموظفين)"""
+        """ظ…ط²ط§ظ…ظ†ط© ط·ظٹط§ط±ظٹ ظˆظ…ظ†ط¯ظˆط¨ظٹ ط§ظ„ط¯ظ„ظٹظپط±ظٹ ظپظ‚ط· (ظپطµظ„ ط­ط§ط³ظ… ط¹ظ† ط§ظ„ط¹ظ…ط§ظ„ ظˆط§ظ„ظ…ظˆط¸ظپظٹظ†)"""
         try:
             cur.execute("""
                 SELECT id, name, phone, remote_id 
                 FROM employees 
-                WHERE (role IN ('دليفري', 'طيار', 'سائق') OR role LIKE '%دليفري%' OR role LIKE '%طيار%' OR role LIKE '%سائق%')
+                WHERE (role IN ('ط¯ظ„ظٹظپط±ظٹ', 'ط·ظٹط§ط±', 'ط³ط§ط¦ظ‚') OR role LIKE '%ط¯ظ„ظٹظپط±ظٹ%' OR role LIKE '%ط·ظٹط§ط±%' OR role LIKE '%ط³ط§ط¦ظ‚%')
                 AND (synced = 0 OR synced IS NULL)
             """)
             rows = cur.fetchall()
@@ -347,12 +347,12 @@ class HybridSyncManager:
             print(f"Sync delivery drivers error: {e}")
 
     def _sync_pending_employees(self, api_url, api_key, conn, cur):
-        """مزامنة عمال وموظفي المتجر إلى السحابة فوراً (غير طياري الدليفري)"""
+        """ظ…ط²ط§ظ…ظ†ط© ط¹ظ…ط§ظ„ ظˆظ…ظˆط¸ظپظٹ ط§ظ„ظ…طھط¬ط± ط¥ظ„ظ‰ ط§ظ„ط³ط­ط§ط¨ط© ظپظˆط±ط§ظ‹ (ط؛ظٹط± ط·ظٹط§ط±ظٹ ط§ظ„ط¯ظ„ظٹظپط±ظٹ)"""
         try:
             cur.execute("""
                 SELECT id, name, role, salary, phone, remote_id 
                 FROM employees 
-                WHERE (role NOT IN ('دليفري', 'طيار', 'سائق') AND role NOT LIKE '%دليفري%' AND role NOT LIKE '%طيار%' AND role NOT LIKE '%سائق%')
+                WHERE (role NOT IN ('ط¯ظ„ظٹظپط±ظٹ', 'ط·ظٹط§ط±', 'ط³ط§ط¦ظ‚') AND role NOT LIKE '%ط¯ظ„ظٹظپط±ظٹ%' AND role NOT LIKE '%ط·ظٹط§ط±%' AND role NOT LIKE '%ط³ط§ط¦ظ‚%')
                 AND (synced = 0 OR synced IS NULL)
                 LIMIT 50
             """)
@@ -362,7 +362,7 @@ class HybridSyncManager:
                 payload = {
                     'employee_id': r[5] or '',
                     'name': r[1] or '',
-                    'role': r[2] or 'عامل',
+                    'role': r[2] or 'ط¹ط§ظ…ظ„',
                     'salary': r[3] or 0,
                     'base_salary': r[3] or 0,
                     'phone': r[4] or '',
@@ -377,7 +377,7 @@ class HybridSyncManager:
             print(f"Sync pending employees error: {e}")
 
     def _pull_cloud_employees(self, api_url, api_key, conn, cur):
-        """سحب عمال وموظفي المتجر المضافين أو المحدثين من كاشير الويب إلى الكاشير المكتبي"""
+        """ط³ط­ط¨ ط¹ظ…ط§ظ„ ظˆظ…ظˆط¸ظپظٹ ط§ظ„ظ…طھط¬ط± ط§ظ„ظ…ط¶ط§ظپظٹظ† ط£ظˆ ط§ظ„ظ…ط­ط¯ط«ظٹظ† ظ…ظ† ظƒط§ط´ظٹط± ط§ظ„ظˆظٹط¨ ط¥ظ„ظ‰ ط§ظ„ظƒط§ط´ظٹط± ط§ظ„ظ…ظƒطھط¨ظٹ"""
         try:
             ok, resp = self._make_request(api_url, action='get_employees', api_key=api_key, method='GET', timeout=8)
             if ok and isinstance(resp, dict) and resp.get('success'):
@@ -385,13 +385,13 @@ class HybridSyncManager:
                 for e in emps:
                     name = (e.get('name') or '').strip()
                     if not name: continue
-                    role = (e.get('role') or 'عامل').strip()
+                    role = (e.get('role') or 'ط¹ط§ظ…ظ„').strip()
                     phone = (e.get('phone') or '').strip()
                     sal = float(e.get('base_salary') or 0)
                     rem_id = str(e.get('id') or '')
 
-                    # تخطي كباتن التوصيل هنا لأنهم يُدارون في دالة _pull_cloud_delivery_drivers
-                    if role in ('دليفري', 'طيار', 'سائق') or 'دليفري' in role or 'طيار' in role:
+                    # طھط®ط·ظٹ ظƒط¨ط§طھظ† ط§ظ„طھظˆطµظٹظ„ ظ‡ظ†ط§ ظ„ط£ظ†ظ‡ظ… ظٹظڈط¯ط§ط±ظˆظ† ظپظٹ ط¯ط§ظ„ط© _pull_cloud_delivery_drivers
+                    if role in ('ط¯ظ„ظٹظپط±ظٹ', 'ط·ظٹط§ط±', 'ط³ط§ط¦ظ‚') or 'ط¯ظ„ظٹظپط±ظٹ' in role or 'ط·ظٹط§ط±' in role:
                         continue
 
                     cur.execute("SELECT id, role FROM employees WHERE remote_id = ? OR name = ? LIMIT 1", (rem_id, name))
@@ -405,7 +405,7 @@ class HybridSyncManager:
             print(f"Pull cloud employees error: {e}")
 
     def _pull_cloud_delivery_drivers(self, api_url, api_key, conn, cur):
-        """سحب كباتن التوصيل والدليفري المضافين من كاشير الويب إلى الكاشير المكتبي"""
+        """ط³ط­ط¨ ظƒط¨ط§طھظ† ط§ظ„طھظˆطµظٹظ„ ظˆط§ظ„ط¯ظ„ظٹظپط±ظٹ ط§ظ„ظ…ط¶ط§ظپظٹظ† ظ…ظ† ظƒط§ط´ظٹط± ط§ظ„ظˆظٹط¨ ط¥ظ„ظ‰ ط§ظ„ظƒط§ط´ظٹط± ط§ظ„ظ…ظƒطھط¨ظٹ"""
         try:
             ok, resp = self._make_request(api_url, action='get_delivery_drivers', api_key=api_key, method='GET', timeout=8)
             if ok and isinstance(resp, dict) and resp.get('success'):
@@ -419,9 +419,9 @@ class HybridSyncManager:
                     cur.execute("SELECT id FROM employees WHERE remote_id = ? OR name = ? LIMIT 1", (rem_id, name))
                     row = cur.fetchone()
                     if row:
-                        cur.execute("UPDATE employees SET role='دليفري', phone=?, synced=1, remote_id=? WHERE id=?", (phone, rem_id, row[0]))
+                        cur.execute("UPDATE employees SET role='ط¯ظ„ظٹظپط±ظٹ', phone=?, synced=1, remote_id=? WHERE id=?", (phone, rem_id, row[0]))
                     else:
-                        cur.execute("INSERT INTO employees (name, role, salary, phone, hours, synced, remote_id) VALUES (?, 'دليفري', 0, ?, 8, 1, ?)", (name, phone, rem_id))
+                        cur.execute("INSERT INTO employees (name, role, salary, phone, hours, synced, remote_id) VALUES (?, 'ط¯ظ„ظٹظپط±ظٹ', 0, ?, 8, 1, ?)", (name, phone, rem_id))
                 conn.commit()
         except Exception as e:
             print(f"Pull cloud delivery drivers error: {e}")
@@ -473,8 +473,8 @@ class HybridSyncManager:
                         'qty': it[1],
                         'cost_price': it[2],
                         'barcode': it[3] or '',
-                        'name': it[4] or f"منتج #{it[0]}",
-                        'unit': it[5] or 'قطعة',
+                        'name': it[4] or f"ظ…ظ†طھط¬ #{it[0]}",
+                        'unit': it[5] or 'ظ‚ط·ط¹ط©',
                         'selling_price': it[6] or 0
                     })
 
@@ -482,14 +482,14 @@ class HybridSyncManager:
                     'local_purchase_id': p_id,
                     'remote_id': r[9] or '',
                     'supplier_id': r[1] or 0,
-                    'supplier_name': r[10] or 'مورد عام',
+                    'supplier_name': r[10] or 'ظ…ظˆط±ط¯ ط¹ط§ظ…',
                     'invoice_number': r[7] or f"INV-{p_id}",
-                    'payment_method': r[8] or 'نقدي',
+                    'payment_method': r[8] or 'ظ†ظ‚ط¯ظٹ',
                     'total_amount': r[2] or 0,
                     'paid_amount': r[3] or 0,
                     'discount': r[6] or 0,
                     'date': r[4] or '',
-                    'status': r[5] or 'مكتملة',
+                    'status': r[5] or 'ظ…ظƒطھظ…ظ„ط©',
                     'source': 'desktop_pos',
                     'items': items
                 }
@@ -521,10 +521,10 @@ class HybridSyncManager:
             print(f"Sync categories error: {e}")
 
     def delete_product_from_cloud(self, local_id, barcode='', local_code='', name='', remote_id=None):
-        """حذف منتج من المتجر الإلكتروني السحابي فوراً في الخلفية"""
+        """ط­ط°ظپ ظ…ظ†طھط¬ ظ…ظ† ط§ظ„ظ…طھط¬ط± ط§ظ„ط¥ظ„ظƒطھط±ظˆظ†ظٹ ط§ظ„ط³ط­ط§ط¨ظٹ ظپظˆط±ط§ظ‹ ظپظٹ ط§ظ„ط®ظ„ظپظٹط©"""
         try:
             settings = self.get_cloud_settings()
-            url = settings.get('cloud_api_url', 'https://supermarkrt.almagd555.com/api_sync.php')
+            url = settings.get('cloud_api_url', 'https://syrianhouse.almagd555.com/api_sync.php')
             key = settings.get('cloud_api_key', 'syrian_home_pos_secret_token_2026')
             payload = {
                 'product_id': remote_id or '',
@@ -543,14 +543,14 @@ class HybridSyncManager:
             print(f"Delete product dispatch error: {e}")
 
     def pull_products_from_cloud(self, api_url=None, api_key=None):
-        """سحب كافة المنتجات والمخزون من السيرفر المركزي وحفظها في قاعدة البيانات المحلية"""
+        """ط³ط­ط¨ ظƒط§ظپط© ط§ظ„ظ…ظ†طھط¬ط§طھ ظˆط§ظ„ظ…ط®ط²ظˆظ† ظ…ظ† ط§ظ„ط³ظٹط±ظپط± ط§ظ„ظ…ط±ظƒط²ظٹ ظˆط­ظپط¸ظ‡ط§ ظپظٹ ظ‚ط§ط¹ط¯ط© ط§ظ„ط¨ظٹط§ظ†ط§طھ ط§ظ„ظ…ط­ظ„ظٹط©"""
         settings = self.get_cloud_settings()
-        url = api_url or settings.get('cloud_api_url', 'https://supermarkrt.almagd555.com/api_sync.php')
+        url = api_url or settings.get('cloud_api_url', 'https://syrianhouse.almagd555.com/api_sync.php')
         key = api_key or settings.get('cloud_api_key', 'syrian_home_pos_secret_token_2026')
 
         ok, resp = self._make_request(url, action='get_products', api_key=key, method='GET', timeout=12)
         if not ok or not isinstance(resp, dict) or not resp.get('success'):
-            return False, f"تعذر جلب المنتجات من السحابة: {resp}"
+            return False, f"طھط¹ط°ط± ط¬ظ„ط¨ ط§ظ„ظ…ظ†طھط¬ط§طھ ظ…ظ† ط§ظ„ط³ط­ط§ط¨ط©: {resp}"
 
         cloud_products = resp.get('products', [])
         inserted_count = 0
@@ -569,18 +569,18 @@ class HybridSyncManager:
                 p_price = float(cp.get('price', 0))
                 p_cost = float(cp.get('cost', 0))
                 p_stock = float(cp.get('stock', 100))
-                p_cat = (cp.get('category') or 'عام').strip()
+                p_cat = (cp.get('category') or 'ط¹ط§ظ…').strip()
                 p_sub = (cp.get('sub_category') or '').strip()
                 p_rem_id = str(cp.get('id', ''))
-                p_is_weight = 1 if (cp.get('is_weight_based') or cp.get('unit_type') in ['weight', 'وزن']) else 0
-                p_unit_type = cp.get('unit_type') or ('وزن' if p_is_weight else 'قطعة')
+                p_is_weight = 1 if (cp.get('is_weight_based') or cp.get('unit_type') in ['weight', 'ظˆط²ظ†']) else 0
+                p_unit_type = cp.get('unit_type') or ('ظˆط²ظ†' if p_is_weight else 'ظ‚ط·ط¹ط©')
                 p_has_pack = 1 if cp.get('has_pack') else 0
                 p_pack_name = (cp.get('pack_name') or '').strip()
                 p_pack_barcode = (cp.get('pack_barcode') or '').strip()
                 p_pack_price = float(cp.get('pack_price', 0))
                 p_pack_qty = float(cp.get('pack_qty', 1))
 
-                # البحث عن المنتج محلياً بالباركود أو الكود المحلي أو الاسم
+                # ط§ظ„ط¨ط­ط« ط¹ظ† ط§ظ„ظ…ظ†طھط¬ ظ…ط­ظ„ظٹط§ظ‹ ط¨ط§ظ„ط¨ط§ط±ظƒظˆط¯ ط£ظˆ ط§ظ„ظƒظˆط¯ ط§ظ„ظ…ط­ظ„ظٹ ط£ظˆ ط§ظ„ط§ط³ظ…
                 local_row = None
                 if p_barcode:
                     cur.execute("SELECT id FROM products WHERE barcode = ? LIMIT 1", (p_barcode,))
@@ -609,10 +609,10 @@ class HybridSyncManager:
                     """, (p_barcode, p_bc2, p_bc3, p_all_bc, p_loc, p_name, p_price, p_cost, p_stock, p_cat, p_cat, p_sub, p_is_weight, p_unit_type, p_has_pack, p_pack_name, p_pack_barcode, p_pack_price, p_pack_qty, p_rem_id))
                     inserted_count += 1
 
-                # تسجيل وتحديث الأقسام والتصنيفات تلقائياً محلياً
+                # طھط³ط¬ظٹظ„ ظˆطھط­ط¯ظٹط« ط§ظ„ط£ظ‚ط³ط§ظ… ظˆط§ظ„طھطµظ†ظٹظپط§طھ طھظ„ظ‚ط§ط¦ظٹط§ظ‹ ظ…ط­ظ„ظٹط§ظ‹
                 if p_cat:
                     cur.execute("INSERT OR IGNORE INTO categories (name) VALUES (?)", (p_cat,))
-                    if p_sub and p_sub != "عام" and p_sub != "-":
+                    if p_sub and p_sub != "ط¹ط§ظ…" and p_sub != "-":
                         cur.execute("SELECT id FROM categories WHERE name = ?", (p_cat,))
                         cat_id_row = cur.fetchone()
                         if cat_id_row:
@@ -620,7 +620,7 @@ class HybridSyncManager:
                             if not cur.fetchone():
                                 cur.execute("INSERT INTO sub_categories (name, main_category_id) VALUES (?, ?)", (p_sub, cat_id_row[0]))
 
-            # جلب وتحديث كافة تصنيفات السحابة
+            # ط¬ظ„ط¨ ظˆطھط­ط¯ظٹط« ظƒط§ظپط© طھطµظ†ظٹظپط§طھ ط§ظ„ط³ط­ط§ط¨ط©
             try:
                 ok_c, resp_c = self._make_request(url, action='get_categories', api_key=key, method='GET')
                 if ok_c and isinstance(resp_c, dict) and resp_c.get('success'):
@@ -633,14 +633,14 @@ class HybridSyncManager:
                 print(f"Categories pull error: {ce}")
 
             conn.commit()
-            return True, f"✅ تمت المزامنة بنجاح: تم تحديث {updated_count} صنف وإضافة {inserted_count} صنف جديد ومزامنة الأقسام من السحابة (إجمالي {len(cloud_products)} صنف)."
+            return True, f"âœ… طھظ…طھ ط§ظ„ظ…ط²ط§ظ…ظ†ط© ط¨ظ†ط¬ط§ط­: طھظ… طھط­ط¯ظٹط« {updated_count} طµظ†ظپ ظˆط¥ط¶ط§ظپط© {inserted_count} طµظ†ظپ ط¬ط¯ظٹط¯ ظˆظ…ط²ط§ظ…ظ†ط© ط§ظ„ط£ظ‚ط³ط§ظ… ظ…ظ† ط§ظ„ط³ط­ط§ط¨ط© (ط¥ط¬ظ…ط§ظ„ظٹ {len(cloud_products)} طµظ†ظپ)."
         finally:
             conn.close()
 
     def reset_cloud_database(self, mode="factory_reset_all", wipe_products=True, api_url=None, api_key=None):
-        """تصفير وحذف جميع بيانات المتجر الإلكتروني السحابي المركزي أو تصفير الحسابات والكميات"""
+        """طھطµظپظٹط± ظˆط­ط°ظپ ط¬ظ…ظٹط¹ ط¨ظٹط§ظ†ط§طھ ط§ظ„ظ…طھط¬ط± ط§ظ„ط¥ظ„ظƒطھط±ظˆظ†ظٹ ط§ظ„ط³ط­ط§ط¨ظٹ ط§ظ„ظ…ط±ظƒط²ظٹ ط£ظˆ طھطµظپظٹط± ط§ظ„ط­ط³ط§ط¨ط§طھ ظˆط§ظ„ظƒظ…ظٹط§طھ"""
         settings = self.get_cloud_settings()
-        url = api_url or settings.get('cloud_api_url', 'https://supermarkrt.almagd555.com/api_sync.php')
+        url = api_url or settings.get('cloud_api_url', 'https://syrianhouse.almagd555.com/api_sync.php')
         key = api_key or settings.get('cloud_api_key', 'syrian_home_pos_secret_token_2026')
         
         payload = {
@@ -657,11 +657,11 @@ class HybridSyncManager:
 
         ok, res = self._make_request(target_url, action='system_reset', payload=payload, api_key=key, method='POST', timeout=15)
         if ok and isinstance(res, dict) and res.get('success'):
-            return True, res.get('message', 'تم تنفيذ العملية السحابية بنجاح.')
-        return False, f"فشل تصفير السحابة: {res}"
+            return True, res.get('message', 'طھظ… طھظ†ظپظٹط° ط§ظ„ط¹ظ…ظ„ظٹط© ط§ظ„ط³ط­ط§ط¨ظٹط© ط¨ظ†ط¬ط§ط­.')
+        return False, f"ظپط´ظ„ طھطµظپظٹط± ط§ظ„ط³ط­ط§ط¨ط©: {res}"
 
     def _pull_online_orders(self, api_url, api_key, conn, cur):
-        """سحب وتجهيز الطلبات الواردة عبر المتجر الإلكتروني"""
+        """ط³ط­ط¨ ظˆطھط¬ظ‡ظٹط² ط§ظ„ط·ظ„ط¨ط§طھ ط§ظ„ظˆط§ط±ط¯ط© ط¹ط¨ط± ط§ظ„ظ…طھط¬ط± ط§ظ„ط¥ظ„ظƒطھط±ظˆظ†ظٹ"""
         try:
             ok, resp = self._make_request(api_url, action='get_pending_orders', api_key=api_key, method='GET')
             if ok and isinstance(resp, dict) and resp.get('success'):
@@ -669,3 +669,4 @@ class HybridSyncManager:
                 pass
         except Exception as e:
             print(f"Pull orders error: {e}")
+

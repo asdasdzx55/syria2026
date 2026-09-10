@@ -12,6 +12,16 @@ $active_drivers = $stmt_drivers->fetchAll(PDO::FETCH_ASSOC);
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>تطبيق الطيارين والدليفري | سوبر ماركت المنزل السوري</title>
     
+    <!-- PWA & Mobile App Settings -->
+    <link rel="manifest" href="delivery-manifest.json">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="سوريان دليفري">
+    <link rel="apple-touch-icon" href="images/delivery-icon-192.png">
+    <link rel="icon" type="image/png" href="images/delivery-icon-192.png">
+    
     <!-- الخطوط والأيقونات والتنسيقات الحديثة -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -94,6 +104,14 @@ $active_drivers = $stmt_drivers->fetchAll(PDO::FETCH_ASSOC);
                 </button>
             </form>
 
+            <div id="login-install-banner" class="pt-3 border-t border-slate-800 space-y-1">
+                <button type="button" onclick="triggerPwaInstall()" class="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 border border-emerald-400/30">
+                    <i class="fa-solid fa-mobile-screen-button text-sm animate-bounce"></i>
+                    <span>📲 تثبيت تطبيق الدليفري على هاتفك</span>
+                </button>
+                <p class="text-[10px] text-slate-400">يعمل كتطبيق كامل ومستقل على شاشة هاتفك الرئيسية</p>
+            </div>
+
             <div class="pt-2 border-t border-slate-800 text-center">
                 <a href="/pos/" target="_blank" class="text-slate-400 hover:text-white text-[11px] font-bold inline-flex items-center gap-1">
                     <i class="fa-solid fa-cash-register"></i> الذهاب لشاشة الكاشير الرئيسية (POS)
@@ -124,6 +142,10 @@ $active_drivers = $stmt_drivers->fetchAll(PDO::FETCH_ASSOC);
                 </div>
 
                 <div class="flex items-center gap-2">
+                    <button id="header-install-btn" onclick="triggerPwaInstall()" class="px-2.5 py-1.5 bg-emerald-500/20 hover:bg-emerald-500 text-emerald-400 hover:text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border border-emerald-500/30" title="تثبيت التطبيق على الهاتف">
+                        <i class="fa-solid fa-mobile-screen-button"></i>
+                        <span class="hidden sm:inline">تثبيت التطبيق</span>
+                    </button>
                     <button onclick="refreshDriverOrders(true)" class="w-9 h-9 rounded-xl bg-slate-800 text-slate-300 hover:text-white flex items-center justify-center text-xs transition-colors" title="تحديث">
                         <i class="fa-solid fa-rotate" id="refresh-icon"></i>
                     </button>
@@ -630,6 +652,98 @@ $active_drivers = $stmt_drivers->fetchAll(PDO::FETCH_ASSOC);
                 if (audio) { audio.currentTime = 0; audio.play().catch(()=>{}); }
             } catch (e) {}
         }
+
+        // ============================================================
+        // PWA Installation & Service Worker Handling
+        // ============================================================
+        let deferredPrompt = null;
+        const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+
+        if (isStandalone) {
+            const loginBanner = document.getElementById('login-install-banner');
+            if (loginBanner) loginBanner.style.display = 'none';
+            const headerBtn = document.getElementById('header-install-btn');
+            if (headerBtn) headerBtn.style.display = 'none';
+        }
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            console.log('beforeinstallprompt captured');
+        });
+
+        window.addEventListener('appinstalled', () => {
+            deferredPrompt = null;
+            const loginBanner = document.getElementById('login-install-banner');
+            if (loginBanner) loginBanner.style.display = 'none';
+            const headerBtn = document.getElementById('header-install-btn');
+            if (headerBtn) headerBtn.style.display = 'none';
+            alert('🎉 تم تثبيت تطبيق الدليفري بنجاح على هاتفك!');
+        });
+
+        function triggerPwaInstall() {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then((choiceResult) => {
+                    if (choiceResult.outcome === 'accepted') {
+                        console.log('Driver installed the app');
+                    }
+                    deferredPrompt = null;
+                });
+            } else {
+                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+                const instrEl = document.getElementById('pwa-install-instructions');
+                if (isIOS) {
+                    instrEl.innerHTML = `
+                        <div class="space-y-3">
+                            <p class="font-bold text-amber-400 text-sm">خطوات تثبيت التطبيق على أجهزة iPhone / iPad:</p>
+                            <p class="flex items-center gap-2"><span>1.</span> اضغط على زر المشاركة <span class="inline-flex items-center gap-1 bg-slate-800 text-sky-400 px-2 py-1 rounded font-mono font-bold"><i class="fa-solid fa-arrow-up-from-bracket"></i> Share</span> أسفل شاشة Safari.</p>
+                            <p class="flex items-center gap-2"><span>2.</span> اسحب لأسفل واضغط على <span class="inline-flex items-center gap-1 bg-slate-800 text-amber-400 px-2 py-1 rounded font-bold"><i class="fa-solid fa-square-plus"></i> إضافة إلى الشاشة الرئيسية (Add to Home Screen)</span>.</p>
+                            <p class="flex items-center gap-2"><span>3.</span> اضغط على <span class="text-emerald-400 font-bold">إضافة (Add)</span> في أعلى زاوية الشاشة.</p>
+                            <p class="text-emerald-400 font-bold mt-2">✓ سيظهر تطبيق الدليفري فوراً على شاشتك الرئيسية ويعمل بكامل الشاشة كبرنامج مستقل!</p>
+                        </div>
+                    `;
+                } else {
+                    instrEl.innerHTML = `
+                        <div class="space-y-3">
+                            <p class="font-bold text-amber-400 text-sm">خطوات تثبيت التطبيق على هواتف أندرويد (Chrome):</p>
+                            <p class="flex items-center gap-2"><span>1.</span> اضغط على زر القائمة <span class="inline-flex items-center gap-1 bg-slate-800 text-sky-400 px-2 py-1 rounded font-mono font-bold"><i class="fa-solid fa-ellipsis-vertical"></i> الثلاث نقاط</span> في أعلى الشاشة.</p>
+                            <p class="flex items-center gap-2"><span>2.</span> اختر من القائمة <span class="inline-flex items-center gap-1 bg-slate-800 text-amber-400 px-2 py-1 rounded font-bold"><i class="fa-solid fa-download"></i> تثبيت التطبيق (Install App)</span> أو <span class="text-amber-400 font-bold">الإضافة إلى الشاشة الرئيسية</span>.</p>
+                            <p class="flex items-center gap-2"><span>3.</span> اضغط على تأكيد <span class="text-emerald-400 font-bold">تثبيت (Install)</span>.</p>
+                            <p class="text-emerald-400 font-bold mt-2">✓ سيتم تنزيل أيقونة التطبيق على شاشتك وتفتح فوراً بدون الحاجة لفتح المتصفح!</p>
+                        </div>
+                    `;
+                }
+                document.getElementById('pwa-install-modal').classList.remove('hidden');
+                document.getElementById('pwa-install-modal').classList.add('flex');
+            }
+        }
+
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('delivery-sw.js').then((reg) => {
+                    console.log('Delivery SW registered successfully:', reg.scope);
+                }).catch((err) => {
+                    console.warn('Delivery SW registration error:', err);
+                });
+            });
+        }
     </script>
+
+    <!-- Modal تعليمات تثبيت تطبيق الدليفري -->
+    <div id="pwa-install-modal" class="fixed inset-0 z-50 bg-black/80 hidden items-center justify-center p-4">
+        <div class="max-w-sm w-full bg-slate-900 border border-amber-500/40 rounded-3xl p-6 shadow-2xl text-center space-y-4">
+            <div class="w-16 h-16 mx-auto rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-3xl border border-amber-500/30">
+                <i class="fa-solid fa-mobile-screen-button"></i>
+            </div>
+            <h3 class="text-lg font-black text-white">تثبيت تطبيق الدليفري على الهاتف</h3>
+            <div id="pwa-install-instructions" class="text-right text-xs text-slate-300 space-y-3 bg-slate-950/70 p-4 rounded-xl border border-slate-800">
+                <!-- محتوى التعليمات الذكي -->
+            </div>
+            <button onclick="closeModal('pwa-install-modal')" class="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl transition">
+                إغلاق
+            </button>
+        </div>
+    </div>
 </body>
 </html>
