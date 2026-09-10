@@ -47,17 +47,16 @@ if (function_exists('trackVisitor')) {
     
     <!-- PWA & iOS Configurations -->
     <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="<?php echo htmlspecialchars($settings['store_name'] ?? 'المتجر الإلكتروني'); ?>">
-    <?php if (!empty($settings['store_favicon'])): ?>
-        <link rel="icon" href="<?php echo htmlspecialchars($settings['store_favicon']); ?>">
-        <link rel="apple-touch-icon" href="<?php echo htmlspecialchars($settings['store_favicon']); ?>">
-    <?php else: ?>
-        <link rel="apple-touch-icon" href="uploads/logo_180.png">
-    <?php endif; ?>
+    <meta name="apple-mobile-web-app-title" content="المنزل السوري">
+    <meta name="application-name" content="المنزل السوري">
+    <link rel="icon" type="image/png" href="images/store-icon-96.png">
+    <link rel="apple-touch-icon" href="images/store-icon-192.png">
 
-    <title><?php echo htmlspecialchars($settings['store_name'] ?? 'المتجر الإلكتروني'); ?><?php echo !empty($settings['store_tagline']) ? ' | ' . htmlspecialchars($settings['store_tagline']) : ''; ?></title>
+    <title><?php echo htmlspecialchars($settings['store_name'] ?? 'المنزل السوري'); ?><?php echo !empty($settings['store_tagline']) ? ' | ' . htmlspecialchars($settings['store_tagline']) : ' | سوبر ماركت المنزل السوري'; ?></title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Google Fonts -->
