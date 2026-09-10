@@ -365,8 +365,22 @@ if (isset($_POST['edit_category'])) {
 // 6. حذف القسم
 if (isset($_GET['action']) && $_GET['action'] == 'delete_category' && isset($_GET['id'])) {
     $cat_id = (int)$_GET['id'];
-    $pdo->prepare("UPDATE categories SET parent_id = NULL WHERE parent_id = ?")->execute([$cat_id]);
-    $pdo->prepare("DELETE FROM categories WHERE id = ?")->execute([$cat_id]);
+    $stmt = $pdo->prepare("SELECT name, parent_id FROM categories WHERE id = ?");
+    $stmt->execute([$cat_id]);
+    $cat_to_del = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($cat_to_del) {
+        $c_name = $cat_to_del['name'];
+        if (!empty($cat_to_del['parent_id'])) {
+            // Subcategory: clear sub_category in products
+            $pdo->prepare("UPDATE products SET sub_category = NULL WHERE sub_category = ?")->execute([$c_name]);
+            $pdo->prepare("DELETE FROM categories WHERE id = ?")->execute([$cat_id]);
+        } else {
+            // Main category: reassign products to 'عام' and delete subcategories
+            $pdo->prepare("UPDATE products SET category = 'عام', sub_category = NULL WHERE category = ?")->execute([$c_name]);
+            $pdo->prepare("DELETE FROM categories WHERE parent_id = ?")->execute([$cat_id]);
+            $pdo->prepare("DELETE FROM categories WHERE id = ?")->execute([$cat_id]);
+        }
+    }
     header("Location: admin_settings.php?tab=categories&msg=cat_deleted");
     exit;
 }
@@ -1469,27 +1483,96 @@ $active_tab = $_GET['tab'] ?? (isset($_GET['edit_cat_id']) ? 'categories' : 'gen
 
     <!-- TAB 5: 🏷️ أقسام وتصنيفات المتجر -->
     <?php if ($active_tab === 'categories'): ?>
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-        <!-- كارت إضافة/تعديل قسم -->
-        <div class="bg-white p-6 border border-royal-gold/10 shadow-sm rounded-2xl">
-            <?php 
-            $edit_cat_mode = false;
-            $edit_cat = ['id'=>'', 'name'=>'', 'image_url'=>'', 'parent_id'=>''];
-            if(isset($_GET['edit_cat_id'])) {
-                $edit_cat_id = (int)$_GET['edit_cat_id'];
-                $stmt = $pdo->prepare("SELECT * FROM categories WHERE id = ?");
-                $stmt->execute([$edit_cat_id]);
-                $cat_data = $stmt->fetch(PDO::FETCH_ASSOC);
-                if($cat_data) {
-                    $edit_cat = $cat_data;
-                    $edit_cat_mode = true;
-                }
-            }
-            ?>
-            
-            <h3 class="font-serif font-bold text-sm text-royal-dark mb-4 border-b pb-2 flex items-center gap-1.5">
-                <i class="fa-solid fa-folder-tree text-royal-darkgold"></i> 
-                <?php echo $edit_cat_mode ? 'تعديل بيانات القسم' : 'إضافة تصنيف/قسم جديد'; ?>
+    <?php 
+    $edit_cat_mode = false;
+    $edit_cat = ['id'=>'', 'name'=>'', 'image_url'=>'', 'parent_id'=>''];
+    if(isset($_GET['edit_cat_id'])) {
+        $edit_cat_id = (int)$_GET['edit_cat_id'];
+        $stmt = $pdo->prepare("SELECT * FROM categories WHERE id = ?");
+        $stmt->execute([$edit_cat_id]);
+        $cat_data = $stmt->fetch(PDO::FETCH_ASSOC);
+        if($cat_data) {
+            $edit_cat = $cat_data;
+            $edit_cat_mode = true;
+        }
+    }
+
+    // Fetch all categories with parent names and actual product counts
+    $all_categories_query = "
+        SELECT c.*, p.name AS parent_name,
+               (SELECT COUNT(*) FROM products prod WHERE prod.category = c.name OR prod.sub_category = c.name) AS products_count
+        FROM categories c
+        LEFT JOIN categories p ON c.parent_id = p.id
+        ORDER BY CASE WHEN c.parent_id IS NULL OR c.parent_id = 0 THEN 0 ELSE 1 END, c.parent_id ASC, c.name ASC
+    ";
+    $all_categories_list = $pdo->query($all_categories_query)->fetchAll(PDO::FETCH_ASSOC);
+
+    $total_mains = 0;
+    $total_subs = 0;
+    $total_prods_assigned = 0;
+    foreach ($all_categories_list as $row) {
+        if (empty($row['parent_id'])) $total_mains++;
+        else $total_subs++;
+        $total_prods_assigned += (int)($row['products_count'] ?? 0);
+    }
+    ?>
+
+    <!-- Top KPI & Action Bar on PC -->
+    <div class="mb-6 grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+        <div class="p-4 bg-white rounded-2xl border border-gray-100 shadow-2xs flex items-center gap-3">
+            <div class="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold text-lg shrink-0">
+                <i class="fa-solid fa-layer-group"></i>
+            </div>
+            <div>
+                <span class="text-[11px] font-bold text-gray-400 block">إجمالي التصنيفات</span>
+                <span class="text-lg font-black text-gray-800"><?php echo count($all_categories_list); ?></span>
+            </div>
+        </div>
+
+        <div class="p-4 bg-white rounded-2xl border border-gray-100 shadow-2xs flex items-center gap-3">
+            <div class="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-lg shrink-0">
+                <i class="fa-solid fa-folder"></i>
+            </div>
+            <div>
+                <span class="text-[11px] font-bold text-gray-400 block">أقسام رئيسية</span>
+                <span class="text-lg font-black text-gray-800"><?php echo $total_mains; ?></span>
+            </div>
+        </div>
+
+        <div class="p-4 bg-white rounded-2xl border border-gray-100 shadow-2xs flex items-center gap-3">
+            <div class="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-lg shrink-0">
+                <i class="fa-solid fa-tags"></i>
+            </div>
+            <div>
+                <span class="text-[11px] font-bold text-gray-400 block">أقسام فرعية</span>
+                <span class="text-lg font-black text-gray-800"><?php echo $total_subs; ?></span>
+            </div>
+        </div>
+
+        <div class="p-4 bg-white rounded-2xl border border-gray-100 shadow-2xs flex items-center gap-3">
+            <div class="w-11 h-11 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center font-bold text-lg shrink-0">
+                <i class="fa-solid fa-cash-register"></i>
+            </div>
+            <div class="flex-1">
+                <span class="text-[11px] font-bold text-gray-400 block">كاشير الويب</span>
+                <a href="/pos/" target="_blank" class="text-xs font-bold text-sky-600 hover:underline flex items-center gap-1">
+                    <span>فتح الكاشير</span> ⚡
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        <!-- كارت إضافة / تعديل قسم (4 أعمدة على شاشات الكمبيوتر) -->
+        <div class="lg:col-span-4 bg-white p-6 border border-royal-gold/15 shadow-sm rounded-3xl sticky top-4">
+            <h3 class="font-serif font-bold text-sm text-royal-dark mb-4 pb-3 border-b border-gray-100 flex items-center justify-between">
+                <span class="flex items-center gap-2">
+                    <i class="fa-solid fa-folder-tree text-royal-gold text-base"></i> 
+                    <?php echo $edit_cat_mode ? 'تعديل بيانات القسم' : 'إضافة تصنيف جديد'; ?>
+                </span>
+                <?php if($edit_cat_mode): ?>
+                    <span class="px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 text-[10px] font-bold">وضع التعديل</span>
+                <?php endif; ?>
             </h3>
             
             <form method="POST" action="admin_settings.php?tab=categories" enctype="multipart/form-data" class="space-y-4">
@@ -1498,16 +1581,16 @@ $active_tab = $_GET['tab'] ?? (isset($_GET['edit_cat_id']) ? 'categories' : 'gen
                 <?php endif; ?>
                 
                 <div>
-                    <label class="block text-xs font-bold mb-2 text-gray-600">اسم القسم *</label>
-                    <input type="text" name="cat_name" value="<?php echo htmlspecialchars($edit_cat['name']); ?>" required class="w-full p-3 border border-gray-200 rounded-xl outline-none focus:border-royal-gold text-xs">
+                    <label class="block text-xs font-bold mb-1.5 text-gray-700">اسم القسم أو التصنيف *</label>
+                    <input type="text" name="cat_name" value="<?php echo htmlspecialchars($edit_cat['name']); ?>" placeholder="مثال: أجبان وألبان، عطارة..." required class="w-full p-3 border border-gray-200 rounded-xl outline-none focus:border-royal-gold text-xs font-bold text-gray-800 bg-gray-50/40 focus:bg-white transition-all">
                 </div>
 
                 <div>
-                    <label class="block text-xs font-bold mb-2 text-gray-600">القسم الأب (اختر قسم رئيسي أو اتركه مستقل) *</label>
-                    <select name="parent_id" class="w-full p-3 border border-gray-200 rounded-xl outline-none focus:border-royal-gold text-xs bg-white">
+                    <label class="block text-xs font-bold mb-1.5 text-gray-700">القسم الأب (التبعية) *</label>
+                    <select name="parent_id" class="w-full p-3 border border-gray-200 rounded-xl outline-none focus:border-royal-gold text-xs font-bold text-gray-800 bg-gray-50/40 focus:bg-white transition-all">
                         <option value="none">-- قسم رئيسي مستقل (بدون أب) --</option>
                         <?php 
-                        $main_cats_query = "SELECT * FROM categories WHERE parent_id IS NULL";
+                        $main_cats_query = "SELECT * FROM categories WHERE parent_id IS NULL OR parent_id = 0";
                         if ($edit_cat_mode) {
                             $main_cats_query .= " AND id != " . (int)$edit_cat['id'];
                         }
@@ -1515,79 +1598,145 @@ $active_tab = $_GET['tab'] ?? (isset($_GET['edit_cat_id']) ? 'categories' : 'gen
                         $main_cats = $pdo->query($main_cats_query)->fetchAll(PDO::FETCH_ASSOC);
                         foreach($main_cats as $mc): 
                         ?>
-                            <option value="<?php echo $mc['id']; ?>" <?php echo $edit_cat['parent_id'] == $mc['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($mc['name']); ?></option>
+                            <option value="<?php echo $mc['id']; ?>" <?php echo $edit_cat['parent_id'] == $mc['id'] ? 'selected' : ''; ?>>
+                                📁 <?php echo htmlspecialchars($mc['name']); ?>
+                            </option>
                         <?php endforeach; ?>
                     </select>
+                    <p class="text-[10px] text-gray-400 mt-1">إذا اخترت قسماً رئيسياً، سيصبح هذا تصنيفاً فرعياً يتبع له.</p>
                 </div>
                 
                 <div>
-                    <label class="block text-xs font-bold mb-2 text-gray-600">صورة التصنيف (المقاس الموصى به: 600 × 800 px)</label>
+                    <label class="block text-xs font-bold mb-1.5 text-gray-700">صورة التصنيف (اختياري)</label>
                     <?php if($edit_cat_mode && !empty($edit_cat['image_url'])): ?>
-                        <img src="<?php echo htmlspecialchars($edit_cat['image_url']); ?>" class="w-16 h-16 object-cover mb-3 rounded-lg border">
+                        <div class="mb-2 flex items-center gap-3 p-2 bg-gray-50 rounded-xl border border-gray-100">
+                            <img src="<?php echo htmlspecialchars($edit_cat['image_url']); ?>" class="w-12 h-12 object-cover rounded-lg border border-gray-200">
+                            <span class="text-[11px] text-gray-500 font-medium">الصورة الحالية للقسم</span>
+                        </div>
                     <?php endif; ?>
-                    <input type="file" name="cat_image" accept="image/*" class="w-full text-xs text-gray-500">
+                    <input type="file" name="cat_image" accept="image/*" class="w-full text-xs text-gray-500 file:mr-0 file:ml-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200 cursor-pointer">
                 </div>
                 
-                <div class="flex gap-2">
-                    <button type="submit" name="<?php echo $edit_cat_mode ? 'edit_category' : 'add_category'; ?>" class="flex-grow bg-royal-charcoal text-white hover:bg-royal-gold hover:text-royal-charcoal text-xs py-3.5 font-bold rounded-xl shadow btn-shine transition-all">
-                        <?php echo $edit_cat_mode ? 'حفظ وتحديث القسم' : 'إضافة القسم للمتجر'; ?>
+                <div class="flex gap-2 pt-2">
+                    <button type="submit" name="<?php echo $edit_cat_mode ? 'edit_category' : 'add_category'; ?>" class="flex-1 bg-royal-charcoal hover:bg-royal-gold text-white hover:text-royal-charcoal text-xs py-3 font-bold rounded-xl shadow transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                        <i class="fa-solid fa-check"></i>
+                        <span><?php echo $edit_cat_mode ? 'تحديث وحفظ' : 'إضافة القسم للمتجر'; ?></span>
                     </button>
                     <?php if($edit_cat_mode): ?>
-                        <a href="admin_settings.php?tab=categories" class="bg-gray-100 text-gray-700 px-4 py-3.5 text-xs font-bold rounded-xl hover:bg-gray-200 transition-colors flex items-center justify-center border">إلغاء</a>
+                        <a href="admin_settings.php?tab=categories" class="bg-gray-100 text-gray-700 px-4 py-3 text-xs font-bold rounded-xl hover:bg-gray-200 transition-colors flex items-center justify-center border">
+                            إلغاء
+                        </a>
                     <?php endif; ?>
                 </div>
             </form>
         </div>
 
-        <!-- قائمة الأقسام وتعديلها -->
-        <div class="md:col-span-2 bg-white border border-royal-gold/10 shadow-sm rounded-2xl overflow-hidden">
-            <div class="bg-royal-sand/40 p-4 font-bold text-xs text-royal-darkgold border-b border-royal-gold/10"><i class="fa-solid fa-list-ul"></i> الأقسام والتصنيفات الحالية</div>
-            <table class="w-full text-right text-xs">
-                <thead class="bg-royal-sand/10 text-gray-400 border-b">
-                    <tr>
-                        <th class="p-4 font-bold w-20">الصورة</th>
-                        <th class="p-4 font-bold">اسم القسم</th>
-                        <th class="p-4 font-bold">النوع والتبعية</th>
-                        <th class="p-4 text-center font-bold">إجراء</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-100 font-medium">
-                    <?php if(empty($all_categories_list)): ?>
+        <!-- جدول واستعراض الأقسام (8 أعمدة على شاشات الكمبيوتر) -->
+        <div class="lg:col-span-8 bg-white border border-royal-gold/15 shadow-sm rounded-3xl overflow-hidden flex flex-col">
+            <!-- Header with Search & Filter -->
+            <div class="p-4 bg-gray-50/70 border-b border-gray-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                <div class="flex items-center gap-2">
+                    <span class="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-xs">
+                        <i class="fa-solid fa-list-check"></i>
+                    </span>
+                    <h3 class="font-bold text-xs sm:text-sm text-gray-800">قائمة الأقسام والتصنيفات في المتجر</h3>
+                </div>
+
+                <!-- Instant Search Bar -->
+                <div class="relative w-full sm:w-64">
+                    <i class="fa-solid fa-magnifying-glass absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+                    <input type="text" id="admin-cat-search" oninput="filterAdminCategories(this.value)" placeholder="ابحث في الأقسام..." class="w-full bg-white border border-gray-200 rounded-xl pr-8 pl-3 py-1.5 text-xs font-medium focus:border-royal-gold outline-none">
+                </div>
+            </div>
+
+            <!-- Table -->
+            <div class="overflow-x-auto">
+                <table class="w-full text-right text-xs" id="admin-categories-table">
+                    <thead class="bg-gray-50/50 text-gray-400 border-b border-gray-100">
                         <tr>
-                            <td colspan="4" class="p-8 text-center text-gray-400 text-xs">لا توجد أقسام مضافة حتى الآن.</td>
+                            <th class="p-3.5 font-bold w-16 text-center">أيقونة</th>
+                            <th class="p-3.5 font-bold">اسم القسم</th>
+                            <th class="p-3.5 font-bold">النوع والتبعية</th>
+                            <th class="p-3.5 font-bold text-center">عدد الأصناف</th>
+                            <th class="p-3.5 text-center font-bold">إجراءات</th>
                         </tr>
-                    <?php else: ?>
-                        <?php foreach($all_categories_list as $c): 
-                            $is_sub = !empty($c['parent_id']);
-                        ?>
-                        <tr class="hover:bg-royal-cream/25 transition-colors <?php echo $is_sub ? 'bg-gray-50/50' : ''; ?>">
-                            <td class="p-4 w-20">
-                                <img src="<?php echo htmlspecialchars($c['image_url']); ?>" class="w-10 h-10 object-cover bg-gray-50 border rounded-lg shadow-sm">
-                            </td>
-                            <td class="p-4 font-bold text-royal-dark text-sm">
-                                <?php if($is_sub): ?>
-                                    <span class="text-royal-gold ml-1 text-xs">↳</span>
-                                <?php endif; ?>
-                                <?php echo htmlspecialchars($c['name']); ?>
-                            </td>
-                            <td class="p-4">
-                                <?php if(!$is_sub): ?>
-                                    <span class="bg-green-50 text-green-700 border border-green-200 px-2.5 py-0.5 rounded-full font-bold text-[10px]">قسم رئيسي أساسي</span>
-                                <?php else: ?>
-                                    <span class="bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-0.5 rounded-full font-bold text-[10px]">
-                                        فرعي ➔ <?php echo htmlspecialchars($c['parent_name'] ?? 'قسم رئيسي'); ?>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100 font-medium">
+                        <?php if(empty($all_categories_list)): ?>
+                            <tr>
+                                <td colspan="5" class="p-12 text-center text-gray-400 text-xs">
+                                    <i class="fa-solid fa-folder-open text-3xl mb-2 text-gray-300 block"></i>
+                                    لا توجد تصنيفات أو أقسام مضافة حتى الآن.
+                                </td>
+                            </tr>
+                        <?php else: ?>
+                            <?php foreach($all_categories_list as $c): 
+                                $is_sub = !empty($c['parent_id']);
+                                $count = (int)($c['products_count'] ?? 0);
+                            ?>
+                            <tr class="cat-table-row hover:bg-amber-50/30 transition-colors <?php echo $is_sub ? 'bg-gray-50/30' : ''; ?>" data-name="<?php echo htmlspecialchars(mb_strtolower($c['name'])); ?>" data-parent="<?php echo htmlspecialchars(mb_strtolower($c['parent_name'] ?? '')); ?>">
+                                <td class="p-3.5 text-center w-16">
+                                    <?php if(!empty($c['image_url'])): ?>
+                                        <img src="<?php echo htmlspecialchars($c['image_url']); ?>" class="w-9 h-9 object-cover rounded-xl border border-gray-100 mx-auto shadow-2xs">
+                                    <?php else: ?>
+                                        <div class="w-9 h-9 rounded-xl <?php echo $is_sub ? 'bg-sky-50 text-sky-600' : 'bg-amber-50 text-amber-700'; ?> flex items-center justify-center text-xs font-bold mx-auto border border-gray-100 shadow-2xs">
+                                            <i class="<?php echo $is_sub ? 'fa-solid fa-tag' : 'fa-solid fa-folder'; ?>"></i>
+                                        </div>
+                                    <?php endif; ?>
+                                </td>
+                                <td class="p-3.5 font-bold text-gray-900 text-xs sm:text-sm">
+                                    <?php if($is_sub): ?>
+                                        <span class="text-amber-500 ml-1 font-mono text-xs">↳</span>
+                                    <?php endif; ?>
+                                    <?php echo htmlspecialchars($c['name']); ?>
+                                </td>
+                                <td class="p-3.5">
+                                    <?php if(!$is_sub): ?>
+                                        <span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-full font-bold text-[10px] inline-flex items-center gap-1">
+                                            <i class="fa-solid fa-layer-group text-[9px]"></i> قسم رئيسي أساسي
+                                        </span>
+                                    <?php else: ?>
+                                        <span class="bg-indigo-50 text-indigo-700 border border-indigo-200 px-2.5 py-1 rounded-full font-bold text-[10px] inline-flex items-center gap-1">
+                                            <i class="fa-solid fa-arrow-turn-down-right text-[9px]"></i> فرعي تابع لـ: <?php echo htmlspecialchars($c['parent_name'] ?? 'رئيسي'); ?>
+                                        </span>
+                                    <?php endif; ?>
+                                </td>
+                                <td class="p-3.5 text-center">
+                                    <span class="px-2.5 py-1 rounded-lg text-xs font-mono font-bold <?php echo $count > 0 ? 'bg-gray-100 text-gray-800' : 'bg-gray-50 text-gray-400'; ?>">
+                                        <?php echo $count; ?> صنف
                                     </span>
-                                <?php endif; ?>
-                            </td>
-                            <td class="p-4 text-center space-x-3 space-x-reverse">
-                                <a href="admin_settings.php?tab=categories&edit_cat_id=<?php echo $c['id']; ?>" class="text-blue-500 hover:text-blue-700 text-xs font-bold">تعديل</a>
-                                <a href="admin_settings.php?tab=categories&action=delete_category&id=<?php echo $c['id']; ?>" onclick="return confirm('هل أنت متأكد من رغبتك في حذف هذا القسم؟')" class="text-red-500 hover:text-red-700 text-xs font-bold">حذف القسم</a>
-                            </td>
-                        </tr>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
-                </tbody>
-            </table>
+                                </td>
+                                <td class="p-3.5 text-center space-x-2 space-x-reverse">
+                                    <a href="admin_settings.php?tab=categories&edit_cat_id=<?php echo $c['id']; ?>" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 font-bold text-xs transition">
+                                        <i class="fa-solid fa-pen-to-square text-[11px]"></i> تعديل
+                                    </a>
+                                    <a href="admin_settings.php?tab=categories&action=delete_category&id=<?php echo $c['id']; ?>" onclick="return confirm('هل أنت متأكد من رغبتك في حذف قسم (<?php echo htmlspecialchars($c['name']); ?>)؟ سيتم تحويل كافة المنتجات التابعة له إلى قسم عام.')" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 font-bold text-xs transition">
+                                        <i class="fa-solid fa-trash text-[11px]"></i> حذف
+                                    </a>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Table Filter Script -->
+            <script>
+            function filterAdminCategories(query) {
+                const q = (query || '').toLowerCase().trim();
+                const rows = document.querySelectorAll('.cat-table-row');
+                rows.forEach(r => {
+                    const name = r.getAttribute('data-name') || '';
+                    const parent = r.getAttribute('data-parent') || '';
+                    if (!q || name.includes(q) || parent.includes(q)) {
+                        r.style.display = '';
+                    } else {
+                        r.style.display = 'none';
+                    }
+                });
+            }
+            </script>
         </div>
     </div>
     <?php endif; ?>
