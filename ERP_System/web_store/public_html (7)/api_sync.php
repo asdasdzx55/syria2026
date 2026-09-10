@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * Syrian Home Supermarket - Central Data Hub & POS Sync API
  * ظˆط§ط¬ظ‡ط© ط§ظ„ظ…ط²ط§ظ…ظ†ط© ط§ظ„ظ…ط±ظƒط²ظٹط© ط§ظ„ط´ط§ظ…ظ„ط© ظ„ط³ظˆط¨ط± ظ…ط§ط±ظƒطھ ط§ظ„ظ…ظ†ط²ظ„ ط§ظ„ط³ظˆط±ظٹ
@@ -213,7 +213,76 @@ try {
     switch ($action) {
         
         // ============================================================
-        // 1. ط³ط­ط¨ ط§ظ„ظ…ظ†طھط¬ط§طھ ظˆط§ظ„ط£ط³ط¹ط§ط± ظˆط§ظ„ظ…ط®ط²ظˆظ† ط§ظ„ظ…ط­ط¯ط«
+        // 0. التحقق من كلمة مرور الأدمن لتسجيل الدخول للكاشير (POS Login)
+        // ============================================================
+        case 'verify_admin_password':
+        case 'pos_login':
+            $input_pass = trim($json_payload['password'] ?? $_POST['password'] ?? $_GET['password'] ?? '');
+            if (empty($input_pass)) {
+                echo json_encode(['success' => false, 'error' => 'يرجى إدخال كلمة المرور'], JSON_UNESCAPED_UNICODE);
+                break;
+            }
+
+            $is_valid = false;
+            $admin_name = 'admin';
+
+            // 1. فحص جدول users للمستخدمين برتبة admin أو اسم admin
+            try {
+                $stmt = $pdo->query("SELECT * FROM users WHERE role = 'admin' OR username = 'admin' ORDER BY id ASC");
+                $admin_users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                foreach ($admin_users as $adm) {
+                    if (!empty($adm['password'])) {
+                        if (password_verify($input_pass, $adm['password']) || $input_pass === $adm['password']) {
+                            $is_valid = true;
+                            $admin_name = $adm['username'] ?? 'admin';
+                            break;
+                        }
+                    }
+                }
+            } catch (Exception $e) {}
+
+            // 2. فحص جدول settings إذا وُجد admin_password أو pos_password
+            if (!$is_valid) {
+                try {
+                    $stmt = $pdo->query("SELECT setting_value FROM settings WHERE key_name IN ('admin_password', 'pos_password', 'admin_pin')");
+                    $settings_vals = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                    foreach ($settings_vals as $val) {
+                        if (!empty($val)) {
+                            if ($input_pass === $val || (strlen($val) > 20 && password_verify($input_pass, $val))) {
+                                $is_valid = true;
+                                break;
+                            }
+                        }
+                    }
+                } catch (Exception $e) {}
+            }
+
+            // 3. فحص الباسورد الافتراضي لمنظومة الديسكتوب ERP والويب (1234 أو admin123)
+            if (!$is_valid) {
+                if ($input_pass === '1234' || $input_pass === 'admin123') {
+                    $is_valid = true;
+                }
+            }
+
+            if ($is_valid) {
+                $token = bin2hex(random_bytes(16));
+                echo json_encode([
+                    'success' => true,
+                    'message' => 'تم التحقق من كلمة مرور الأدمن بنجاح!',
+                    'username' => $admin_name,
+                    'token' => $token,
+                    'timestamp' => date('Y-m-d H:i:s')
+                ], JSON_UNESCAPED_UNICODE);
+            } else {
+                echo json_encode([
+                    'success' => false,
+                    'error' => 'كلمة المرور غير صحيحة! يرجى إدخال كلمة مرور الأدمن.'
+                ], JSON_UNESCAPED_UNICODE);
+            }
+            break;
+
+        // ============================================================
+        // 1. سحب المنتجات والأسعار والمخزون المحدث
         // ============================================================
         case 'get_products':
             $since = $_GET['since'] ?? '';
