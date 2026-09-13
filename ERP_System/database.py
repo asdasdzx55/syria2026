@@ -17,70 +17,70 @@ def setup_database():
     cursor = conn.cursor()
 
     
-    # 1. ط¬ط¯ظˆظ„ ط§ظ„ظ…ظ†طھط¬ط§طھ
+    # 1. جدول المنتجات
     cursor.execute('''CREATE TABLE IF NOT EXISTS products
                       (id INTEGER PRIMARY KEY, barcode TEXT UNIQUE, barcode2 TEXT, barcode3 TEXT, name TEXT, price REAL, cost REAL, stock REAL, all_barcodes TEXT)''')
     
-    # 2. ط¬ط¯ظˆظ„ ط§ظ„ظ…ط¨ظٹط¹ط§طھ
+    # 2. جدول المبيعات
     cursor.execute('''CREATE TABLE IF NOT EXISTS sales
-                      (id INTEGER PRIMARY KEY, total REAL, date TEXT, customer TEXT, phone TEXT, address TEXT, delivery_person TEXT, status TEXT DEFAULT 'ظ…ظƒطھظ…ظ„ط©', payment_method TEXT DEFAULT 'ظƒط§ط´', payment_fee REAL DEFAULT 0, discount REAL DEFAULT 0, delivery_fee REAL DEFAULT 0)''')
+                      (id INTEGER PRIMARY KEY, total REAL, date TEXT, customer TEXT, phone TEXT, address TEXT, delivery_person TEXT, status TEXT DEFAULT 'مكتملة', payment_method TEXT DEFAULT 'كاش', payment_fee REAL DEFAULT 0, discount REAL DEFAULT 0, delivery_fee REAL DEFAULT 0)''')
     
-    # 3. ط¬ط¯ظˆظ„ ط¹ظ†ط§طµط± ط§ظ„ظ…ط¨ظٹط¹ط§طھ
+    # 3. جدول عناصر المبيعات
     cursor.execute('''CREATE TABLE IF NOT EXISTS sale_items
                       (sale_id INTEGER, product_id INTEGER, qty REAL)''')
     
-    # 4. ط¬ط¯ظˆظ„ ط§ظ„ظ…طµط±ظˆظپط§طھ
+    # 4. جدول المصروفات
     cursor.execute('''CREATE TABLE IF NOT EXISTS expenses
                       (id INTEGER PRIMARY KEY, category TEXT, amount REAL, note TEXT, date TEXT)''')
                       
-    # 5. ط¬ط¯ظˆظ„ ط§ظ„ظ…ظˆط±ط¯ظٹظ†
+    # 5. جدول الموردين
     cursor.execute('''CREATE TABLE IF NOT EXISTS suppliers
                       (id INTEGER PRIMARY KEY, name TEXT, balance REAL DEFAULT 0)''')
                       
-    # 6. ط¬ط¯ظˆظ„ ط§ظ„ظ…ط´طھط±ظٹط§طھ
+    # 6. جدول المشتريات
     cursor.execute('''CREATE TABLE IF NOT EXISTS purchases
-                      (id INTEGER PRIMARY KEY, supplier_id INTEGER, total REAL, paid REAL, date TEXT, status TEXT DEFAULT 'ظ…ظƒطھظ…ظ„ط©', discount REAL DEFAULT 0)''')
+                      (id INTEGER PRIMARY KEY, supplier_id INTEGER, total REAL, paid REAL, date TEXT, status TEXT DEFAULT 'مكتملة', discount REAL DEFAULT 0)''')
                       
-    # 7. ط¬ط¯ظˆظ„ ط¹ظ†ط§طµط± ط§ظ„ظ…ط´طھط±ظٹط§طھ
+    # 7. جدول عناصر المشتريات
     cursor.execute('''CREATE TABLE IF NOT EXISTS purchase_items
                       (purchase_id INTEGER, product_id INTEGER, qty REAL, cost REAL)''')
                       
-    # 8. ط¬ط¯ظˆظ„ ط§ظ„ظ…ظˆط¸ظپظٹظ†
+    # 8. جدول الموظفين
     cursor.execute('''CREATE TABLE IF NOT EXISTS employees
-                      (id INTEGER PRIMARY KEY, name TEXT, role TEXT DEFAULT 'ط¹ط§ظ…ظ„', salary REAL, hours INTEGER, advances REAL DEFAULT 0, deductions REAL DEFAULT 0)''')
+                      (id INTEGER PRIMARY KEY, name TEXT, role TEXT DEFAULT 'عامل', salary REAL, hours INTEGER, advances REAL DEFAULT 0, deductions REAL DEFAULT 0)''')
     
-    # 9. ط¬ط¯ظˆظ„ ط·ط±ظ‚ ط§ظ„ط¯ظپط¹
+    # 9. جدول طرق الدفع
     cursor.execute('''CREATE TABLE IF NOT EXISTS payment_methods 
                       (id INTEGER PRIMARY KEY, name TEXT UNIQUE, fee_percent REAL)''')
     
-    # 10. ط¬ط¯ظˆظ„ طھطµظ†ظٹظپط§طھ ط§ظ„ظ…طµط±ظˆظپط§طھ
+    # 10. جدول تصنيفات المصروفات
     cursor.execute('''CREATE TABLE IF NOT EXISTS expense_categories 
                       (id INTEGER PRIMARY KEY, name TEXT UNIQUE)''')
     
-    # 11. ط¬ط¯ظˆظ„ ط§ظ„ط¥ط¹ط¯ط§ط¯ط§طھ
+    # 11. جدول الإعدادات
     cursor.execute('''CREATE TABLE IF NOT EXISTS settings 
                       (key TEXT PRIMARY KEY, value TEXT)''')
     
-    # 12. ط¬ط¯ظˆظ„ ط§ظ„ط¹ظ…ظ„ط§ط،
+    # 12. جدول العملاء
     cursor.execute('''CREATE TABLE IF NOT EXISTS customers 
                       (phone TEXT PRIMARY KEY, name TEXT, address TEXT)''')
     
-    # 13. ط¬ط¯ط§ظˆظ„ ط§ظ„ظپظˆط§طھظٹط± ط§ظ„ظ…ط¹ظ„ظ‚ط©
+    # 13. جداول الفواتير المعلقة
     cursor.execute('''CREATE TABLE IF NOT EXISTS temp_invoices 
-                      (id INTEGER PRIMARY KEY, note TEXT, date TEXT, customer TEXT, phone TEXT, delivery_person TEXT, discount REAL, payment_method TEXT DEFAULT 'ظƒط§ط´ (0.0%)', address TEXT, delivery_fee REAL DEFAULT 0)''')
+                      (id INTEGER PRIMARY KEY, note TEXT, date TEXT, customer TEXT, phone TEXT, delivery_person TEXT, discount REAL, payment_method TEXT DEFAULT 'كاش (0.0%)', address TEXT, delivery_fee REAL DEFAULT 0)''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS temp_invoice_items 
                       (temp_id INTEGER, product_id INTEGER, name TEXT, price REAL, qty REAL)''')
 
-    # 14. ط¬ط¯ظˆظ„ ط§ظ„ط´ط±ظƒط§ط، / ط§ظ„ظ…ط§ظ„ظƒظٹظ†
+    # 14. جدول الشركاء / المالكين
     cursor.execute('''CREATE TABLE IF NOT EXISTS partners 
                       (id INTEGER PRIMARY KEY, name TEXT UNIQUE)''')
 
-    # 15. ط¬ط¯ظˆظ„ ط·ط§ط¨ظˆط± ط§ظ„ظ…ط²ط§ظ…ظ†ط© ط§ظ„ظ‡ط¬ظٹظ†ط© ط§ظ„ط³ط­ط§ط¨ظٹط© (Hybrid Sync Queue)
+    # 15. جدول طابور المزامنة الهجينة السحابية (Hybrid Sync Queue)
     cursor.execute('''CREATE TABLE IF NOT EXISTS sync_queue 
                       (id INTEGER PRIMARY KEY, action TEXT, entity_type TEXT, entity_id INTEGER, payload TEXT, status TEXT DEFAULT 'pending', created_at TEXT)''')
 
     # ==========================================
-    # ظپط­طµ ظˆط¥ط¶ط§ظپط© ط§ظ„ط£ط¹ظ…ط¯ط© ط§ظ„ط¬ط¯ظٹط¯ط© طھظ„ظ‚ط§ط¦ظٹط§ظ‹ ظ„ظ‚ظˆط§ط¹ط¯ ط§ظ„ط¨ظٹط§ظ†ط§طھ ط§ظ„ط­ط§ظ„ظٹط© (Auto Migration)
+    # فحص وإضافة الأعمدة الجديدة تلقائياً لقواعد البيانات الحالية (Auto Migration)
     # ==========================================
     migrations = [
         ("products", "barcode2 TEXT"),
@@ -91,7 +91,7 @@ def setup_database():
         ("products", "remote_id TEXT"),
         ("expenses", "partner_name TEXT"),
         ("sales", "delivery_person TEXT"),
-        ("sales", "payment_method TEXT DEFAULT 'ظƒط§ط´'"),
+        ("sales", "payment_method TEXT DEFAULT 'كاش'"),
         ("sales", "payment_fee REAL DEFAULT 0"),
         ("sales", "discount REAL DEFAULT 0"),
         ("sales", "address TEXT"),
@@ -100,31 +100,31 @@ def setup_database():
         ("sales", "delivery_settled_at TEXT"),
         ("sales", "synced INTEGER DEFAULT 0"),
         ("sales", "remote_id TEXT"),
-        ("purchases", "status TEXT DEFAULT 'ظ…ظƒطھظ…ظ„ط©'"),
+        ("purchases", "status TEXT DEFAULT 'مكتملة'"),
         ("purchases", "discount REAL DEFAULT 0"),
-        ("employees", "role TEXT DEFAULT 'ط¹ط§ظ…ظ„'"),
+        ("employees", "role TEXT DEFAULT 'عامل'"),
         ("employees", "deductions REAL DEFAULT 0"),
-        ("temp_invoices", "payment_method TEXT DEFAULT 'ظƒط§ط´ (0.0%)'"),
+        ("temp_invoices", "payment_method TEXT DEFAULT 'كاش (0.0%)'"),
         ("temp_invoices", "address TEXT"),
         ("temp_invoices", "delivery_fee REAL DEFAULT 0"),
-        ("products", "category TEXT DEFAULT 'ط¹ط§ظ…'"),
-        ("products", "main_category TEXT DEFAULT 'ط¹ط§ظ…'"),
-        ("products", "sub_category TEXT DEFAULT 'ط¹ط§ظ…'"),
+        ("products", "category TEXT DEFAULT 'عام'"),
+        ("products", "main_category TEXT DEFAULT 'عام'"),
+        ("products", "sub_category TEXT DEFAULT 'عام'"),
         ("suppliers", "phone TEXT"),
         ("suppliers", "synced INTEGER DEFAULT 0"),
         ("suppliers", "remote_id TEXT"),
         ("purchases", "invoice_number TEXT"),
-        ("purchases", "payment_method TEXT DEFAULT 'ظ†ظ‚ط¯ظٹ'"),
+        ("purchases", "payment_method TEXT DEFAULT 'نقدي'"),
         ("purchases", "source TEXT DEFAULT 'desktop_pos'"),
         ("purchases", "synced INTEGER DEFAULT 0"),
         ("purchases", "remote_id TEXT"),
         ("purchase_items", "barcode TEXT"),
         ("purchase_items", "name TEXT"),
-        ("purchase_items", "unit TEXT DEFAULT 'ظ‚ط·ط¹ط©'"),
+        ("purchase_items", "unit TEXT DEFAULT 'قطعة'"),
         ("purchase_items", "selling_price REAL DEFAULT 0"),
         ("products", "is_weight_based INTEGER DEFAULT 0"),
-        ("products", "unit_type TEXT DEFAULT 'ظ‚ط·ط¹ط©'"),
-        ("products", "weight_unit TEXT DEFAULT 'ظƒط¬ظ…'"),
+        ("products", "unit_type TEXT DEFAULT 'قطعة'"),
+        ("products", "weight_unit TEXT DEFAULT 'كجم'"),
         ("products", "has_pack INTEGER DEFAULT 0"),
         ("products", "pack_name TEXT DEFAULT ''"),
         ("products", "pack_barcode TEXT DEFAULT ''"),
@@ -147,9 +147,9 @@ def setup_database():
         try:
             cursor.execute(f"ALTER TABLE {table} ADD COLUMN {col_def}")
         except sqlite3.OperationalError:
-            pass # ط§ظ„ط¹ظ…ظˆط¯ ظ…ظˆط¬ظˆط¯ ط¨ط§ظ„ظپط¹ظ„
+            pass # العمود موجود بالفعل
 
-    # 16. ط¬ط¯ط§ظˆظ„ ط§ظ„طھطµظ†ظٹظپط§طھ ط§ظ„ط£ط³ط§ط³ظٹط© ظˆط§ظ„ظپط±ط¹ظٹط© (Categories & Sub-Categories)
+    # 16. جداول التصنيفات الأساسية والفرعية (Categories & Sub-Categories)
     cursor.execute('''CREATE TABLE IF NOT EXISTS categories 
                       (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL)''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS sub_categories 
@@ -157,7 +157,7 @@ def setup_database():
                        UNIQUE(name, main_category_id),
                        FOREIGN KEY(main_category_id) REFERENCES categories(id) ON DELETE CASCADE)''')
 
-    # ط§ظ„طھط±ظ‚ظٹظ… ط§ظ„طھظ„ظ‚ط§ط¦ظٹ ط¨ط§ظ„ط¨ط§ط±ظƒظˆط¯ ط§ظ„ظ…ط­ظ„ظٹ (5 ط£ط±ظ‚ط§ظ…) ظ„ظ„ظ…ظ†طھط¬ط§طھ ط§ظ„ظ‚ط¯ظٹظ…ط© ط§ظ„طھظٹ ظ„ط§ طھظ…ظ„ظƒ ط¨ط§ط±ظƒظˆط¯ ظ…ط­ظ„ظٹ
+    # الترقيم التلقائي بالباركود المحلي (5 أرقام) للمنتجات القديمة التي لا تملك باركود محلي
     cursor.execute("SELECT id, barcode, all_barcodes FROM products WHERE local_code IS NULL OR local_code = ''")
     missing_prods = cursor.fetchall()
     if missing_prods:
@@ -179,34 +179,34 @@ def setup_database():
             cursor.execute("UPDATE products SET local_code = ?, all_barcodes = ? WHERE id = ?", (new_loc_code, new_all_bcs, p_id))
         conn.commit()
 
-    # ط¨ظٹط§ظ†ط§طھ ط§ظپطھط±ط§ط¶ظٹط© ط¥ط°ط§ ظƒط§ظ†طھ ط§ظ„ط¬ط¯ط§ظˆظ„ ظپط§ط±ط؛ط©
+    # بيانات افتراضية إذا كانت الجداول فارغة
     cursor.execute("SELECT COUNT(*) FROM payment_methods")
     if cursor.fetchone()[0] == 0:
         cursor.executemany("INSERT OR IGNORE INTO payment_methods (name, fee_percent) VALUES (?, ?)", 
-                           [("ظƒط§ط´", 0.0), ("ظپظٹط²ط§", 2.0), ("ط§ظ†ط³طھط§ ط¨ط§ظٹ", 0.0)])
+                           [("كاش", 0.0), ("فيزا", 2.0), ("انستا باي", 0.0)])
 
     cursor.execute("SELECT COUNT(*) FROM expense_categories")
     if cursor.fetchone()[0] == 0:
-        defaults = [("ظ†ط«ط±ظٹط§طھ",), ("ط¥ظٹط¬ط§ط±",), ("ظپظˆط§طھظٹط± (ظƒظ‡ط±ط¨ط§ط،/ظ…ظٹط§ظ‡)",), ("طµظٹط§ظ†ط©",), ("ط±ظˆط§طھط¨ ط¹ط§ظ…ظ„ظٹظ†",), ("ط³ظ„ظپ ط¹ط§ظ…ظ„ظٹظ†",), ("ط³ط¯ط§ط¯ ظ…ظˆط±ط¯ظٹظ†",), ("ظ…ط´طھط±ظٹط§طھ ط¨ط¶ط§ط¹ط©",), ("ظ…ط³ط­ظˆط¨ط§طھ ط§ظ„ط¥ط¯ط§ط±ط©",), ("ط£ط®ط±ظ‰",)]
+        defaults = [("نثريات",), ("إيجار",), ("فواتير (كهرباء/مياه)",), ("صيانة",), ("رواتب عاملين",), ("سلف عاملين",), ("سداد موردين",), ("مشتريات بضاعة",), ("مسحوبات الإدارة",), ("أخرى",)]
         cursor.executemany("INSERT OR IGNORE INTO expense_categories (name) VALUES (?)", defaults)
 
     cursor.execute("SELECT COUNT(*) FROM partners")
     if cursor.fetchone()[0] == 0:
-        p_defaults = [("ط§ظ„ظ…ط§ظ„ظƒ / ط§ظ„ظ…ط¯ظٹط± ط§ظ„ط¹ط§ظ…",), ("ط§ظ„ط´ط±ظٹظƒ ط§ظ„ط£ظˆظ„",), ("ط§ظ„ط´ط±ظٹظƒ ط§ظ„ط«ط§ظ†ظٹ",)]
+        p_defaults = [("المالك / المدير العام",), ("الشريك الأول",), ("الشريك الثاني",)]
         cursor.executemany("INSERT OR IGNORE INTO partners (name) VALUES (?)", p_defaults)
 
-    # طھظ‡ظٹط¦ط© ط§ظ„طھطµظ†ظٹظپط§طھ ط§ظ„ط£ط³ط§ط³ظٹط© ظˆط§ظ„ظپط±ط¹ظٹط© ط§ظ„ط§ظپطھط±ط§ط¶ظٹط©
+    # تهيئة التصنيفات الأساسية والفرعية الافتراضية
     cursor.execute("SELECT COUNT(*) FROM categories")
     if cursor.fetchone()[0] == 0:
         default_categories = {
-            "ط­ظ„ظˆظٹط§طھ ظˆط´ظˆظƒظˆظ„ط§طھط©": ["ظ†ظˆظƒط§ ظˆظ…ظƒط³ط±ط§طھ", "ط¨ظ‚ظ„ط§ظˆط© ظˆظ…ط¹ظ…ظˆظ„", "ظ…ظ„ط¨ظ† ظˆط±ط§ط­ط©", "ط´ظˆظƒظˆظ„ط§طھط© ظˆطھظˆظپظٹ", "ط­ظ„ظˆظٹط§طھ ط´ط±ظ‚ظٹط©"],
-            "ط¹ط·ط§ط±ط© ظˆط¨ظ‡ط§ط±ط§طھ": ["ط¨ظ‡ط§ط±ط§طھ ظˆطھظˆط§ط¨ظ„", "ط£ط¹ط´ط§ط¨ ط·ط¨ظٹط¹ظٹط©", "ط­ط¨ظˆط¨ ظˆط¨ظ‚ظˆظ„ظٹط§طھ", "ظ…ظƒط³ط±ط§طھ ظˆطھط³ط§ظ„ظٹ"],
-            "ط£ظ„ط¨ط§ظ† ظˆط£ط¬ط¨ط§ظ†": ["ط£ط¬ط¨ط§ظ† ط³ظˆط±ظٹط© ظˆظ…ط­ظ„ظٹط©", "ط£ظ„ط¨ط§ظ† ظˆط²ط¨ط§ط¯ظٹ", "ظ‚ط´ط·ط© ظˆط²ط¨ط¯ط©"],
-            "ط²ظٹظˆطھ ظˆط³ظ…ظ†": ["ط²ظٹطھ ط²ظٹطھظˆظ†", "ط³ظ…ظ† ط¨ظ„ط¯ظٹ ظˆط³ظˆط±ظٹ", "ط²ظٹظˆطھ ظ†ط¨ط§طھظٹط©"],
-            "ظ…ط¹ظ„ط¨ط§طھ ظˆظ…ظˆط§ط¯ ط؛ط°ط§ط¦ظٹط©": ["ط¨ظ‚ظˆظ„ظٹط§طھ ظˆظ…ط¹ظ„ط¨ط§طھ", "طµظ„طµط§طھ ظˆط¯ط¨ط³", "ظ…ط±ط¨ظٹط§طھ ظˆط¹ط³ظ„", "ط£ط±ط² ظˆظ…ظƒط±ظˆظ†ط©"],
-            "ظ…ط´ط±ظˆط¨ط§طھ ظˆط¹طµط§ط¦ط±": ["ط´ط§ظٹ ظˆظ‚ظ‡ظˆط© ظˆظ…طھظ‡", "ظ…ط´ط±ظˆط¨ط§طھ ط¨ط§ط±ط¯ط©", "ظ…ظٹط§ظ‡ ط؛ط§ط²ظٹط© ظˆظ…ط¹ط¯ظ†ظٹط©"],
-            "ظ…ظ†ط¸ظپط§طھ ظˆط¹ظ†ط§ظٹط© ظ…ظ†ط²ظ„ظٹط©": ["ظ…ظ†ط¸ظپط§طھ ط£ط·ط¨ط§ظ‚ ظˆظ…ظ„ط§ط¨ط³", "ظ…ط¹ظ‚ظ…ط§طھ ظˆظ…ط·ظ‡ط±ط§طھ", "ط¹ظ†ط§ظٹط© ط´ط®طµظٹط©"],
-            "ط¹ط§ظ…": ["ظ…ظ†طھط¬ط§طھ ط¹ط§ظ…ط©"]
+            "حلويات وشوكولاتة": ["نوكا ومكسرات", "بقلاوة ومعمول", "ملبن وراحة", "شوكولاتة وتوفي", "حلويات شرقية"],
+            "عطارة وبهارات": ["بهارات وتوابل", "أعشاب طبيعية", "حبوب وبقوليات", "مكسرات وتسالي"],
+            "ألبان وأجبان": ["أجبان سورية ومحلية", "ألبان وزبادي", "قشطة وزبدة"],
+            "زيوت وسمن": ["زيت زيتون", "سمن بلدي وسوري", "زيوت نباتية"],
+            "معلبات ومواد غذائية": ["بقوليات ومعلبات", "صلصات ودبس", "مربيات وعسل", "أرز ومكرونة"],
+            "مشروبات وعصائر": ["شاي وقهوة ومته", "مشروبات باردة", "مياه غازية ومعدنية"],
+            "منظفات وعناية منزلية": ["منظفات أطباق وملابس", "معقمات ومطهرات", "عناية شخصية"],
+            "عام": ["منتجات عامة"]
         }
         for cat_name, sub_list in default_categories.items():
             cursor.execute("INSERT OR IGNORE INTO categories (name) VALUES (?)", (cat_name,))
