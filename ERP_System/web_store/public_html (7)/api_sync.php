@@ -1,4 +1,5 @@
 <?php
+if (!ob_start("ob_gzhandler")) ob_start();
 /**
  * Syrian Home Supermarket - Central Data Hub & POS Sync API
  * واجهة المزامنة المركزية الشاملة لسوبر ماركت المنزل السوري
@@ -159,6 +160,10 @@ if (!function_exists('ensure_customers_schema')) {
         try { $pdo->exec("ALTER TABLE customers ADD COLUMN total_orders INT DEFAULT 0"); } catch (Exception $e) {}
         try { $pdo->exec("ALTER TABLE customers ADD COLUMN total_spent DECIMAL(10,2) DEFAULT 0.00"); } catch (Exception $e) {}
         try { $pdo->exec("ALTER TABLE customers ADD COLUMN last_order_date DATETIME DEFAULT NULL"); } catch (Exception $e) {}
+        try { $pdo->exec("ALTER TABLE customers ADD COLUMN code INT DEFAULT NULL"); } catch (Exception $e) {}
+        try { $pdo->exec("ALTER TABLE customers ADD COLUMN remind DECIMAL(12,2) DEFAULT 0.00"); } catch (Exception $e) {}
+        try { $pdo->exec("ALTER TABLE customers ADD COLUMN receipts DECIMAL(12,2) DEFAULT 0.00"); } catch (Exception $e) {}
+        try { $pdo->exec("ALTER TABLE customers ADD COLUMN balance DECIMAL(12,2) DEFAULT 0.00"); } catch (Exception $e) {}
 
         // ترقية أعمدة جدول الطلبات لضمان عدم وجود أخطاء عند القراءة
         try { $pdo->exec("ALTER TABLE orders ADD COLUMN governorate VARCHAR(100) DEFAULT 'القاهرة'"); } catch (Exception $e) {}
@@ -699,6 +704,131 @@ try {
                 'count' => count($suppliers),
                 'suppliers' => $suppliers
             ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 2.41 تقرير الموردين الشامل والمديونيات (Suppliers Report)
+        // ============================================================
+        case 'get_suppliers_report':
+            try {
+                $pdo->exec("ALTER TABLE suppliers ADD COLUMN supplier_code VARCHAR(50) DEFAULT NULL");
+            } catch (Exception $e) {}
+
+            $stmt = $pdo->query("SELECT * FROM suppliers ORDER BY CASE WHEN balance > 0 THEN 0 WHEN balance < 0 THEN 1 ELSE 2 END, balance DESC, name ASC");
+            $raw_suppliers = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // استبعاد الموردين الوهميين والفارغين
+            $suppliers = array_values(array_filter($raw_suppliers, function($sup) {
+                $nm = trim($sup['name'] ?? '');
+                return !empty($nm) && !in_array($nm, ['000', '0000000', '0', '00']);
+            }));
+
+            // إحصائيات المشتريات لكل مورد
+            $purch_stats = [];
+            try {
+                $p_rows = $pdo->query("SELECT supplier_id, supplier_name, 
+                                              COUNT(*) as invoices_count, 
+                                              SUM(total_amount) as total_supplied, 
+                                              SUM(paid_amount) as total_paid, 
+                                              SUM(CASE WHEN (total_amount - paid_amount) > 0.001 THEN 1 ELSE 0 END) as unpaid_count, 
+                                              MAX(created_at) as last_date 
+                                       FROM purchases 
+                                       GROUP BY supplier_id, supplier_name")->fetchAll(PDO::FETCH_ASSOC);
+                foreach ($p_rows as $pr) {
+                    if (!empty($pr['supplier_id'])) {
+                        $purch_stats['id_' . $pr['supplier_id']] = $pr;
+                    }
+                    if (!empty($pr['supplier_name'])) {
+                        $purch_stats['name_' . trim($pr['supplier_name'])] = $pr;
+                    }
+                }
+            } catch (Exception $e) {}
+
+            $total_debt = 0.0;
+            $total_supplied = 0.0;
+            $total_paid = 0.0;
+
+            foreach ($suppliers as &$s) {
+                $sid = $s['id'] ?? 0;
+                $name = trim($s['name'] ?? '');
+                $bal = (float)($s['balance'] ?? 0);
+                
+                $p_info = $purch_stats['id_' . $sid] ?? $purch_stats['name_' . $name] ?? null;
+                $s['total_purchases'] = (float)($p_info['total_supplied'] ?? 0);
+                $s['total_paid'] = (float)($p_info['total_paid'] ?? 0);
+                $s['invoices_count'] = (int)($p_info['invoices_count'] ?? 0);
+                $s['purchases_count'] = $s['invoices_count']; // توافق تام مع واجهة العرض
+                $s['unpaid_invoices_count'] = (int)($p_info['unpaid_count'] ?? 0);
+                $s['last_purchase_date'] = $p_info['last_date'] ?? null;
+
+                // مديونية الموردين (المبالغ المستحقة لهم)
+                if ($bal > 0) {
+                    $total_debt += $bal;
+                }
+                $total_supplied += $s['total_purchases'];
+                $total_paid += $s['total_paid'];
+            }
+
+            echo json_encode([
+                'success' => true,
+                'count' => count($suppliers),
+                'summary' => [
+                    'total_debt' => $total_debt,
+                    'total_supplied' => $total_supplied,
+                    'total_paid' => $total_paid,
+                    'suppliers_count' => count($suppliers)
+                ],
+                'suppliers' => $suppliers
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 2.42 مزامنة جماعية لموردي دريم سوفت (Bulk Sync DreamSoft Suppliers)
+        // ============================================================
+        case 'sync_dreamsoft_suppliers':
+            $sups = $json_payload['suppliers'] ?? [];
+            if (empty($sups) && !empty($_POST['suppliers'])) {
+                $sups = json_decode($_POST['suppliers'], true);
+            }
+            if (empty($sups) || !is_array($sups)) {
+                echo json_encode(['success' => false, 'error' => 'قائمة الموردين فارغة']);
+                exit;
+            }
+            try {
+                $pdo->exec("ALTER TABLE suppliers ADD COLUMN supplier_code VARCHAR(50) DEFAULT NULL");
+            } catch(Exception $e) {}
+
+            $chk_code = $pdo->prepare("SELECT id FROM suppliers WHERE supplier_code = ? LIMIT 1");
+            $chk_name = $pdo->prepare("SELECT id FROM suppliers WHERE name = ? LIMIT 1");
+            $upd = $pdo->prepare("UPDATE suppliers SET name = ?, phone = ?, balance = ?, supplier_code = ? WHERE id = ?");
+            $ins = $pdo->prepare("INSERT INTO suppliers (name, phone, balance, supplier_code) VALUES (?, ?, ?, ?)");
+
+            $synced_sups = 0;
+            foreach ($sups as $sp) {
+                $sname = trim($sp['name'] ?? '');
+                if (empty($sname) || in_array($sname, ['000', '0000000', '0', '00'])) continue;
+                $scode = trim($sp['code'] ?? $sp['supplier_code'] ?? '');
+                $sphone = trim($sp['phone'] ?? $sp['mobile'] ?? '');
+                $sbal = (float)($sp['balance'] ?? 0);
+
+                $target_id = null;
+                if (!empty($scode)) {
+                    $chk_code->execute([$scode]);
+                    $target_id = $chk_code->fetchColumn();
+                }
+                if (!$target_id) {
+                    $chk_name->execute([$sname]);
+                    $target_id = $chk_name->fetchColumn();
+                }
+
+                if ($target_id) {
+                    $upd->execute([$sname, $sphone, $sbal, $scode ?: null, $target_id]);
+                } else {
+                    $ins->execute([$sname, $sphone, $sbal, $scode ?: null]);
+                }
+                $synced_sups++;
+            }
+            echo json_encode(['success' => true, 'synced_count' => $synced_sups]);
             break;
 
         // ============================================================
@@ -2048,6 +2178,196 @@ try {
             break;
 
         // ============================================================
+        // 2.651 تسجيل سند قبض / مقبوض من عميل (Customer Receipt)
+        // ============================================================
+        
+        // ============================================================
+        // 2.653 مزامنة عملاء دريم سوفت بكامل الأكواد والأرصدة الفعلية
+        // ============================================================
+        case 'sync_dreamsoft_customers':
+            ensure_customers_schema($pdo);
+            $custs = $json_payload['customers'] ?? [];
+            if (empty($custs) && !empty($_POST['customers'])) {
+                $custs = json_decode($_POST['customers'], true);
+            }
+
+            if (empty($custs) || !is_array($custs)) {
+                echo json_encode(['success' => false, 'error' => 'قائمة العملاء فارغة']);
+                exit;
+            }
+
+            // تم إزالة شرط التصفير الإجباري لضمان حفظ وتطابق كل مديونيات وأرصدة العملاء بنسبة 100%
+            $synced_count = 0;
+            $updated_debts = 0;
+
+            // استعلام التحقق والتحديث
+            $chk = $pdo->prepare("SELECT id FROM customers WHERE code = ? LIMIT 1");
+            $upd = $pdo->prepare("UPDATE customers SET name = ?, phone = ?, address = ?, remind = ?, receipts = ?, balance = ? WHERE code = ?");
+            $ins = $pdo->prepare("INSERT INTO customers (code, name, phone, address, remind, receipts, balance) VALUES (?, ?, ?, ?, ?, ?, ?)");
+
+            foreach ($custs as $c) {
+                $code = (int)($c['code'] ?? 0);
+                if ($code <= 0) continue;
+
+                $name = trim($c['name'] ?? '');
+                $raw_phone = trim($c['phone'] ?? $c['mobile'] ?? $c['tel'] ?? '');
+                // لتفادي خطأ Duplicate entry '' في MySQL
+                $phone = !empty($raw_phone) ? $raw_phone : "0100000" . str_pad($code, 4, '0', STR_PAD_LEFT);
+                $address = trim($c['address'] ?? '');
+                $remind = (float)($c['remind'] ?? 0);
+                $receipts = (float)($c['receipts'] ?? 0);
+                
+                // في الكاشير: الرصيد السالب يمثل مديونية على العميل بمقدار المتبقي
+                $balance = $remind > 0 ? -$remind : 0.00;
+
+                $chk->execute([$code]);
+                $existing_id = $chk->fetchColumn();
+
+                if ($existing_id) {
+                    $upd->execute([$name, $phone, $address, $remind, $receipts, $balance, $code]);
+                } else {
+                    // فحص إذا كان موجوداً بالاسم
+                    $chk_name = $pdo->prepare("SELECT id FROM customers WHERE name = ? LIMIT 1");
+                    $chk_name->execute([$name]);
+                    $by_name = $chk_name->fetchColumn();
+                    if ($by_name) {
+                        $pdo->prepare("UPDATE customers SET code = ?, phone = ?, address = COALESCE(NULLIF(address, ''), ?), remind = ?, receipts = ?, balance = ? WHERE id = ?")
+                            ->execute([$code, $phone, $address, $remind, $receipts, $balance, $by_name]);
+                    } else {
+                        try {
+                            $ins->execute([$code, $name, $phone, $address, $remind, $receipts, $balance]);
+                        } catch (Exception $ex_ins) {
+                            // إذا كان الهاتف مكرراً، نولد هاتف فريد بالكود
+                            $alt_phone = "0100000" . str_pad($code, 4, '0', STR_PAD_LEFT);
+                            $ins->execute([$code, $name, $alt_phone, $address, $remind, $receipts, $balance]);
+                        }
+                    }
+                }
+
+                $synced_count++;
+                if ($remind > 0) $updated_debts++;
+            }
+
+            echo json_encode([
+                'success' => true,
+                'message' => "تمت مزامنة {$synced_count} عميل من دريم سوفت بنجاح، منهم {$updated_debts} عميل عليهم حسابات آجلة.",
+                'synced_count' => $synced_count,
+                'debts_count' => $updated_debts
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        case 'customer_receipt':
+            $data = !empty($json_payload) ? $json_payload : $_POST;
+            $cust_id = (int)($data['customer_id'] ?? $data['id'] ?? 0);
+            $cust_name = trim($data['customer_name'] ?? '');
+            $amount = (float)($data['amount'] ?? 0);
+            $note = trim($data['note'] ?? '');
+            $pm = trim($data['payment_method'] ?? 'كاش من الدرج');
+            $date = $data['date'] ?? date('Y-m-d H:i:s');
+
+            if ($amount <= 0) {
+                echo json_encode(['success' => false, 'error' => 'مبلغ السند يجب أن يكون أكبر من الصفر!']);
+                exit;
+            }
+
+            // زيادة الرصيد (يخفض المديونية السالبة)
+            if ($cust_id > 0) {
+                $upd = $pdo->prepare("UPDATE customers SET balance = balance + ?, total_spent = total_spent + ? WHERE id = ?");
+                $upd->execute([$amount, $amount, $cust_id]);
+                if (empty($cust_name)) {
+                    $cust_name = $pdo->query("SELECT name FROM customers WHERE id = {$cust_id}")->fetchColumn() ?: "عميل #{$cust_id}";
+                }
+            } elseif (!empty($cust_name)) {
+                $upd = $pdo->prepare("UPDATE customers SET balance = balance + ?, total_spent = total_spent + ? WHERE name = ?");
+                $upd->execute([$amount, $amount, $cust_name]);
+            }
+
+            try {
+                $pdo->exec("CREATE TABLE IF NOT EXISTS customer_vouchers (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    customer_id INT DEFAULT NULL,
+                    customer_name VARCHAR(150) NOT NULL,
+                    type VARCHAR(50) NOT NULL,
+                    amount DECIMAL(12,2) NOT NULL,
+                    payment_method VARCHAR(100) DEFAULT 'كاش',
+                    note TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+                $ins_v = $pdo->prepare("INSERT INTO customer_vouchers (customer_id, customer_name, type, amount, payment_method, note, created_at) VALUES (?, ?, 'سند قبض', ?, ?, ?, ?)");
+                $ins_v->execute([$cust_id ?: null, $cust_name, $amount, $pm, $note, $date]);
+            } catch (Exception $e) {}
+
+            echo json_encode([
+                'success' => true,
+                'message' => "✅ تم استلام مبلغ {$amount} ج.م من العميل ({$cust_name}) وتخفيض مديونيته بنجاح."
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 2.652 تسجيل سند صرف / دفع لعميل (Customer Payment / Refund)
+        // ============================================================
+        case 'pay_customer':
+            $data = !empty($json_payload) ? $json_payload : $_POST;
+            $cust_id = (int)($data['customer_id'] ?? $data['id'] ?? 0);
+            $cust_name = trim($data['customer_name'] ?? '');
+            $amount = (float)($data['amount'] ?? 0);
+            $note = trim($data['note'] ?? '');
+            $pm = trim($data['payment_method'] ?? 'كاش من الدرج');
+            $date = $data['date'] ?? date('Y-m-d H:i:s');
+
+            if ($amount <= 0) {
+                echo json_encode(['success' => false, 'error' => 'المبلغ يجب أن يكون أكبر من الصفر!']);
+                exit;
+            }
+
+            if ($cust_id > 0) {
+                $upd = $pdo->prepare("UPDATE customers SET balance = balance - ? WHERE id = ?");
+                $upd->execute([$amount, $cust_id]);
+                if (empty($cust_name)) {
+                    $cust_name = $pdo->query("SELECT name FROM customers WHERE id = {$cust_id}")->fetchColumn() ?: "عميل #{$cust_id}";
+                }
+            }
+
+            try {
+                $pdo->exec("CREATE TABLE IF NOT EXISTS customer_vouchers (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    customer_id INT DEFAULT NULL,
+                    customer_name VARCHAR(150) NOT NULL,
+                    type VARCHAR(50) NOT NULL,
+                    amount DECIMAL(12,2) NOT NULL,
+                    payment_method VARCHAR(100) DEFAULT 'كاش',
+                    note TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+                $ins_v = $pdo->prepare("INSERT INTO customer_vouchers (customer_id, customer_name, type, amount, payment_method, note, created_at) VALUES (?, ?, 'سند صرف', ?, ?, ?, ?)");
+                $ins_v->execute([$cust_id ?: null, $cust_name, $amount, $pm, $note, $date]);
+            } catch (Exception $e) {}
+
+            echo json_encode([
+                'success' => true,
+                'message' => "✅ تم صرف مبلغ {$amount} ج.م للعميل ({$cust_name}) وتعديل حسابه بنجاح."
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
+        // 2.653 كشف حساب عميل تفصيلي (Customer Ledger)
+        // ============================================================
+        case 'get_customer_ledger':
+            $cust_id = (int)($_GET['customer_id'] ?? 0);
+            $transactions = [];
+            try {
+                $stmt = $pdo->prepare("SELECT type, amount, payment_method, note, created_at as date FROM customer_vouchers WHERE customer_id = ? ORDER BY id DESC LIMIT 50");
+                $stmt->execute([$cust_id]);
+                $transactions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            } catch (Exception $e) {}
+
+            echo json_encode([
+                'success' => true,
+                'transactions' => $transactions
+            ], JSON_UNESCAPED_UNICODE);
+            break;
+
+        // ============================================================
         // 7. سحب أرباح / مسحوبات للمالك أو الشريك (Partner Withdrawal)
         // ============================================================
         case 'partner_withdraw':
@@ -2810,29 +3130,30 @@ try {
         case 'get_customers':
             ensure_customers_schema($pdo);
             $q = trim($json_payload['q'] ?? $json_payload['query'] ?? $_GET['q'] ?? $_GET['query'] ?? $_POST['q'] ?? $_POST['query'] ?? $_REQUEST['q'] ?? $_REQUEST['query'] ?? '');
-            $limit = min(200, max(1, (int)($json_payload['limit'] ?? $_GET['limit'] ?? $_POST['limit'] ?? $_REQUEST['limit'] ?? 50)));
+            $limit = min(5000, max(1, (int)($json_payload['limit'] ?? $_GET['limit'] ?? $_POST['limit'] ?? $_REQUEST['limit'] ?? 1000)));
             $page = max(1, (int)($json_payload['page'] ?? $_GET['page'] ?? $_POST['page'] ?? $_REQUEST['page'] ?? 1));
             $offset = ($page - 1) * $limit;
 
             if ($q !== '') {
                 $search_term = "%$q%";
-                $cnt = $pdo->prepare("SELECT COUNT(*) FROM customers WHERE name LIKE ? OR phone LIKE ? OR phone2 LIKE ? OR address LIKE ? OR governorate LIKE ?");
-                $cnt->execute([$search_term, $search_term, $search_term, $search_term, $search_term]);
+                $cnt = $pdo->prepare("SELECT COUNT(*) FROM customers WHERE code LIKE ? OR name LIKE ? OR phone LIKE ? OR phone2 LIKE ? OR address LIKE ? OR notes LIKE ?");
+                $cnt->execute([$search_term, $search_term, $search_term, $search_term, $search_term, $search_term]);
                 $total_count = (int)$cnt->fetchColumn();
 
-                $stmt = $pdo->prepare("SELECT * FROM customers WHERE name LIKE ? OR phone LIKE ? OR phone2 LIKE ? OR address LIKE ? OR governorate LIKE ? ORDER BY total_orders DESC, id DESC LIMIT ? OFFSET ?");
+                $stmt = $pdo->prepare("SELECT * FROM customers WHERE code LIKE ? OR name LIKE ? OR phone LIKE ? OR phone2 LIKE ? OR address LIKE ? OR notes LIKE ? ORDER BY CASE WHEN remind > 0 THEN 0 WHEN balance < 0 THEN 1 ELSE 2 END, remind DESC, code ASC LIMIT ? OFFSET ?");
                 $stmt->bindValue(1, $search_term, PDO::PARAM_STR);
                 $stmt->bindValue(2, $search_term, PDO::PARAM_STR);
                 $stmt->bindValue(3, $search_term, PDO::PARAM_STR);
                 $stmt->bindValue(4, $search_term, PDO::PARAM_STR);
                 $stmt->bindValue(5, $search_term, PDO::PARAM_STR);
-                $stmt->bindValue(6, (int)$limit, PDO::PARAM_INT);
-                $stmt->bindValue(7, (int)$offset, PDO::PARAM_INT);
+                $stmt->bindValue(6, $search_term, PDO::PARAM_STR);
+                $stmt->bindValue(7, (int)$limit, PDO::PARAM_INT);
+                $stmt->bindValue(8, (int)$offset, PDO::PARAM_INT);
                 $stmt->execute();
                 $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
             } else {
                 $total_count = (int)$pdo->query("SELECT COUNT(*) FROM customers")->fetchColumn();
-                $stmt = $pdo->prepare("SELECT * FROM customers ORDER BY total_orders DESC, id DESC LIMIT ? OFFSET ?");
+                $stmt = $pdo->prepare("SELECT * FROM customers ORDER BY CASE WHEN remind > 0 THEN 0 WHEN balance < 0 THEN 1 ELSE 2 END, remind DESC, code ASC LIMIT ? OFFSET ?");
                 $stmt->bindValue(1, (int)$limit, PDO::PARAM_INT);
                 $stmt->bindValue(2, (int)$offset, PDO::PARAM_INT);
                 $stmt->execute();
