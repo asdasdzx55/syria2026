@@ -42,7 +42,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pay_supplier'])) {
     if ($sup_id > 0 && $amount > 0) {
         $upd = $pdo->prepare("UPDATE suppliers SET balance = GREATEST(0, balance - ?) WHERE id = ?");
         $upd->execute([$amount, $sup_id]);
-        $msg = "تم سداد مبلغ {$amount} ج.م بنجاح!";
+        $sup_name = $pdo->query("SELECT name FROM suppliers WHERE id = {$sup_id}")->fetchColumn() ?: 'مورد';
+        $full_note = "[سداد مورد: {$sup_name}] سداد من لوحة إدارة الموردين";
+        $stmt = $pdo->prepare("INSERT INTO expenses (category, amount, note, date, supplier_id, payment_method, synced) VALUES ('سداد موردين', ?, ?, NOW(), ?, 'كاش', 0)");
+        $stmt->execute([$amount, $full_note, $sup_id]);
+        $msg = "تم سداد مبلغ {$amount} ج.م للمورد ({$sup_name}) بنجاح!";
+    }
+}
+
+// مقبوض من مورد (سند قبض)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['receive_supplier'])) {
+    $sup_id = (int)($_POST['supplier_id'] ?? 0);
+    $amount = (float)($_POST['amount'] ?? 0);
+    $note = trim($_POST['note'] ?? 'مقبوض من مورد عبر لوحة الإدارة');
+    if ($sup_id > 0 && $amount > 0) {
+        $sup_info = $pdo->query("SELECT name, supplier_code FROM suppliers WHERE id = {$sup_id}")->fetch(PDO::FETCH_ASSOC);
+        $s_name = $sup_info['name'] ?? 'مورد عام';
+        $s_code = $sup_info['supplier_code'] ?? null;
+        
+        $upd = $pdo->prepare("UPDATE suppliers SET balance = balance + ? WHERE id = ?");
+        $upd->execute([$amount, $sup_id]);
+        
+        $ins = $pdo->prepare("INSERT INTO supplier_receipts (supplier_id, supplier_code, supplier_name, amount, payment_method, note, date, created_at, synced) VALUES (?, ?, ?, ?, 'كاش', ?, NOW(), NOW(), 0)");
+        $ins->execute([$sup_id, $s_code, $s_name, $amount, $note]);
+        $msg = "تم تسجيل مقبوض من المورد ({$s_name}) بمبلغ {$amount} ج.م بنجاح!";
     }
 }
 
@@ -156,9 +179,12 @@ include 'admin_nav.php';
                                     <td class="py-3 px-3 text-center">
                                         <form method="POST" class="inline-flex gap-1 items-center">
                                             <input type="hidden" name="supplier_id" value="<?php echo $s['id']; ?>">
-                                            <input type="number" step="0.01" name="amount" placeholder="المبلغ" required class="w-20 border rounded-lg px-2 py-1 text-xs">
-                                            <button type="submit" name="pay_supplier" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2.5 py-1 rounded-lg text-xs">
+                                            <input type="number" step="0.01" name="amount" placeholder="المبلغ" required class="w-20 border rounded-lg px-2 py-1 text-xs font-bold">
+                                            <button type="submit" name="pay_supplier" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2.5 py-1 rounded-lg text-xs" title="صرف وسداد دفعة للمورد">
                                                 سداد
+                                            </button>
+                                            <button type="submit" name="receive_supplier" class="bg-sky-600 hover:bg-sky-700 text-white font-bold px-2.5 py-1 rounded-lg text-xs" title="قبض مبالغ من المورد وتوريدها للخزينة">
+                                                قبض
                                             </button>
                                         </form>
                                     </td>
