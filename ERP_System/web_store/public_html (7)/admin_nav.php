@@ -17,6 +17,9 @@ $current_admin_page = basename($_SERVER['PHP_SELF']);
             <a href="admin_orders.php" class="px-3 py-2.5 rounded-xl transition-all <?php echo in_array($current_admin_page, ['admin_orders.php', 'admin_order_details.php']) ? 'bg-royal-charcoal text-white shadow-sm' : 'text-gray-500 hover:text-royal-dark hover:bg-royal-sand border border-gray-100'; ?>">
                 <i class="fa-solid fa-receipt block md:inline mb-1 md:mb-0"></i> طلبات العملاء
             </a>
+            <a href="admin_invoices.php" class="px-3 py-2.5 rounded-xl transition-all <?php echo $current_admin_page == 'admin_invoices.php' ? 'bg-royal-charcoal text-white shadow-sm' : 'text-gray-500 hover:text-royal-dark hover:bg-royal-sand border border-gray-100'; ?>">
+                <i class="fa-solid fa-magnifying-glass-dollar block md:inline mb-1 md:mb-0 text-indigo-600"></i> البحث في الفواتير
+            </a>
             <a href="admin_customers.php" class="px-3 py-2.5 rounded-xl transition-all <?php echo $current_admin_page == 'admin_customers.php' ? 'bg-royal-charcoal text-white shadow-sm' : 'text-gray-500 hover:text-royal-dark hover:bg-royal-sand border border-gray-100'; ?>">
                 <i class="fa-solid fa-users block md:inline mb-1 md:mb-0 text-cyan-600"></i> 👥 دليل العملاء
             </a>
@@ -34,6 +37,9 @@ $current_admin_page = basename($_SERVER['PHP_SELF']);
             </a>
             <a href="admin_products.php" class="px-3 py-2.5 rounded-xl transition-all <?php echo in_array($current_admin_page, ['admin_products.php', 'admin_edit_product.php']) ? 'bg-royal-charcoal text-white shadow-sm' : 'text-gray-500 hover:text-royal-dark hover:bg-royal-sand border border-gray-100'; ?>">
                 <i class="fa-solid fa-box-open block md:inline mb-1 md:mb-0"></i> المنتجات والمعرض
+            </a>
+            <a href="admin_dormant_products.php" class="px-3 py-2.5 rounded-xl transition-all <?php echo $current_admin_page == 'admin_dormant_products.php' ? 'bg-royal-charcoal text-white shadow-sm' : 'text-gray-500 hover:text-royal-dark hover:bg-royal-sand border border-gray-100'; ?>">
+                <i class="fa-solid fa-broom block md:inline mb-1 md:mb-0 text-amber-600"></i> تنظيف الراكد والأرشيف
             </a>
             <a href="admin_coupons.php" class="px-3 py-2.5 rounded-xl transition-all <?php echo $current_admin_page == 'admin_coupons.php' ? 'bg-royal-charcoal text-white shadow-sm' : 'text-gray-500 hover:text-royal-dark hover:bg-royal-sand border border-gray-100'; ?>">
                 <i class="fa-solid fa-tags block md:inline mb-1 md:mb-0"></i> كوبونات الخصم

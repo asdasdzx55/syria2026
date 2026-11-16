@@ -1,5 +1,6 @@
 <?php
 require_once 'config.php';
+require_once __DIR__ . '/storefront_helpers.php';
 
 // استيراد القائمة المشتركة إلى مفضلة المستخدم الحالية
 if (isset($_GET['action']) && $_GET['action'] === 'import' && isset($_GET['items'])) {
@@ -45,20 +46,20 @@ if (isset($_GET['items']) && !empty($_GET['items'])) {
 if ($is_shared_view) {
     if (!empty($shared_items)) {
         $placeholders = implode(',', array_fill(0, count($shared_items), '?'));
-        $stmt = $pdo->prepare("SELECT * FROM products WHERE id IN ($placeholders) ORDER BY id DESC");
+        $stmt = $pdo->prepare("SELECT * FROM products WHERE id IN ($placeholders) AND " . storefrontVisibleProductSql() . " ORDER BY id DESC");
         $stmt->execute($shared_items);
         $wishlist_products = $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 } else {
     if (isset($_SESSION['user_id'])) {
         $user_id = $_SESSION['user_id'];
-        $stmt = $pdo->prepare("SELECT p.* FROM products p JOIN wishlist w ON p.id = w.product_id WHERE w.user_id = ? ORDER BY w.id DESC");
+        $stmt = $pdo->prepare("SELECT p.* FROM products p JOIN wishlist w ON p.id = w.product_id WHERE w.user_id = ? AND " . storefrontVisibleProductSql('p') . " ORDER BY w.id DESC");
         $stmt->execute([$user_id]);
         $wishlist_products = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } else {
         if (isset($_SESSION['wishlist']) && !empty($_SESSION['wishlist'])) {
             $placeholders = implode(',', array_fill(0, count($_SESSION['wishlist']), '?'));
-            $stmt = $pdo->prepare("SELECT * FROM products WHERE id IN ($placeholders) ORDER BY id DESC");
+            $stmt = $pdo->prepare("SELECT * FROM products WHERE id IN ($placeholders) AND " . storefrontVisibleProductSql() . " ORDER BY id DESC");
             $stmt->execute($_SESSION['wishlist']);
             $wishlist_products = $stmt->fetchAll(PDO::FETCH_ASSOC);
         }
@@ -122,7 +123,7 @@ if (!empty($wishlist_ids)) {
         </div>
     <?php else: ?>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8" id="wishlist-grid">
-            <?php foreach ($wishlist_products as $p): ?>
+            <?php foreach ($wishlist_products as $p): $p['image_url'] = resolveProductDisplayImage($pdo, $p); ?>
                 <div class="product-card group relative flex flex-col bg-white rounded-2xl overflow-hidden shadow-sm border border-royal-gold/10 p-3 hover:shadow-lg transition-all duration-300" id="item-card-<?php echo $p['id']; ?>">
                     <!-- الصورة والتأثيرات -->
                     <div class="product-image-container block overflow-hidden bg-gray-50 aspect-[4/5] relative rounded-xl shadow-inner">

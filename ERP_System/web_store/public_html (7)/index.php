@@ -1,11 +1,25 @@
 <?php
 require_once 'config.php';
+require_once __DIR__ . '/storefront_helpers.php';
 
 // جلب الشرائح المتحركة (Slides)
 $slides = $pdo->query("SELECT * FROM home_slides ORDER BY sort_order ASC, id ASC")->fetchAll(PDO::FETCH_ASSOC);
 
 // جلب 8 منتجات مميزة للرئيسية لجعلها تبدو غنية ومليئة بالمعروضات
-$featured_products = $pdo->query("SELECT * FROM products ORDER BY id DESC LIMIT 8")->fetchAll(PDO::FETCH_ASSOC);
+$featured_products = $pdo->query("SELECT * FROM products WHERE " . storefrontVisibleProductSql() . " ORDER BY id DESC LIMIT 8")->fetchAll(PDO::FETCH_ASSOC);
+
+// جلب الأقسام مرتبة حسب كثرة الأصناف المتوفرة
+$featured_categories = [];
+try {
+    $featured_categories = $pdo->query("
+        SELECT c.*, COUNT(p.id) as product_count 
+        FROM categories c
+        LEFT JOIN products p ON p.category = c.name AND " . storefrontVisibleProductSql('p') . "
+        WHERE c.parent_id IS NULL
+        GROUP BY c.id, c.name, c.image_url
+        ORDER BY product_count DESC, c.id ASC
+    ")->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {}
 
 include 'header.php';
 ?>
@@ -133,30 +147,110 @@ include 'header.php';
     </div>
 </div>
 
-<!-- ================= 3. تسوق حسب الأقسام المميزة (Featured Categories) ================= -->
-<?php if(!empty($categories_list)): ?>
-<div class="py-20 bg-royal-sand/30">
-    <div class="container mx-auto px-4 md:px-8 max-w-6xl">
-        <div class="text-center mb-14">
-            <span class="text-royal-darkgold text-xs font-bold tracking-widest uppercase mb-2.5 block">OUR CATEGORIES</span>
-            <h3 class="text-3xl font-serif text-royal-dark font-bold relative inline-block pb-3">
-                تصفح أقسام وتصنيفات المتجر
-                <span class="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-12 h-[2px] bg-royal-gold"></span>
-            </h3>
+<!-- ================= 3. شريط أقسام المتجر المتحرك الفاخر (Interactive Categories Carousel & Strip) ================= -->
+<?php 
+$cats_to_show = !empty($featured_categories) ? $featured_categories : $categories_list;
+if(!empty($cats_to_show)): 
+?>
+<div class="py-12 sm:py-16 bg-gradient-to-b from-royal-sand/15 via-royal-sand/35 to-transparent overflow-hidden border-b border-royal-gold/10">
+    <div class="container mx-auto px-4 md:px-8 max-w-7xl">
+        <!-- Section Header with Arrows -->
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6 sm:mb-10">
+            <div class="text-center sm:text-right">
+                <span class="text-royal-darkgold text-xs font-bold tracking-widest uppercase mb-1 block flex items-center justify-center sm:justify-start gap-1.5">
+                    <i class="fa-solid fa-shapes text-royal-gold text-[11px]"></i> أقسام البيت السوري
+                </span>
+                <h3 class="text-2xl sm:text-3xl font-serif text-royal-dark font-bold">
+                    تسوق حسب القسم
+                </h3>
+            </div>
+            <!-- Navigation Controls -->
+            <div class="flex items-center gap-2.5">
+                <button type="button" id="cat-scroll-right" class="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white text-royal-dark hover:bg-royal-gold hover:text-white border border-royal-gold/25 flex items-center justify-center shadow-xs transition-all cursor-pointer hover:scale-105 active:scale-95" title="السابق">
+                    <i class="fa-solid fa-arrow-right text-xs"></i>
+                </button>
+                <button type="button" id="cat-scroll-left" class="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white text-royal-dark hover:bg-royal-gold hover:text-white border border-royal-gold/25 flex items-center justify-center shadow-xs transition-all cursor-pointer hover:scale-105 active:scale-95" title="التالي">
+                    <i class="fa-solid fa-arrow-left text-xs"></i>
+                </button>
+                <a href="shop.php" class="text-xs font-bold text-royal-darkgold hover:text-royal-dark hover:underline flex items-center gap-1 ms-2 py-1.5 px-3 rounded-full bg-white/80 border border-royal-gold/15 shadow-2xs">
+                    <span>عرض الكل</span>
+                    <i class="fa-solid fa-angle-left text-[10px]"></i>
+                </a>
+            </div>
         </div>
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
-            <?php foreach($categories_list as $cat): ?>
-            <a href="shop.php?category=<?php echo urlencode($cat['name']); ?>" class="group block bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border border-royal-gold/5 text-center p-3">
-                <div class="overflow-hidden aspect-[4/5] relative rounded-xl mb-4 shadow-inner">
-                    <img src="<?php echo htmlspecialchars($cat['image_url'] ?: 'images/cat_pantry.jpg'); ?>" class="w-full h-full object-cover transition duration-1000 group-hover:scale-105" alt="<?php echo htmlspecialchars($cat['name']); ?>" loading="lazy" decoding="async">
-                    <div class="absolute inset-0 bg-black/5 group-hover:bg-black/25 transition-colors"></div>
+
+        <!-- Categories Swiper Slider with Seamless Autoplay & Touch Drag -->
+        <div class="relative group">
+            <div class="swiper categories-swiper !py-4 !px-1">
+                <div class="swiper-wrapper items-stretch">
+                    <?php foreach($cats_to_show as $cat): 
+                        $cat_img = !empty($cat['image_url']) ? htmlspecialchars($cat['image_url']) : 'images/categories/pantry.jpg';
+                        $count = isset($cat['product_count']) ? (int)$cat['product_count'] : 0;
+                    ?>
+                    <div class="swiper-slide !w-auto">
+                        <a href="shop.php?category=<?php echo urlencode($cat['name']); ?>" class="group/card block w-28 sm:w-36 flex flex-col items-center text-center transition-all duration-300 hover:-translate-y-2">
+                            <!-- Circular/Squircle Luxury Image Frame -->
+                            <div class="w-24 h-24 sm:w-32 sm:h-32 rounded-3xl overflow-hidden relative p-1 bg-gradient-to-tr from-amber-200 via-royal-gold to-amber-500 shadow-md group-hover/card:shadow-xl group-hover/card:shadow-amber-500/30 transition-all duration-300 ring-1 ring-royal-gold/20">
+                                <div class="w-full h-full rounded-[22px] overflow-hidden bg-white relative">
+                                    <img src="<?php echo $cat_img; ?>" 
+                                         class="w-full h-full object-cover transition-transform duration-700 group-hover/card:scale-115" 
+                                         alt="<?php echo htmlspecialchars($cat['name']); ?>" 
+                                         loading="lazy" 
+                                         decoding="async">
+                                    <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent opacity-60 group-hover/card:opacity-20 transition-opacity"></div>
+                                    <?php if ($count > 0): ?>
+                                    <span class="absolute bottom-1.5 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-black/75 backdrop-blur-xs text-[9px] sm:text-[10px] font-mono text-amber-200 font-bold whitespace-nowrap shadow-xs">
+                                        <?php echo number_format($count); ?> صنف
+                                    </span>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                            <!-- Title -->
+                            <h4 class="text-xs sm:text-sm font-bold font-serif text-royal-dark group-hover/card:text-royal-darkgold transition-colors mt-2.5 line-clamp-1">
+                                <?php echo htmlspecialchars($cat['name']); ?>
+                            </h4>
+                        </a>
+                    </div>
+                    <?php endforeach; ?>
                 </div>
-                <h4 class="text-sm font-serif text-royal-dark font-bold group-hover:text-royal-darkgold transition-colors duration-300 pb-1"><?php echo htmlspecialchars($cat['name']); ?></h4>
-            </a>
-            <?php endforeach; ?>
+            </div>
+            
+            <!-- Edge Fade Gradients for Luxury Look -->
+            <div class="pointer-events-none absolute inset-y-0 right-0 w-8 sm:w-16 bg-gradient-to-l from-royal-sand/40 to-transparent z-10 hidden sm:block"></div>
+            <div class="pointer-events-none absolute inset-y-0 left-0 w-8 sm:w-16 bg-gradient-to-r from-royal-sand/40 to-transparent z-10 hidden sm:block"></div>
         </div>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    if (typeof Swiper !== 'undefined') {
+        const catSwiper = new Swiper('.categories-swiper', {
+            slidesPerView: 'auto',
+            spaceBetween: 14,
+            freeMode: {
+                enabled: true,
+                sticky: false,
+                momentumRatio: 1.1
+            },
+            autoplay: {
+                delay: 2800,
+                disableOnInteraction: false,
+                pauseOnMouseEnter: true
+            },
+            navigation: {
+                nextEl: '#cat-scroll-left',
+                prevEl: '#cat-scroll-right'
+            },
+            breakpoints: {
+                640: {
+                    spaceBetween: 22
+                }
+            }
+        });
+    }
+});
+</script>
 <?php endif; ?>
 
 <!-- ================= 4. العرض الخاص والترويجي (Special Offer Section) ================= -->
@@ -191,7 +285,7 @@ include 'header.php';
         
         <?php if(!empty($featured_products)): ?>
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-                <?php foreach($featured_products as $p): ?>
+                <?php foreach($featured_products as $p): $p['image_url'] = resolveProductDisplayImage($pdo, $p); ?>
                     <div class="product-card group relative flex flex-col bg-royal-cream/40 rounded-2xl overflow-hidden shadow-sm border border-royal-gold/10 p-3 hover:shadow-lg transition-all duration-300">
                         <a href="product.php?id=<?php echo $p['id']; ?>" class="product-image-container block overflow-hidden bg-gray-50 aspect-[4/5] relative rounded-xl shadow-inner">
                             <?php if($p['old_price'] && $p['old_price'] > $p['price']): $discount = round((($p['old_price'] - $p['price']) / $p['old_price']) * 100); ?>

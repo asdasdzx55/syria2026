@@ -15,6 +15,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
 }
 
 require_once 'config.php';
+require_once __DIR__ . '/storefront_helpers.php';
 
 $action = $_REQUEST['action'] ?? 'lookup';
 $raw_input = file_get_contents('php://input');
@@ -38,16 +39,16 @@ try {
 
             // البحث بالباركود المباشر أو الكود الداخلي أو قائمة الباركودات أو المعرف
             $stmt = $pdo->prepare("
-                SELECT id, name, price, cost, stock, barcode, local_code, all_barcodes, image, category_id, description, is_active
+                SELECT id, name, category, sub_category, price, old_price, cost, stock, barcode, barcode2, barcode3, local_code, all_barcodes, image_url, image_url AS image, category AS category_name, description, has_pack, pack_name, pack_barcode, pack_price, pack_qty, is_weight_based, unit_type
                 FROM products 
                 WHERE barcode = ? 
                    OR local_code = ? 
-                   OR all_barcodes LIKE ?
+                   OR barcode2 = ? OR barcode3 = ? OR pack_barcode = ? OR all_barcodes LIKE ?
                    OR id = ?
                 LIMIT 1
             ");
             $like_barcode = '%' . $barcode . '%';
-            $stmt->execute([$barcode, $barcode, $like_barcode, is_numeric($barcode) ? (int)$barcode : 0]);
+            $stmt->execute([$barcode, $barcode, $barcode, $barcode, $barcode, $like_barcode, is_numeric($barcode) ? (int)$barcode : 0]);
             $product = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if ($product) {
@@ -55,7 +56,10 @@ try {
                 $product['price'] = (float)$product['price'];
                 $product['cost'] = (float)($product['cost'] ?? 0);
                 $product['stock'] = (float)($product['stock'] ?? 0);
-                $product['is_active'] = (int)($product['is_active'] ?? 1);
+                $product['image_url'] = resolveProductDisplayImage($pdo, $product);
+                $product['image'] = $product['image_url'];
+                $product['has_real_image'] = ($product['image_url'] !== '');
+                $product['is_active'] = 1;
                 
                 echo json_encode([
                     'success' => true,
@@ -82,13 +86,19 @@ try {
             }
 
             $results = [];
-            $stmt = $pdo->prepare("SELECT id, name, price, stock, barcode, local_code, image FROM products WHERE barcode = ? OR local_code = ? LIMIT 1");
+            $stmt = $pdo->prepare("SELECT id, name, category, sub_category, price, old_price, cost, stock, barcode, barcode2, barcode3, local_code, all_barcodes, image_url, image_url AS image, category AS category_name, description, has_pack, pack_name, pack_barcode, pack_price, pack_qty, is_weight_based, unit_type FROM products WHERE barcode = ? OR barcode2 = ? OR barcode3 = ? OR pack_barcode = ? OR local_code = ? OR all_barcodes LIKE ? LIMIT 1");
 
             foreach ($barcodes as $code) {
                 $code = trim($code);
                 if (empty($code)) continue;
-                $stmt->execute([$code, $code]);
+                $like_c = '%' . $code . '%';
+                $stmt->execute([$code, $code, $code, $code, $code, $like_c]);
                 $prod = $stmt->fetch(PDO::FETCH_ASSOC);
+                if ($prod) {
+                    $prod['image_url'] = resolveProductDisplayImage($pdo, $prod);
+                    $prod['image'] = $prod['image_url'];
+                    $prod['has_real_image'] = ($prod['image_url'] !== '');
+                }
                 $results[$code] = $prod ?: null;
             }
 

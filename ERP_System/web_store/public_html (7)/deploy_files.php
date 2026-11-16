@@ -50,6 +50,47 @@ function copyFolder($src, $dst, &$copied, &$errors) {
     closedir($dir);
 }
 
+$rootPhpFiles = [
+    'storefront_helpers.php',
+    'index.php',
+    'shop.php',
+    'product.php',
+    'wishlist.php',
+    'ajax_wishlist.php',
+    'ajax_chat.php',
+    'admin_products.php',
+    'admin_dormant_products.php',
+    'admin_invoices.php',
+    'admin_edit_product.php',
+    'admin_nav.php',
+    'api_barcode.php',
+    'ai_helpers.php',
+    'ajax_ai_description.php',
+];
+foreach ($rootPhpFiles as $rootFile) {
+    $srcPath = $sourceDir . '/' . $rootFile;
+    $dstPath = $targetRoot . '/' . $rootFile;
+    if (file_exists($srcPath)) {
+        if (copy($srcPath, $dstPath)) {
+            if (function_exists('opcache_invalidate')) {
+                @opcache_invalidate($dstPath, true);
+            }
+            $copied[] = $rootFile;
+        } else {
+            $errors[] = 'Failed to copy ' . $rootFile;
+        }
+    }
+}
+if (file_exists($apiSyncDst) && function_exists('opcache_invalidate')) {
+    @opcache_invalidate($apiSyncDst, true);
+}
+
+$imgCategoriesSrc = $sourceDir . '/images/categories';
+$imgCategoriesDst = $targetRoot . '/images/categories';
+if (is_dir($imgCategoriesSrc)) {
+    copyFolder($imgCategoriesSrc, $imgCategoriesDst, $copied, $errors);
+}
+
 $posSrc = $sourceDir . '/pos';
 $posDst = $targetRoot . '/pos';
 if (is_dir($posSrc)) {

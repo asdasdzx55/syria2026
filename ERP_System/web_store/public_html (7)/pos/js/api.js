@@ -132,6 +132,20 @@ class SyrianHomeAPI {
   }
 
   /**
+   * 3.1 Lookup a product directly by exact database ID
+   */
+  async lookupProductById(productId) {
+    try {
+      const pid = parseInt(productId, 10);
+      if (!pid || pid <= 0) return { success: false, error: 'Invalid product ID' };
+      return await this.get('lookup_barcode', { id: pid });
+    } catch (e) {
+      console.warn('lookupProductById API notice:', e.message);
+      return { success: false, error: e.message };
+    }
+  }
+
+  /**
    * 4. Submit a new sales invoice & deduct stock
    */
   async pushSale(salePayload) {
@@ -191,6 +205,17 @@ class SyrianHomeAPI {
   }
 
   /**
+   * 10.1 Quick update product selling price (تعديل سعر البيع أثناء البيع)
+   */
+  async updateProductPrice(productId, newPrice, localCode = '') {
+    return await this.post('update_product_price', {
+      product_id: productId,
+      price: newPrice,
+      local_code: localCode
+    });
+  }
+
+  /**
    * 11. Record General Operating Expense
    */
   async recordExpense(expensePayload) {
@@ -216,6 +241,13 @@ class SyrianHomeAPI {
    */
   async deleteProduct(productId, barcode = '') {
     return await this.post('delete_product', { product_id: productId, barcode: barcode });
+  }
+
+  /**
+   * 14.1 Push Print Job to Cashier Thermal Printer (الطباعة السحابية لطابعة الكاشير)
+   */
+  async pushPrintJob(jobPayload) {
+    return await this.post('push_print_job', jobPayload);
   }
 
   /**
@@ -278,6 +310,18 @@ class SyrianHomeAPI {
     return await this.post('sync_delivery_driver', driverPayload);
   }
 
+
+  /**
+   * 19.1 Delete / Deactivate Delivery Driver (حذف أو تعطيل طيار دليفري)
+   */
+  async deleteDeliveryDriver(driverId, name = '', force = true) {
+    return await this.post('delete_delivery_driver', {
+      driver_id: driverId,
+      name: name,
+      force: force ? 1 : 0
+    });
+  }
+
   /**
    * 20. Assign Order to Driver (إسناد طلب لطيار بالاسم)
    */
@@ -307,10 +351,29 @@ class SyrianHomeAPI {
   }
 
   /**
+   * 22.1.1 Get Temporary & Active Invoices (جلب الفواتير المؤقتة والمعلقة)
+   */
+  async getTempInvoices() {
+    return await this.get('get_temp_invoices');
+  }
+
+  /**
    * 22.2 Settle Ad-hoc / Temporary Delivery (تقفيل أوردر دليفري مؤقت بملاحظة وتوريد النقدية)
    */
   async settleAdhocDelivery(settlePayload) {
     return await this.post('settle_adhoc_delivery', settlePayload);
+  }
+
+  /**
+   * 22.2.1 Settle Delivery Order & Transfer to Main Cashier
+   * محاسبة أوردر الدليفري وترحيله نقداً للكاشير الأساسي بدون رسوم التوصيل
+   */
+  async settleDeliveryOrder(orderId, cashier = '', note = '') {
+    return await this.post('settle_delivery_order', {
+      order_id: orderId,
+      cashier: cashier || (window.cart?.cashierNotes || 'كاشير المحل'),
+      note: note
+    });
   }
 
   /**
@@ -439,6 +502,26 @@ class SyrianHomeAPI {
    *  - wipe_sales_and_operations
    *  - factory_reset_all
    */
+  async searchProducts(query, limit = 30, filter = 'all') {
+    return this.get('search_products', { q: query, limit, filter });
+  }
+
+  async uploadProductImage(payload) {
+    return this.post('upload_product_image', payload);
+  }
+
+  async deleteProductImage(productId, imageId = 0) {
+    return this.post('delete_product_image', { product_id: productId, image_id: imageId });
+  }
+
+  async updateInventoryStock(payload) {
+    return this.post('update_inventory_stock', payload);
+  }
+
+  async getInventoryAdjustments(limit = 30) {
+    return this.get('get_inventory_adjustments', { limit });
+  }
+
   async systemReset(mode, wipeProducts = 0) {
     const payload = {
       action: 'system_reset',

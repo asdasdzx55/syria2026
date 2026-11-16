@@ -29,6 +29,8 @@ class POSCart {
       const completed = JSON.parse(localStorage.getItem('pos_completed_orders') || '[]');
       if (completed.length > 0) this.lastInvoice = completed[0];
     } catch(e) {}
+    // Restore active cart from localStorage on startup / page reload
+    this.loadFromStorage();
   }
 
   /* ==================== CART ITEM ACTIONS ==================== */
@@ -127,16 +129,15 @@ class POSCart {
       unit: 'كجم'
     };
 
-    // 1. Check local cached products first for instant response
-    let product = window.app?.products?.find(p => {
-      if (window.BarcodeParser) {
-        return window.BarcodeParser.matchesProduct(parsed, p);
-      }
-      const pBarcode = String(p.barcode || '').trim();
-      const pLocal = String(p.local_code || '').trim().toLowerCase();
-      const code = String(parsed.itemCode || '').toLowerCase();
-      return (pBarcode && pBarcode === code) || (pLocal && pLocal === code);
-    });
+    // 1. Check local cached products first for instant response (prioritized exact match)
+    let product = window.BarcodeParser
+      ? window.BarcodeParser.findBestMatch(parsed, window.app?.products || [])
+      : window.app?.products?.find(p => {
+          const pBarcode = String(p.barcode || '').trim();
+          const pLocal = String(p.local_code || '').trim().toLowerCase();
+          const code = String(parsed.itemCode || '').toLowerCase();
+          return (pBarcode && pBarcode === code) || (pLocal && pLocal === code);
+        });
 
     if (product) {
       const productToAdd = parsed.isScale ? {
@@ -215,7 +216,87 @@ class POSCart {
     this.render();
   }
 
-  clearCart() {
+  /* ==================== CART PERSISTENCE (LOCALSTORAGE) ==================== */
+  saveToStorage() {
+    try {
+      if (this.items && this.items.length > 0) {
+        const state = {
+          items: this.items,
+          discountAmount: this.discountAmount,
+          taxRate: this.taxRate,
+          paymentMethod: this.paymentMethod,
+          orderType: this.orderType,
+          deliveryPayMode: this.deliveryPayMode,
+          deliveryPrepaidMethod: this.deliveryPrepaidMethod,
+          deliveryPrepaidRef: this.deliveryPrepaidRef,
+          deliveryFee: this.deliveryFee,
+          deliveryPerson: this.deliveryPerson,
+          customerName: this.customerName,
+          customerPhone: this.customerPhone,
+          customerAddress: this.customerAddress,
+          customerCode: this.customerCode || '',
+          cashierNotes: this.cashierNotes,
+          paidAmount: this.paidAmount,
+          timestamp: Date.now()
+        };
+        localStorage.setItem('pos_active_cart', JSON.stringify(state));
+      } else {
+        localStorage.removeItem('pos_active_cart');
+      }
+    } catch (e) {
+      console.warn('[POSCart] Error saving cart to storage:', e);
+    }
+  }
+
+  loadFromStorage() {
+    try {
+      const saved = localStorage.getItem('pos_active_cart');
+      if (!saved) return false;
+      const data = JSON.parse(saved);
+      if (data && Array.isArray(data.items) && data.items.length > 0) {
+        this.items = data.items.map(item => ({
+          cart_key: item.cart_key || String(item.product_id),
+          product_id: item.product_id,
+          name: item.name,
+          qty: parseFloat(item.qty || 1),
+          price: parseFloat(item.price || 0),
+          cost: parseFloat(item.cost || 0),
+          barcode: item.barcode || '',
+          local_code: item.local_code || '',
+          unit_type: item.unit_type || 'piece',
+          unit: item.unit || 'قطعة',
+          is_pack: item.is_pack ? 1 : 0,
+          pack_name: item.pack_name || '',
+          pack_multiplier: item.pack_multiplier || 1
+        }));
+
+        this.discountAmount = Math.max(0, parseFloat(data.discountAmount || 0));
+        this.taxRate = parseFloat(data.taxRate || 0);
+        this.paymentMethod = data.paymentMethod || 'cash';
+        this.orderType = data.orderType || 'hall';
+        this.deliveryPayMode = data.deliveryPayMode || 'cod';
+        this.deliveryPrepaidMethod = data.deliveryPrepaidMethod || 'instapay';
+        this.deliveryPrepaidRef = data.deliveryPrepaidRef || '';
+        this.deliveryFee = parseFloat(data.deliveryFee || 0);
+        this.deliveryPerson = data.deliveryPerson || 'ديلفري غير معروف';
+        this.customerName = data.customerName || 'عميل نقدي';
+        this.customerPhone = data.customerPhone || '';
+        this.customerAddress = data.customerAddress || '';
+        this.customerCode = data.customerCode || '';
+        this.cashierNotes = data.cashierNotes || 'كاشير 1';
+        this.paidAmount = parseFloat(data.paidAmount || 0);
+        return true;
+      }
+    } catch (e) {
+      console.warn('[POSCart] Error restoring cart from storage:', e);
+    }
+    return false;
+  }
+
+  clearCart(confirmBefore = false) {
+    if (confirmBefore && this.items.length > 0) {
+      if (!confirm('هل أنت متأكد من تفريغ سلة المبيعات وحذف جميع الأصناف؟')) return;
+    }
     this.items = [];
     this.discountAmount = 0;
     this.paidAmount = 0;
@@ -230,6 +311,10 @@ class POSCart {
     this.customerAddress = '';
     this.customerPhone = '';
     this.customerName = 'عميل نقدي';
+    this.customerCode = '';
+    try {
+      localStorage.removeItem('pos_active_cart');
+    } catch(e) {}
     this.render();
   }
 
@@ -388,10 +473,20 @@ class POSCart {
 
   /* ==================== CHECKOUT & SUBMIT SALE ==================== */
   async checkout(shouldPrint = true) {
+    if (this.isSubmitting) {
+      console.warn('Checkout already in progress, ignoring duplicate trigger.');
+      return;
+    }
     if (this.items.length === 0) {
       window.app?.showToast('سلة المشتريات فارغة!', 'error');
       return;
     }
+
+    this.isSubmitting = true;
+    const submitBtn = document.getElementById('btn-submit-payment');
+    const saveOnlyBtn = document.getElementById('btn-submit-save-only');
+    if (submitBtn) submitBtn.disabled = true;
+    if (saveOnlyBtn) saveOnlyBtn.disabled = true;
 
     const total = this.getTotal();
 
@@ -433,6 +528,7 @@ class POSCart {
 
     const payload = {
       local_sale_id: Date.now(),
+      source: 'phone_pos',
       customer_name: (this.customerName || (isDelivery ? 'عميل دليفري' : 'عميل نقدي')).trim(),
       customer_phone: (this.customerPhone || '').trim(),
       phone: (this.customerPhone || '').trim(),
@@ -470,6 +566,32 @@ class POSCart {
         deduct_qty: (item.qty || 1) * (item.pack_multiplier || 1)
       }))
     };
+
+    if (shouldPrint) {
+      payload.print_job = {
+        job_type: 'receipt',
+        printer_name: 'XP-80C',
+        payload: this.buildCloudPrintPayload({
+          order_id: '',
+          invoice_barcode: `INV-${payload.local_sale_id}`,
+          created_at: new Date().toLocaleString('ar-EG'),
+          cashier: this.cashierNotes,
+          customer_name: payload.customer_name,
+          customer_phone: payload.customer_phone,
+          phone: payload.customer_phone,
+          address: payload.address,
+          delivery_person: finalDeliveryPerson,
+          delivery_fee: deliveryFee,
+          order_type: isDelivery ? 'delivery' : 'hall',
+          delivery_pay_mode: payload.delivery_pay_mode,
+          payment_method: paymentMethodLabel,
+          items: [...this.items],
+          discount: this.discountAmount,
+          total: total,
+          paid_amount: paidAmount
+        })
+      };
+    }
 
     try {
       window.app?.showLoading(true, shouldPrint ? 'جاري حفظ وطباعة الفاتورة...' : 'جاري حفظ الفاتورة في السيستم...');
@@ -528,15 +650,23 @@ class POSCart {
         document.getElementById('checkout-modal')?.classList.add('hidden');
 
         if (shouldPrint) {
-          // Show Success Thermal Receipt Modal & Trigger Chrome Print
+          // Show Success Thermal Receipt Modal & Trigger Cloud / Hardware Print (1 round-trip when server already queued it)
           this.showReceiptModal(invoiceData);
-          try {
-            this.printReceiptDirectly();
-          } catch(e) {}
-          window.app?.showToast(`تم حفظ الفاتورة #${realOrderId} وطباعتها بنجاح ✅`, 'success');
+          if (!result.print_queued && !result.already_recorded) {
+            this.printViaCloudPrinter(invoiceData);
+          }
+          if (isDelivery) {
+            window.app?.showToast(`🛵 تم حفظ أوردر الدليفري #${realOrderId} وخروج الفاتورة للطيار! (الفاتورة مؤقتة لحين محاسبة الدليفري)`, 'info');
+          } else {
+            window.app?.showToast(`تم حفظ الفاتورة #${realOrderId} وطباعتها بنجاح ✅`, 'success');
+          }
         } else {
-          // Saved without printing (عدم الطباعة)
-          window.app?.showToast(`تم حفظ الفاتورة #${realOrderId} بنجاح بدون طباعة 💾✅`, 'success');
+          // Saved without printing
+          if (isDelivery) {
+            window.app?.showToast(`🛵 تم حفظ أوردر الدليفري #${realOrderId} مؤقتاً لحين محاسبة الطيار`, 'info');
+          } else {
+            window.app?.showToast(`تم حفظ الفاتورة #${realOrderId} بنجاح بدون طباعة 💾✅`, 'success');
+          }
         }
 
         // Update local reports and trigger product reload in background
@@ -602,6 +732,12 @@ class POSCart {
       } else {
         window.app?.showToast(`تم حفظ الفاتورة #${offlineOrderId} محلياً بدون طباعة (وضع أوفلاين) 💾📦`, 'info');
       }
+    } finally {
+      this.isSubmitting = false;
+      const submitBtn = document.getElementById('btn-submit-payment');
+      const saveOnlyBtn = document.getElementById('btn-submit-save-only');
+      if (submitBtn) submitBtn.disabled = false;
+      if (saveOnlyBtn) saveOnlyBtn.disabled = false;
     }
   }
 
@@ -634,6 +770,8 @@ class POSCart {
       pmDisplay = 'إنستاباي';
     } else if (inv.payment_method === 'فيزا' || inv.payment_method === 'card') {
       pmDisplay = 'بطاقة بنكية';
+    } else if (inv.payment_method === 'آجل' || inv.payment_method === 'credit') {
+      pmDisplay = 'حساب آجل (على ذمة العميل)';
     } else if (inv.payment_method) {
       pmDisplay = inv.payment_method;
     }
@@ -642,43 +780,77 @@ class POSCart {
       store_name: 'سوبر ماركت المنزل السوري',
       store_phone: '01000000000',
       store_phone2: '',
-      store_address: 'القاهرة - مصر',
-      receipt_sub: 'للمنتجات والمواد الغذائية السورية الأصلية',
-      receipt_footer: 'شكراً لزيارتكم • يُرجى الاحتفاظ بالفاتورة للاستبدال والاسترجاع'
+      store_address: 'الفرع الرئيسي • شارع الجيش • خدمة التوصيل',
+      receipt_sub: 'أشهى المنتجات والمواد الغذائية السورية والشرقية',
+      receipt_footer: 'شكراً لزيارتكم • نسعد بخدمتكم دائماً ❤️'
     };
 
     const phones = [store.store_phone, store.store_phone2].filter(Boolean);
     const phonesText = phones.join(' • ');
     const totalQtyCount = inv.items ? inv.items.reduce((acc, itm) => acc + (parseFloat(itm.qty) || 1), 0) : 0;
-    const isDelivery = inv.order_type === 'delivery' || parseFloat(inv.delivery_fee) > 0 || !!inv.address;
+    const isDelivery = inv.order_type === 'delivery' || inv.order_type === 'دليفري' || parseFloat(inv.delivery_fee) > 0 || !!inv.address;
     const isPrepaid = inv.delivery_pay_mode === 'prepaid' || (parseFloat(inv.paid_amount) >= parseFloat(inv.total) && inv.amount_to_collect === 0);
+    const netTotal = parseFloat(inv.total || inv.total_price || 0);
+    const deliveryFee = parseFloat(inv.delivery_fee || 0);
+    const discountVal = parseFloat(inv.discount || inv.discount_amount || 0);
+    const paidVal = parseFloat(inv.paid_amount || 0);
+    const changeVal = paidVal >= netTotal ? (paidVal - netTotal) : 0;
+
+    // Calculate Items Subtotal strictly BEFORE delivery and discount
+    let subtotalVal = 0;
+    if (Array.isArray(inv.items) && inv.items.length > 0) {
+      subtotalVal = inv.items.reduce((acc, itm) => {
+        const p = parseFloat(itm.price || itm.unit_price || 0);
+        const q = parseFloat(itm.qty || itm.quantity || 1);
+        return acc + (p * q);
+      }, 0);
+    }
+    if (subtotalVal <= 0) {
+      if (inv.subtotal && parseFloat(inv.subtotal) > 0) {
+        const rawSub = parseFloat(inv.subtotal);
+        if (Math.abs(rawSub - netTotal) < 0.01 && deliveryFee > 0) {
+          subtotalVal = Math.max(0, netTotal - deliveryFee + discountVal);
+        } else {
+          subtotalVal = rawSub;
+        }
+      } else {
+        subtotalVal = Math.max(0, netTotal - deliveryFee + discountVal);
+      }
+    }
 
     return `
       <div class="bw-receipt">
         
-        <!-- Header -->
+        <!-- Store Brand Header -->
         <div class="bw-header">
+          <div class="bw-divider-top"></div>
           <h1 class="bw-title">${store.store_name}</h1>
-          <div class="bw-sub">${store.receipt_sub || 'للمنتجات والمواد الغذائية السورية'}</div>
-          ${phonesText ? `<div class="bw-info"><b>هاتف:</b> <span class="bw-mono">${phonesText}</span></div>` : ''}
-          ${store.store_address ? `<div class="bw-info"><b>العنوان:</b> ${store.store_address}</div>` : ''}
+          <div class="bw-stars">★  ★  ★</div>
+          <div class="bw-sub">${store.receipt_sub || 'أشهى المنتجات والمواد الغذائية السورية والشرقية'}</div>
+          <div class="bw-info"><b>الفرع:</b> ${store.store_address || 'الفرع الرئيسي • شارع الجيش • خدمة التوصيل'}</div>
+          ${phonesText ? `<div class="bw-info"><b>هاتف وخدمة عملاء:</b> <span class="bw-mono">${phonesText}</span></div>` : ''}
+          <div class="bw-tax-reg">س.ت: 45210  •  ر.ض: 541-890-332</div>
         </div>
 
-        <div class="bw-divider-double"></div>
+        <!-- Framed Invoice Title Banner -->
+        <div class="bw-title-banner">فاتورة مبيعات نقدية مبسطة</div>
 
-        <!-- Invoice Details Table -->
+        <!-- Invoice Details Box -->
         <table class="bw-meta-table">
           <tr>
-            <td style="width: 50%;"><b>رقم الفاتورة:</b> <span class="bw-mono">#${inv.order_id}</span></td>
+            <td style="width: 50%;"><b>رقم الفاتورة:</b> <span class="bw-mono font-bold">#${inv.order_id}</span></td>
             <td style="width: 50%; text-align: left;"><b>التاريخ:</b> <span class="bw-mono">${inv.created_at || new Date().toLocaleString('ar-EG')}</span></td>
           </tr>
           <tr>
-            <td><b>الكاشير:</b> ${inv.cashier || 'كاشير 1'}</td>
-            <td style="text-align: left;"><b>العميل:</b> ${inv.customer_name || 'عميل نقدي'}</td>
+            <td><b>الكاشير:</b> ${inv.cashier || inv.cashier_name || 'كاشير 1'} (نقطة #1)</td>
+            <td style="text-align: left;"><b>طريقة الدفع:</b> ${pmDisplay}</td>
           </tr>
-          <tr>
-            <td colspan="2"><b>طريقة الدفع:</b> ${pmDisplay}</td>
-          </tr>
+          ${(inv.customer_name && inv.customer_name !== 'عميل نقدي') ? `
+            <tr>
+              <td><b>العميل:</b> ${inv.customer_name}</td>
+              <td style="text-align: left;"><b>الهاتف:</b> <span class="bw-mono">${inv.customer_phone || inv.phone || '-'}</span></td>
+            </tr>
+          ` : ''}
         </table>
 
         <!-- Delivery Box If Applicable -->
@@ -687,8 +859,8 @@ class POSCart {
             <div class="bw-delivery-title">🛵 طلب توصيل منزلي (دليفري)</div>
             <table class="bw-meta-table">
               <tr>
-                <td><b>الهاتف:</b> <span class="bw-mono">${inv.customer_phone || inv.phone || '-'}</span></td>
-                <td style="text-align: left;"><b>الطيار:</b> ${inv.delivery_person || 'غير محدد'}</td>
+                <td><b>هاتف العميل:</b> <span class="bw-mono">${inv.customer_phone || inv.phone || '-'}</span></td>
+                <td style="text-align: left;"><b>الطيار:</b> ${inv.delivery_person || 'كابتن التوصيل'}</td>
               </tr>
               ${inv.address ? `
                 <tr>
@@ -697,7 +869,7 @@ class POSCart {
               ` : ''}
               <tr>
                 <td colspan="2" style="text-align: center; font-weight: bold; padding-top: 3px; border-top: 1px dashed #000;">
-                  ${isPrepaid ? '✅ مدفوعة مسبقاً (لا يُحصل أي مبلغ)' : `⏳ تحصيل عند الاستلام: ${parseFloat(inv.total).toFixed(2)} ج.م`}
+                  ${isPrepaid ? '✅ مدفوعة مسبقاً (لا يُحصل أي مبلغ من العميل)' : `⏳ مطلوب تحصيل عند الاستلام: ${netTotal.toFixed(2)} ج.م`}
                 </td>
               </tr>
             </table>
@@ -706,7 +878,7 @@ class POSCart {
 
         <div class="bw-divider-solid"></div>
 
-        <!-- Items Table (جدول الأصناف الأسود والأبيض المنسق) -->
+        <!-- Items Table -->
         <table class="bw-items-table">
           <thead>
             <tr>
@@ -719,47 +891,50 @@ class POSCart {
           </thead>
           <tbody>
             ${inv.items && inv.items.map((item, idx) => {
-              const isWeight = item.unit_type === 'weight' || item.unit === 'كجم';
-              const qtyDisplay = item.is_pack 
-                ? `${item.qty} كرتونة` 
-                : (isWeight ? (item.qty < 1 ? `${Math.round(item.qty * 1000)} جم` : `${parseFloat(item.qty).toFixed(3)} كجم`) : `${item.qty} ق`);
-              const lineTotal = (parseFloat(item.price) * parseFloat(item.qty)).toFixed(2);
+              const rawQty = parseFloat(item.qty) || 1;
+              const isWeight = item.unit_type === 'weight' || item.unit === 'كجم' || (rawQty % 1 !== 0);
+              let qtyDisplay = '';
+              if (isWeight) {
+                qtyDisplay = rawQty < 1 ? `${Math.round(rawQty * 1000)} جم` : `${rawQty.toFixed(3)} كجم`;
+              } else if (item.is_pack) {
+                qtyDisplay = `${Math.round(rawQty)} كرتونة`;
+              } else {
+                qtyDisplay = `${Math.round(rawQty)} ق`;
+              }
+              const itemCode = item.local_code || item.code || item.barcode;
+              const lineTotal = (parseFloat(item.price) * rawQty).toFixed(2);
               return `
                 <tr>
                   <td class="td-num">${idx + 1}</td>
                   <td class="td-name">
                     <div class="item-title">${item.name}</div>
-                    ${item.local_code ? `<span class="item-code">كود: ${item.local_code}</span>` : ''}
+                    ${itemCode ? `<span class="item-code">كود: ${itemCode}</span>` : ''}
                   </td>
                   <td class="td-qty">${qtyDisplay}</td>
                   <td class="td-price">${parseFloat(item.price).toFixed(2)}</td>
-                  <td class="td-total">${lineTotal}</td>
+                  <td class="td-total">${lineTotal} ج.م</td>
                 </tr>
               `;
             }).join('')}
           </tbody>
         </table>
 
-        <div class="bw-divider-solid"></div>
+        <!-- Items Count & Quantity Summary -->
+        <div class="bw-summary-bar">
+          عدد الأصناف: <b>${inv.items ? inv.items.length : 0}</b> صنف  •  إجمالي الكميات والأوزان: <b>${totalQtyCount % 1 === 0 ? totalQtyCount : totalQtyCount.toFixed(3)}</b>
+        </div>
 
         <!-- Totals & Payment Summary Table -->
         <table class="bw-summary-table">
           <tr>
             <td>المجموع الفرعي:</td>
-            <td class="bw-val">${parseFloat(inv.subtotal || inv.total).toFixed(2)} ج.م</td>
+            <td class="bw-val">${subtotalVal.toFixed(2)} ج.م</td>
           </tr>
 
           ${parseFloat(inv.discount) > 0 ? `
             <tr>
               <td>الخصم الممنوح:</td>
-              <td class="bw-val">-${parseFloat(inv.discount).toFixed(2)} ج.م</td>
-            </tr>
-          ` : ''}
-
-          ${(inv.payment_fee && parseFloat(inv.payment_fee) > 0) ? `
-            <tr>
-              <td>رسوم / ضريبة دفع (${inv.payment_method || 'إلكتروني'}):</td>
-              <td class="bw-val">+${parseFloat(inv.payment_fee).toFixed(2)} ج.م</td>
+              <td class="bw-val" style="color: #b91c1c;">-${parseFloat(inv.discount).toFixed(2)} ج.م</td>
             </tr>
           ` : ''}
 
@@ -769,49 +944,54 @@ class POSCart {
               <td class="bw-val">+${parseFloat(inv.delivery_fee).toFixed(2)} ج.م</td>
             </tr>
           ` : ''}
-
-          <tr class="bw-grand-row">
-            <td>الإجمالي النهائي المطلوب:</td>
-            <td class="bw-grand-val">${parseFloat(inv.total).toFixed(2)} ج.م</td>
-          </tr>
-
-          ${(!isDelivery && (inv.payment_method === 'cash' || inv.payment_method === 'نقدي' || !inv.payment_method)) ? `
-            <tr>
-              <td>المبلغ المدفوع نقداً:</td>
-              <td class="bw-val">${parseFloat(inv.paid_amount || inv.total).toFixed(2)} ج.م</td>
-            </tr>
-            <tr>
-              <td>المتبقي (الباقي للعميل):</td>
-              <td class="bw-val" style="font-weight: 900; font-size: 13px;">${parseFloat(inv.change || 0).toFixed(2)} ج.م</td>
-            </tr>
-          ` : ''}
-
-          <tr>
-            <td colspan="2" style="text-align: center; font-size: 10px; padding-top: 4px; border-top: 1px dashed #000;">
-              عدد الأصناف: <b>${inv.items ? inv.items.length : 0}</b> صنف (<b>${totalQtyCount % 1 === 0 ? totalQtyCount : totalQtyCount.toFixed(3)}</b> كمية)
-            </td>
-          </tr>
         </table>
+
+        <!-- High-Visibility Grand Total Box -->
+        <div class="bw-grand-box">
+          <span class="bw-grand-label">الإجمالي الصافي النهائي:</span>
+          <span class="bw-grand-val">${netTotal.toFixed(2)} ج.م</span>
+        </div>
+
+        ${(!isDelivery && paidVal > 0) ? `
+          <table class="bw-summary-table" style="margin-top: 3px;">
+            <tr>
+              <td>المبلغ المدفوع نقدياً:</td>
+              <td class="bw-val">${paidVal.toFixed(2)} ج.م</td>
+            </tr>
+            <tr>
+              <td><b>المتبقي (الباقي للعميل):</b></td>
+              <td class="bw-val" style="font-size: 13px; font-weight: 900;">${changeVal.toFixed(2)} ج.م</td>
+            </tr>
+          </table>
+        ` : ''}
+
+        ${(inv.payment_method === 'آجل' || inv.payment_method === 'credit') ? `
+          <div style="text-align: center; font-weight: bold; font-size: 11px; padding: 4px; background: #fef3c7; border: 1px solid #d97706; border-radius: 4px; margin: 4px 0;">
+            ⚠️ حساب آجل على ذمة العميل
+          </div>
+        ` : ''}
 
         <!-- Barcode Section -->
         <div class="bw-barcode">
           <svg class="receipt-svg-barcode" data-barcode="${inv.invoice_barcode || `INV-${inv.order_id}`}"></svg>
-          <div class="bw-barcode-text">${inv.invoice_barcode || `INV-${inv.order_id}`}</div>
+          <div class="bw-barcode-text">* ${inv.invoice_barcode || `INV-${inv.order_id}`} *</div>
         </div>
 
-        <div class="bw-divider-double"></div>
+        <div class="bw-divider-solid"></div>
+
+
 
         <!-- Receipt Footer -->
         <div class="bw-footer">
-          <p><b>${store.receipt_footer || 'شكراً لزيارتكم • يُرجى الاحتفاظ بالفاتورة للاسترجاع'}</b></p>
-          <p style="font-size: 9.5px; margin-top: 2px;">الأسعار شاملة الضريبة • نظام كاشير المنزل السوري 2026</p>
+          <p class="bw-footer-farewell"><b>${store.receipt_footer || 'شكراً لزيارتكم • نسعد بخدمتكم دائماً ❤️'}</b></p>
+          <p style="font-size: 9.5px; color: #444; margin-top: 2px;">نظام كاشير المنزل السوري 2026 • Syrian House POS</p>
         </div>
 
       </div>
     `;
   }
 
-  renderBarcodes(inv) {
+    renderBarcodes(inv) {
     if (!window.JsBarcode) return;
     try {
       document.querySelectorAll(".receipt-svg-barcode").forEach(el => {
@@ -861,6 +1041,93 @@ class POSCart {
     this.printInvoice(this.lastInvoice);
   }
 
+  buildCloudPrintPayload(invoice) {
+    let rawItems = invoice.items || [];
+    if (typeof rawItems === 'string') {
+      try { rawItems = JSON.parse(rawItems); } catch(e) { rawItems = []; }
+    }
+
+    const cleanItems = (Array.isArray(rawItems) ? rawItems : []).map(it => ({
+      name: it.name || it.item_name || 'صنف',
+      qty: parseFloat(it.qty || it.quantity || 1),
+      price: parseFloat(it.price || it.unit_price || 0),
+      total: parseFloat(it.total || it.total_price || ((it.qty || 1) * (it.price || 0))),
+      unit: it.unit || it.unit_type || '',
+      local_code: it.local_code || it.code || it.barcode || '',
+      is_pack: !!it.is_pack
+    }));
+
+    const store = window.settingsController ? window.settingsController.getStoreInfo() : {
+      store_name: 'سوبر ماركت المنزل السوري',
+      store_phone: '01000000000',
+      store_phone2: '',
+      store_address: 'الفرع الرئيسي • شارع الجيش • خدمة التوصيل',
+      receipt_sub: 'أشهى المنتجات والمواد الغذائية السورية والشرقية',
+      receipt_footer: 'شكراً لزيارتكم • نسعد بخدمتكم دائماً ❤️'
+    };
+
+    const isDelivery = invoice.order_type === 'delivery' || invoice.order_type === 'دليفري' || parseFloat(invoice.delivery_fee) > 0 || !!invoice.address;
+    const netTotal = parseFloat(invoice.total || invoice.total_price || invoice.net || 0);
+    const delivFee = parseFloat(invoice.delivery_fee || 0);
+    const discVal = parseFloat(invoice.discount || invoice.discount_amount || 0);
+    const itemsSum = cleanItems.reduce((acc, itm) => acc + (parseFloat(itm.price || 0) * parseFloat(itm.qty || 1)), 0);
+    const subtotalVal = itemsSum > 0 ? itemsSum : Math.max(0, netTotal - delivFee + discVal);
+
+    return {
+      order_id: invoice.order_id || invoice.id || '',
+      invoice_barcode: invoice.invoice_barcode || `INV-${invoice.order_id || invoice.id || '000'}`,
+      date: invoice.date || invoice.created_at || new Date().toLocaleString('ar-EG'),
+      cashier_name: invoice.cashier_name || invoice.cashier || 'كاشير 1',
+      customer_name: invoice.customer_name || 'عميل نقدي',
+      customer_phone: invoice.customer_phone || invoice.phone || '',
+      order_type: isDelivery ? 'دليفري' : 'صالة',
+      delivery_person: invoice.delivery_person || '',
+      address: invoice.address || '',
+      payment_method: invoice.payment_method || 'كاش',
+      subtotal: subtotalVal,
+      total_price: netTotal,
+      discount: discVal,
+      delivery_fee: delivFee,
+      paid_amount: parseFloat(invoice.paid_amount || 0),
+      items: cleanItems,
+      store_name: store.store_name,
+      store_phone: [store.store_phone, store.store_phone2].filter(Boolean).join(' • ') || '01000000000',
+      store_address: store.store_address,
+      receipt_sub: store.receipt_sub,
+      footer: store.receipt_footer || 'شكراً لزيارتكم • نسعد بخدمتكم دائماً ❤️'
+    };
+  }
+
+  async printViaCloudPrinter(inv = null) {
+    const invoice = inv || this.lastInvoice;
+    if (!invoice) {
+      window.app?.showToast('لا توجد فاتورة محددة للطباعة', 'warning');
+      return;
+    }
+
+    window.app?.showToast('جاري إرسال أمر الطباعة لطابعة الكاشير (XP-80C)... 🖨️', 'info');
+    const payload = this.buildCloudPrintPayload(invoice);
+
+    try {
+      const res = await window.api.pushPrintJob({
+        job_type: 'receipt',
+        printer_name: 'XP-80C',
+        payload: payload
+      });
+
+      if (res && res.success) {
+        window.app?.showToast('✅ تم إرسال الفاتورة للطابعة! تخرج الورقة الآن من الكاشير 🖨️', 'success');
+      } else {
+        window.app?.showToast(res.error || 'تعذر إرسال أمر الطباعة لطابعة الكاشير', 'error');
+        this.printReceiptDirectly();
+      }
+    } catch (err) {
+      console.warn('Cloud print error:', err);
+      window.app?.showToast('خطأ في إرسال أمر الطباعة، جاري الفتح على الموبايل...', 'info');
+      this.printReceiptDirectly();
+    }
+  }
+
   getReceiptPrintStyles() {
     return `
       @page { size: 80mm auto; margin: 2mm; }
@@ -888,43 +1155,73 @@ class POSCart {
         box-shadow: none !important;
       }
       .bw-header { text-align: center; margin-bottom: 6px; }
-      .bw-title { font-size: 18px; font-weight: 900; margin: 0 0 3px 0; color: #000 !important; }
-      .bw-sub { font-size: 11px; font-weight: 700; margin-bottom: 3px; color: #000 !important; }
-      .bw-info { font-size: 10px; margin: 1.5px 0; font-weight: 600; color: #000 !important; }
-      .bw-divider-double { border-top: 2px solid #000; margin: 6px 0; }
-      .bw-divider-solid { border-top: 1px solid #000; margin: 6px 0; }
-      .bw-divider-dashed { border-top: 1px dashed #000; margin: 6px 0; }
-      .bw-meta-table { width: 100%; border-collapse: collapse; font-size: 10.5px; margin: 3px 0; }
-      .bw-meta-table td { padding: 2px 1px; vertical-align: middle; color: #000 !important; }
-      .bw-mono { font-family: 'Courier New', monospace; font-weight: bold; }
-      .bw-delivery-box { border: 1.5px solid #000; border-radius: 6px; padding: 5px 6px; margin: 5px 0; }
-      .bw-delivery-title { font-weight: 900; font-size: 11.5px; text-align: center; border-bottom: 1.5px solid #000; padding-bottom: 3px; margin-bottom: 4px; }
-      .bw-items-table { width: 100%; border-collapse: collapse; margin: 5px 0; font-size: 10.5px; border: 1.5px solid #000; table-layout: fixed; word-wrap: break-word; }
-      .bw-items-table thead th { border: 1px solid #000; border-bottom: 2px solid #000; background: #e8e8e8 !important; color: #000 !important; font-weight: 900; padding: 4px 2px; text-align: center; font-size: 10px; }
-      .bw-items-table tbody td { border: 1px solid #000; padding: 3.5px 2px; vertical-align: middle; color: #000 !important; }
+      .bw-divider-top { border-top: 3px solid #000; margin-bottom: 6px; }
+      .bw-title { font-size: 18px; font-weight: 900; margin: 0 0 2px 0; color: #000 !important; }
+      .bw-stars { font-size: 11px; letter-spacing: 2px; margin-bottom: 2px; color: #000 !important; }
+      .bw-sub { font-size: 10.5px; font-weight: 700; margin-bottom: 2px; color: #000 !important; }
+      .bw-info { font-size: 9.5px; margin: 1.5px 0; font-weight: 600; color: #000 !important; }
+      .bw-tax-reg { font-size: 9px; font-weight: 600; color: #333 !important; margin-top: 2px; }
+      .bw-title-banner {
+        background: #000 !important;
+        color: #fff !important;
+        font-size: 12px;
+        font-weight: 900;
+        text-align: center;
+        padding: 3px 0;
+        border-radius: 4px;
+        margin: 6px 0;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .bw-divider-double { border-top: 2px solid #000; margin: 5px 0; }
+      .bw-divider-solid { border-top: 1px solid #000; margin: 5px 0; }
+      .bw-divider-dashed { border-top: 1px dashed #000; margin: 5px 0; }
+      .bw-meta-table { width: 100%; border-collapse: collapse; font-size: 10px; margin: 3px 0; border: 1px solid #000; border-radius: 4px; }
+      .bw-meta-table td { padding: 3px 4px; vertical-align: middle; color: #000 !important; }
+      .bw-mono { font-family: 'Courier New', monospace; }
+      .bw-delivery-box { border: 1.5px solid #000; border-radius: 6px; padding: 4px 5px; margin: 5px 0; }
+      .bw-delivery-title { font-weight: 900; font-size: 11px; text-align: center; border-bottom: 1.5px solid #000; padding-bottom: 2px; margin-bottom: 3px; }
+      .bw-items-table { width: 100%; border-collapse: collapse; margin: 5px 0; font-size: 10px; border: 1.5px solid #000; table-layout: fixed; word-wrap: break-word; }
+      .bw-items-table thead th { border: 1px solid #000; border-bottom: 2px solid #000; background: #e8e8e8 !important; color: #000 !important; font-weight: 900; padding: 4px 2px; text-align: center; font-size: 9.5px; }
+      .bw-items-table tbody td { border: 1px solid #000; padding: 3px 2px; vertical-align: middle; color: #000 !important; }
       .bw-items-table .th-num, .bw-items-table .td-num { width: 7%; text-align: center; font-family: 'Courier New', monospace; font-weight: bold; }
-      .bw-items-table .th-name, .bw-items-table .td-name { width: 45%; text-align: right; }
-      .bw-items-table .item-title { font-weight: 800; line-height: 1.25; color: #000 !important; font-size: 10.5px; }
-      .bw-items-table .item-code { font-size: 8.5px; color: #333 !important; font-family: 'Courier New', monospace; display: block; }
-      .bw-items-table .th-qty, .bw-items-table .td-qty { width: 20%; text-align: center; font-family: 'Courier New', monospace; font-weight: bold; font-size: 10px; }
-      .bw-items-table .th-price, .bw-items-table .td-price { width: 14%; text-align: center; font-family: 'Courier New', monospace; font-size: 10px; }
-      .bw-items-table .th-total, .bw-items-table .td-total { width: 14%; text-align: left; font-family: 'Courier New', monospace; font-weight: 900; font-size: 10.5px; }
-      .bw-summary-table { width: 100%; border-collapse: collapse; font-size: 11px; margin: 5px 0; table-layout: fixed; }
-      .bw-summary-table td { padding: 2.5px 1px; color: #000 !important; }
+      .bw-items-table .th-name, .bw-items-table .td-name { width: 44%; text-align: right; }
+      .bw-items-table .item-title { font-weight: 800; line-height: 1.2; color: #000 !important; font-size: 10px; }
+      .bw-items-table .item-code { font-size: 8.5px; color: #444 !important; font-family: 'Courier New', monospace; display: block; }
+      .bw-items-table .th-qty, .bw-items-table .td-qty { width: 21%; text-align: center; font-family: 'Courier New', monospace; font-weight: bold; font-size: 9.5px; }
+      .bw-items-table .th-price, .bw-items-table .td-price { width: 14%; text-align: center; font-family: 'Courier New', monospace; font-size: 9.5px; }
+      .bw-items-table .th-total, .bw-items-table .td-total { width: 14%; text-align: left; font-family: 'Courier New', monospace; font-weight: 900; font-size: 10px; }
+      .bw-summary-bar { text-align: center; font-size: 9.5px; padding: 3px 0; border-top: 1px dashed #000; border-bottom: 1px dashed #000; margin: 4px 0; font-weight: 600; }
+      .bw-summary-table { width: 100%; border-collapse: collapse; font-size: 10.5px; margin: 4px 0; table-layout: fixed; }
+      .bw-summary-table td { padding: 2px 1px; color: #000 !important; }
       .bw-summary-table .bw-val { text-align: left; font-family: 'Courier New', monospace; font-weight: 800; }
-      .bw-summary-table .bw-grand-row td { border-top: 2px solid #000; border-bottom: 2px solid #000; padding: 5px 1px; font-size: 13.5px; font-weight: 900; }
-      .bw-summary-table .bw-grand-val { text-align: left; font-family: 'Courier New', monospace; font-size: 15px; font-weight: 900; }
-      .bw-barcode { text-align: center; margin: 6px 0 3px 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+      .bw-grand-box {
+        border: 2px solid #000;
+        background: #e8e8e8 !important;
+        padding: 5px 6px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin: 5px 0;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .bw-grand-label { font-weight: 900; font-size: 11.5px; color: #000 !important; }
+      .bw-grand-val { font-weight: 900; font-size: 15px; font-family: 'Courier New', monospace; color: #000 !important; }
+      .bw-barcode { text-align: center; margin: 6px 0 2px 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
       .bw-barcode svg { max-width: 100%; height: 35px; }
-      .bw-barcode-text { font-family: 'Courier New', monospace; font-size: 10.5px; font-weight: 900; letter-spacing: 1px; color: #000 !important; }
-      .bw-footer { text-align: center; font-size: 9.5px; color: #000 !important; line-height: 1.35; margin-top: 5px; }
-      .bw-footer p { margin: 2px 0; }
+      .bw-barcode-text { font-family: 'Courier New', monospace; font-size: 10px; font-weight: 900; letter-spacing: 1px; color: #000 !important; }
+      .bw-terms-box { font-size: 8.5px; line-height: 1.35; margin: 5px 0; padding-top: 3px; color: #000 !important; }
+      .bw-terms-box ul { list-style: none; padding: 0; margin: 2px 0; }
+      .bw-terms-box li { margin-bottom: 1.5px; }
+      .bw-footer { text-align: center; font-size: 9.5px; color: #000 !important; line-height: 1.35; margin-top: 4px; }
+      .bw-footer p { margin: 1.5px 0; }
+      .bw-footer-farewell { font-size: 11px; font-weight: 800; }
       @media print {
         .no-print { display: none !important; }
       }
     `;
   }
-
   printInvoice(inv) {
     if (!inv && this.lastInvoice) inv = this.lastInvoice;
     if (!inv) return;
@@ -1116,7 +1413,10 @@ class POSCart {
           <div class="flex-1 min-w-0">
             <h4 class="text-xs sm:text-sm font-bold text-gray-900 dark:text-white truncate" title="${item.name}">${item.name}</h4>
             <div class="flex items-center gap-1.5 mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
-              <span class="font-bold text-indigo-600 dark:text-indigo-400 font-mono">${item.price.toFixed(2)} ج.م${isWeight ? '/كجم' : ''}</span>
+              <button type="button" onclick="window.cart.openEditPriceModal('${item.cart_key || item.product_id}')" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 font-mono font-black text-xs border border-indigo-200/80 dark:border-indigo-800 transition active:scale-95 cursor-pointer shadow-2xs" title="اضغط لتعديل سعر البيع لهذا الصنف">
+                <span>${item.price.toFixed(2)} ج.م${isWeight ? '/كجم' : ''}</span>
+                <i data-lucide="edit-3" class="w-2.5 h-2.5 opacity-70"></i>
+              </button>
               ${item.local_code ? `<span class="px-1.5 py-0.2 bg-gray-200 dark:bg-gray-600 rounded text-[9px] font-mono font-bold">${item.local_code}</span>` : ''}
               ${isWeight ? `<span class="px-1.5 py-0.2 bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 rounded text-[9px] font-bold">⚖️ ${gramsVal} جم</span>` : ''}
               ${item.is_pack ? `<span class="px-1.5 py-0.2 bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 rounded text-[9px] font-bold">📦 كرتونة (خصم ${item.pack_multiplier || 1})</span>` : ''}
@@ -1148,12 +1448,14 @@ class POSCart {
       if (emptyNotice) emptyNotice.classList.remove('hidden');
       if (listContainer) listContainer.innerHTML = '';
       if (mobileListContainer) mobileListContainer.innerHTML = '<p class="text-xs text-gray-400 text-center py-6">السلة فارغة</p>';
+      this.saveToStorage();
       return;
     }
 
     if (emptyNotice) emptyNotice.classList.add('hidden');
     if (listContainer) listContainer.innerHTML = itemsHTML;
     if (mobileListContainer) mobileListContainer.innerHTML = itemsHTML;
+    this.saveToStorage();
   }
 
   /* ==================== CASHIER INVOICE NAVIGATION TOOLBAR ==================== */
@@ -1273,6 +1575,366 @@ class POSCart {
 
     window.app?.showToast('جاهز لفاتورة بيع جديدة ➕', 'success');
   }
+
+  /* ==================== EDIT SELLING PRICE DURING SALE (تعديل سعر البيع أثناء البيع) ==================== */
+  openEditPriceModal(cartKey) {
+    const item = this.items.find(i => String(i.cart_key || i.product_id) === String(cartKey));
+    if (!item) return;
+
+    this.editingPriceItemKey = cartKey;
+    const modal = document.getElementById('cart-edit-price-modal');
+    const nameEl = document.getElementById('edit-price-prod-name');
+    const currentLabel = document.getElementById('edit-price-current-label');
+    const input = document.getElementById('cart-edit-price-input');
+    const permCheckbox = document.getElementById('edit-price-save-permanent');
+
+    if (nameEl) nameEl.textContent = item.name;
+    const isWeight = item.unit_type === 'weight' || item.unit === 'كجم';
+    if (currentLabel) {
+      currentLabel.textContent = `السعر الحالي: ${item.price.toFixed(2)} ج.م ${isWeight ? '(لكل كجم)' : ''}`;
+    }
+    if (input) {
+      input.value = item.price.toFixed(2);
+    }
+    if (permCheckbox) permCheckbox.checked = true;
+
+    this.onEditPriceChanged();
+
+    if (modal) {
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+    setTimeout(() => {
+      input?.focus();
+      input?.select();
+    }, 50);
+
+    if (window.lucide) window.lucide.createIcons();
+  }
+
+  closeEditPriceModal() {
+    const modal = document.getElementById('cart-edit-price-modal');
+    if (modal) {
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+    this.editingPriceItemKey = null;
+  }
+
+  onEditPriceChanged() {
+    const input = document.getElementById('cart-edit-price-input');
+    const formulaEl = document.getElementById('edit-price-calc-formula');
+    const totalEl = document.getElementById('edit-price-calc-total');
+
+    const item = this.items.find(i => String(i.cart_key || i.product_id) === String(this.editingPriceItemKey));
+    if (!item) return;
+
+    const newPrice = Math.max(0, parseFloat(input?.value || 0));
+    const qty = parseFloat(item.qty || 1);
+    const subtotal = qty * newPrice;
+
+    const isWeight = item.unit_type === 'weight' || item.unit === 'كجم';
+    const qtyStr = isWeight ? `${qty.toFixed(3)} كجم` : `${qty}`;
+
+    if (formulaEl) {
+      formulaEl.textContent = `${qtyStr} × ${newPrice.toFixed(2)} ج.م`;
+    }
+    if (totalEl) {
+      totalEl.textContent = `${subtotal.toFixed(2)} ج.م`;
+    }
+  }
+
+  applyPriceIncrement(increment) {
+    const input = document.getElementById('cart-edit-price-input');
+    if (!input) return;
+    const current = Math.max(0, parseFloat(input.value || 0));
+    input.value = (current + increment).toFixed(2);
+    this.onEditPriceChanged();
+  }
+
+  async confirmEditPrice() {
+    const input = document.getElementById('cart-edit-price-input');
+    const permCheckbox = document.getElementById('edit-price-save-permanent');
+    const newPrice = Math.max(0, parseFloat(input?.value || 0));
+
+    if (newPrice <= 0) {
+      window.app?.showToast('يرجى إدخال سعر بيع صحيح أكبر من 0', 'error');
+      return;
+    }
+
+    const item = this.items.find(i => String(i.cart_key || i.product_id) === String(this.editingPriceItemKey));
+    if (!item) {
+      this.closeEditPriceModal();
+      return;
+    }
+
+    item.price = newPrice;
+    this.saveToStorage();
+    this.render();
+
+    const savePermanent = permCheckbox ? permCheckbox.checked : true;
+    this.closeEditPriceModal();
+
+    if (savePermanent) {
+      try {
+        // 1. Update in local catalog memory immediately
+        if (window.app && Array.isArray(window.app.products)) {
+          const prod = window.app.products.find(p => p.id === item.product_id || (item.local_code && String(p.local_code) === String(item.local_code)));
+          if (prod) {
+            prod.price = newPrice;
+            window.app.renderProducts();
+          }
+        }
+
+        // 2. Call API to update database and queue for DreamSoft
+        const res = await window.api.updateProductPrice(item.product_id, newPrice, item.local_code || '');
+        if (res && res.success) {
+          window.app?.showToast(`✅ تم تعديل سعر ${item.name} إلى ${newPrice.toFixed(2)} ج.م وتثبيته في النظام`, 'success');
+        }
+      } catch (err) {
+        console.warn('Permanent price save warning:', err);
+        window.app?.showToast(`تم تعديل السعر في الفاتورة الحالية فقط (${newPrice.toFixed(2)} ج.م)`, 'info');
+      }
+    } else {
+      window.app?.showToast(`تم تعديل سعر ${item.name} لهذه الفاتورة (${newPrice.toFixed(2)} ج.م)`, 'info');
+    }
+  }
+
+  // ==================== TEMPORARY / HELD INVOICES MANAGEMENT ====================
+  showTempInvoicesModal() {
+    const modal = document.getElementById('temp-invoices-modal');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    if (window.lucide) window.lucide.createIcons();
+    this.loadTempInvoices();
+  }
+
+  closeTempInvoicesModal() {
+    const modal = document.getElementById('temp-invoices-modal');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  async loadTempInvoices() {
+    const container = document.getElementById('temp-invoices-list');
+    const badge = document.getElementById('temp-modal-count-badge');
+    const headerBadge = document.getElementById('temp-invoices-badge');
+    if (!container) return;
+
+    container.innerHTML = `
+      <div class="text-center py-10 text-gray-400">
+        <i data-lucide="loader-2" class="w-8 h-8 animate-spin mx-auto mb-2 text-amber-500"></i>
+        <p class="text-xs font-bold">جاري جلب الفواتير المؤقتة والمعلقة...</p>
+      </div>
+    `;
+    if (window.lucide) window.lucide.createIcons();
+
+    try {
+      const res = await window.api.getTempInvoices();
+      let orders = (res && res.success && Array.isArray(res.orders)) ? res.orders : [];
+
+      // Also incorporate locally held carts if any
+      const heldCarts = JSON.parse(localStorage.getItem('pos_held_carts') || '[]');
+      
+      const totalCount = orders.length + heldCarts.length;
+      if (badge) badge.textContent = `${totalCount} فواتير`;
+      if (headerBadge) {
+        headerBadge.textContent = totalCount;
+        if (totalCount > 0) headerBadge.classList.remove('hidden');
+        else headerBadge.classList.add('hidden');
+      }
+
+      if (totalCount === 0) {
+        container.innerHTML = `
+          <div class="text-center py-12 text-gray-400 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700">
+            <i data-lucide="clipboard-check" class="w-12 h-12 mx-auto mb-3 text-emerald-500 opacity-60"></i>
+            <h4 class="text-sm font-bold text-gray-700 dark:text-gray-300">لا توجد فواتير مؤقتة أو معلقة حالياً</h4>
+            <p class="text-xs text-gray-400 mt-1">جميع الأوردرات مسددة ومرحلة للنظام الأساسي بنجاح ✨</p>
+          </div>
+        `;
+        if (window.lucide) window.lucide.createIcons();
+        return;
+      }
+
+      let html = '';
+
+      // 1. Local held carts (مسودات السلة)
+      if (heldCarts.length > 0) {
+        heldCarts.forEach((hc, idx) => {
+          const itemsCount = (hc.items || []).reduce((sum, it) => sum + (it.qty || 1), 0);
+          const totalVal = (hc.items || []).reduce((sum, it) => sum + ((it.price || 0) * (it.qty || 1)), 0);
+          html += `
+            <div class="p-4 rounded-2xl border border-amber-300 dark:border-amber-700/60 bg-amber-50/40 dark:bg-amber-950/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+              <div class="flex items-start gap-3">
+                <div class="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-600 flex items-center justify-center shrink-0">
+                  <i data-lucide="pause-circle" class="w-5 h-5"></i>
+                </div>
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span class="px-2 py-0.5 rounded-md bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-200 text-[10px] font-bold">مسودة معلقة</span>
+                    <span class="text-xs font-bold text-gray-900 dark:text-white">${hc.name || `مسودة #${idx + 1}`}</span>
+                  </div>
+                  <p class="text-[11px] text-gray-500 mt-0.5">${itemsCount} أصناف • إجمالي: <strong class="text-amber-700 dark:text-amber-400 font-mono">${totalVal.toFixed(2)} ج.م</strong></p>
+                </div>
+              </div>
+              <div class="flex items-center gap-2 self-end sm:self-center">
+                <button onclick="window.cart?.restoreHeldCart(${idx})" class="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold transition flex items-center gap-1 shadow-xs">
+                  <i data-lucide="arrow-down-left" class="w-3.5 h-3.5"></i>
+                  <span>استرجاع للسلة</span>
+                </button>
+                <button onclick="window.cart?.deleteHeldCart(${idx})" class="p-1.5 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 transition" title="حذف المسودة">
+                  <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+              </div>
+            </div>
+          `;
+        });
+      }
+
+      // 2. Active Cloud / Delivery Orders (أوردرات مؤقتة مع الطيارين)
+      orders.forEach(ord => {
+        const orderId = ord.id;
+        const custName = ord.customer_name || 'عميل دليفري';
+        const custPhone = ord.customer_phone || '';
+        const driverName = ord.driver_name || 'بدون طيار';
+        const netItems = (parseFloat(ord.net_items_price) || 0).toFixed(2);
+        const fee = (parseFloat(ord.delivery_fee) || 0).toFixed(2);
+        const total = (parseFloat(ord.total_price) || 0).toFixed(2);
+        const isWithDriver = driverName && driverName !== 'بدون طيار';
+        const itemsList = Array.isArray(ord.items) ? ord.items.map(it => `${it.qty || it.quantity || 1}x ${it.name || it.product_name || 'صنف'}`).join(' • ') : '';
+
+        html += `
+          <div class="p-4 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col gap-3 shadow-xs hover:border-amber-300 dark:hover:border-amber-700 transition">
+            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-gray-100 dark:border-gray-700/60 pb-2.5">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="font-mono font-black text-xs px-2 py-0.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200">#${ord.invoice_number || orderId}</span>
+                <span class="text-xs font-bold text-gray-900 dark:text-white">${custName}</span>
+                ${custPhone ? `<span class="text-[11px] text-gray-400 font-mono">(${custPhone})</span>` : ''}
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${isWithDriver ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'}">
+                  ${isWithDriver ? `🛵 طيار: ${driverName}` : '⌛ بدون طيار'}
+                </span>
+                <span class="text-[10px] text-gray-400 font-mono">${ord.created_at || ''}</span>
+              </div>
+              <div class="text-left shrink-0">
+                <span class="text-xs text-gray-400">الصافي: </span>
+                <span class="text-sm font-black font-mono text-emerald-600 dark:text-emerald-400">${netItems} ج.م</span>
+                ${parseFloat(fee) > 0 ? `<span class="text-[10px] text-gray-400 font-mono mr-1">(+${fee} توصيل)</span>` : ''}
+              </div>
+            </div>
+
+            ${itemsList ? `
+              <div class="text-[11px] text-gray-500 line-clamp-2 bg-gray-50 dark:bg-gray-700/30 p-2 rounded-xl">
+                <span class="font-bold text-gray-700 dark:text-gray-300">الأصناف: </span>${itemsList}
+              </div>
+            ` : ''}
+
+            <div class="flex items-center justify-between gap-2 pt-1 flex-wrap">
+              <span class="text-[11px] text-gray-400">إجمالي الأوردر المطلوب: <strong class="text-gray-800 dark:text-gray-200 font-mono">${total} ج.م</strong></span>
+              <div class="flex items-center gap-1.5 ms-auto">
+                <button onclick="window.cart?.loadTempOrderToCart(${orderId})" class="px-3 py-1.5 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-xs font-bold transition flex items-center gap-1">
+                  <i data-lucide="shopping-bag" class="w-3.5 h-3.5"></i>
+                  <span>تعديل بالسلة</span>
+                </button>
+                <button onclick="window.cart?.settleTempInvoiceQuick(${orderId}, '${custName.replace(/'/g, "\\'")}', ${total})" class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center gap-1 shadow-xs">
+                  <i data-lucide="check" class="w-3.5 h-3.5"></i>
+                  <span>محاسبة وتقفيل</span>
+                </button>
+                <button onclick="window.cart?.printTempInvoiceQuick(${orderId})" class="p-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 transition" title="طباعة بون الفاتورة">
+                  <i data-lucide="printer" class="w-4 h-4"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+      if (window.lucide) window.lucide.createIcons();
+    } catch (e) {
+      console.warn('Error loading temp invoices:', e);
+      container.innerHTML = `
+        <div class="text-center py-8 text-rose-500">
+          <p class="text-xs font-bold">حدث خطأ أثناء تحميل الفواتير المؤقتة: ${e.message || e}</p>
+        </div>
+      `;
+    }
+  }
+
+  async settleTempInvoiceQuick(orderId, custName, amount) {
+    if (!confirm(`هل أنت متأكد من تقفيل الفاتورة المؤقتة #${orderId} للعميل (${custName}) بمبلغ ${amount} ج.م؟`)) {
+      return;
+    }
+    window.app?.showLoading(true, 'جاري تقفيل الفاتورة وترحيلها للكاشير...');
+    try {
+      const res = await window.api.settleDeliveryOrder(orderId, 'كاشير المحل', 'تقفيل فاتورة مؤقتة');
+      window.app?.showLoading(false);
+      if (res && res.success) {
+        window.app?.showToast(`✅ تم تقفيل الفاتورة #${orderId} بنجاح وترحيلها للكاشير`, 'success');
+        this.loadTempInvoices();
+      } else {
+        window.app?.showToast(res.error || 'فشل التقفيل', 'error');
+      }
+    } catch (e) {
+      window.app?.showLoading(false);
+      window.app?.showToast('خطأ أثناء تقفيل الفاتورة', 'error');
+    }
+  }
+
+  async loadTempOrderToCart(orderId) {
+    window.app?.showLoading(true, 'جاري استرجاع أصناف الفاتورة للسلة...');
+    try {
+      const res = await window.api.get('get_order_details', { order_id: orderId });
+      window.app?.showLoading(false);
+      if (res && res.success && res.order && Array.isArray(res.order.items)) {
+        if (this.items.length > 0 && !confirm('السلة الحالية بها أصناف، هل تريد استبدالها بأصناف الفاتورة المؤقتة؟')) {
+          return;
+        }
+        this.items = [];
+        res.order.items.forEach(it => {
+          this.items.push({
+            id: it.product_id || it.id,
+            product_id: it.product_id || it.id,
+            name: it.product_name || it.name,
+            price: parseFloat(it.unit_price || it.price || 0),
+            qty: parseFloat(it.quantity || it.qty || 1),
+            barcode: it.barcode || '',
+            local_code: it.local_code || '',
+            is_scale: it.is_scale || false
+          });
+        });
+        this.saveToStorage();
+        this.render();
+        this.closeTempInvoicesModal();
+        window.app?.switchView('pos');
+        window.app?.showToast(`تم استرجاع أصناف الفاتورة #${orderId} في السلة بنجاح 🛒`, 'success');
+      } else {
+        window.app?.showToast('لم يتم العثور على تفاصيل الأصناف', 'warning');
+      }
+    } catch (e) {
+      window.app?.showLoading(false);
+      window.app?.showToast('خطأ أثناء استرجاع الأصناف', 'error');
+    }
+  }
+
+  async printTempInvoiceQuick(orderId) {
+    try {
+      const res = await window.api.get('get_order_details', { order_id: orderId });
+      if (res && res.success && res.order) {
+        this.printInvoice(res.order);
+      }
+    } catch (e) {
+      window.app?.showToast('خطأ في الطباعة', 'error');
+    }
+  }
 }
 
 window.cart = new POSCart();
+
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      window.cart?.render();
+    });
+  } else {
+    window.cart?.render();
+  }
+}

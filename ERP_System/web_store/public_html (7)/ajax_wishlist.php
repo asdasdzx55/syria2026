@@ -1,5 +1,6 @@
 <?php
 require_once 'config.php';
+require_once __DIR__ . '/storefront_helpers.php';
 
 header('Content-Type: application/json');
 
@@ -10,7 +11,7 @@ if ($product_id <= 0) {
 }
 
 // التأكد من وجود المنتج في قاعدة البيانات
-$stmt = $pdo->prepare("SELECT COUNT(*) FROM products WHERE id = ?");
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM products WHERE id = ? AND " . storefrontVisibleProductSql());
 $stmt->execute([$product_id]);
 if ($stmt->fetchColumn() == 0) {
     echo json_encode(['status' => 'error', 'message' => 'Product not found']);

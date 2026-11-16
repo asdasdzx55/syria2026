@@ -1,6 +1,7 @@
 <?php
 header('Content-Type: application/json');
 require_once 'config.php';
+require_once __DIR__ . '/storefront_helpers.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['message'])) {
     $user_msg = trim($_POST['message']);
@@ -23,7 +24,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['message'])) {
     
     $prods = [];
     try {
-        $prods = $pdo->query("SELECT name, price, category FROM products ORDER BY id DESC LIMIT 10")->fetchAll(PDO::FETCH_ASSOC);
+        $prods = $pdo->query("SELECT name, price, category FROM products WHERE " . storefrontVisibleProductSql() . " ORDER BY id DESC LIMIT 10")->fetchAll(PDO::FETCH_ASSOC);
     } catch(Exception $e){}
     
     $prod_summary = "";

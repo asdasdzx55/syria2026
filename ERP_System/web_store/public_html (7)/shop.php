@@ -1,5 +1,7 @@
 <?php
 require_once 'config.php';
+require_once __DIR__ . '/storefront_helpers.php';
+$vis_sql = storefrontVisibleProductSql();
 
 // الحصول على التصنيف والبحث المختار
 $cat = isset($_GET['category']) ? trim($_GET['category']) : '';
@@ -7,7 +9,7 @@ $sub_cat = isset($_GET['sub_category']) ? trim($_GET['sub_category']) : '';
 $search = isset($_GET['search']) ? trim($_GET['search']) : '';
 
 // بناء الاستعلام الديناميكي
-$query = "SELECT * FROM products WHERE 1=1";
+$query = "SELECT * FROM products WHERE {$vis_sql}";
 $params = [];
 if(!empty($cat) && !empty($sub_cat)) {
     $query .= " AND category = ? AND sub_category = ?";
@@ -27,6 +29,21 @@ if(!empty($search)) {
     $params[] = "%$search%";
 }
 $query .= " ORDER BY id DESC";
+
+// ترقيم الصفحات لضمان سرعة التحميل حتى مع آلاف المنتجات المصوّرة
+$per_page = 24;
+$page = max(1, (int)($_GET['page'] ?? 1));
+$count_query = preg_replace('/^SELECT \* FROM products/', 'SELECT COUNT(*) FROM products', $query, 1);
+$count_query = preg_replace('/ ORDER BY id DESC$/', '', $count_query);
+$stmt_total = $pdo->prepare($count_query);
+$stmt_total->execute($params);
+$total_products = (int)$stmt_total->fetchColumn();
+$total_pages = max(1, (int)ceil($total_products / $per_page));
+if ($page > $total_pages) {
+    $page = $total_pages;
+}
+$offset = ($page - 1) * $per_page;
+$query .= " LIMIT {$per_page} OFFSET {$offset}";
 
 $stmt = $pdo->prepare($query);
 $stmt->execute($params);
@@ -66,13 +83,27 @@ include 'header.php';
                     <a href="shop.php" class="text-[10px] text-red-500 font-bold hover:underline">إلغاء التصفية ✕</a>
                 <?php endif; ?>
             </div>
-            <div class="flex gap-2 overflow-x-auto pb-2 scrollbar-none">
-                <a href="shop.php" class="shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all <?php echo (empty($cat) && empty($sub_cat)) ? 'bg-royal-charcoal text-white shadow-sm' : 'bg-royal-sand/60 text-gray-700'; ?>">
-                    كل المعروضات
+            <div class="flex gap-3 overflow-x-auto pb-2 scrollbar-none items-center py-1">
+                <a href="shop.php" class="shrink-0 flex flex-col items-center gap-1 group">
+                    <div class="w-14 h-14 rounded-2xl flex items-center justify-center border-2 transition-all <?php echo (empty($cat) && empty($sub_cat)) ? 'border-royal-gold bg-royal-charcoal text-royal-gold shadow-md scale-105' : 'border-gray-200 bg-white text-gray-500 hover:border-royal-gold'; ?>">
+                        <i class="fa-solid fa-store text-lg"></i>
+                    </div>
+                    <span class="text-[10px] font-bold <?php echo (empty($cat) && empty($sub_cat)) ? 'text-royal-darkgold font-extrabold' : 'text-gray-600'; ?>">الكل</span>
                 </a>
-                <?php foreach($categories_tree as $c_mob): ?>
-                    <a href="shop.php?category=<?php echo urlencode($c_mob['name']); ?>" class="shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all <?php echo ($cat === $c_mob['name'] && empty($sub_cat)) ? 'bg-royal-gold text-royal-charcoal shadow-sm' : 'bg-royal-sand/60 text-gray-700 hover:bg-royal-gold/20'; ?>">
-                        <?php echo htmlspecialchars($c_mob['name']); ?>
+                <?php foreach($categories_tree as $c_mob): 
+                    $c_img = !empty($c_mob['image_url']) ? $c_mob['image_url'] : 'images/categories/pantry.jpg';
+                    $is_active = ($cat === $c_mob['name'] && empty($sub_cat));
+                ?>
+                    <a href="shop.php?category=<?php echo urlencode($c_mob['name']); ?>" class="shrink-0 flex flex-col items-center gap-1 group">
+                        <div class="w-14 h-14 rounded-2xl overflow-hidden border-2 transition-all relative <?php echo $is_active ? 'border-royal-gold ring-2 ring-royal-gold/50 shadow-md scale-105' : 'border-gray-200 bg-white hover:border-royal-gold/60'; ?>">
+                            <img src="<?php echo htmlspecialchars($c_img); ?>" class="w-full h-full object-cover" alt="<?php echo htmlspecialchars($c_mob['name']); ?>" loading="lazy">
+                            <?php if ($is_active): ?>
+                                <div class="absolute inset-0 bg-royal-gold/15"></div>
+                            <?php endif; ?>
+                        </div>
+                        <span class="text-[10px] font-bold max-w-[68px] text-center truncate <?php echo $is_active ? 'text-royal-darkgold font-extrabold' : 'text-gray-600'; ?>">
+                            <?php echo htmlspecialchars($c_mob['name']); ?>
+                        </span>
                     </a>
                 <?php endforeach; ?>
             </div>
@@ -144,7 +175,7 @@ include 'header.php';
                         <a href="shop.php" class="flex justify-between items-center py-2.5 px-3 rounded-xl transition-all <?php echo (empty($cat) && empty($sub_cat)) ? 'bg-royal-charcoal text-white font-bold shadow-md' : 'text-gray-700 hover:bg-royal-sand/60 hover:text-royal-darkgold'; ?>">
                             <span class="flex items-center gap-2"><i class="fa-solid fa-store text-[11px]"></i> كل المنتجات المعروضة</span>
                             <span class="<?php echo (empty($cat) && empty($sub_cat)) ? 'bg-royal-gold text-royal-charcoal' : 'bg-royal-gold/20 text-royal-darkgold'; ?> text-[10px] px-2 py-0.5 rounded-full font-bold">
-                                <?php echo $pdo->query("SELECT COUNT(*) FROM products")->fetchColumn(); ?>
+                                <?php echo $pdo->query("SELECT COUNT(*) FROM products WHERE {$vis_sql}")->fetchColumn(); ?>
                             </span>
                         </a>
                     </li>
@@ -154,7 +185,7 @@ include 'header.php';
                         $is_active_main = ($cat === $mc['name']);
                         
                         // إجمالي منتجات القسم الرئيسي
-                        $stmt_count = $pdo->prepare("SELECT COUNT(*) FROM products WHERE category = ?");
+                        $stmt_count = $pdo->prepare("SELECT COUNT(*) FROM products WHERE category = ? AND {$vis_sql}");
                         $stmt_count->execute([$mc['name']]);
                         $main_count = $stmt_count->fetchColumn();
                     ?>
@@ -176,12 +207,12 @@ include 'header.php';
                                 <?php foreach($mc['subs'] as $s): 
                                     $is_active_sub = ($sub_cat === $s['name']);
                                     
-                                    $stmt_sub_count = $pdo->prepare("SELECT COUNT(*) FROM products WHERE category = ? AND sub_category = ?");
+                                    $stmt_sub_count = $pdo->prepare("SELECT COUNT(*) FROM products WHERE category = ? AND sub_category = ? AND {$vis_sql}");
                                     $stmt_sub_count->execute([$mc['name'], $s['name']]);
                                     $sub_count = $stmt_sub_count->fetchColumn();
                                     
                                     if ($sub_count == 0) {
-                                        $stmt_sub_count2 = $pdo->prepare("SELECT COUNT(*) FROM products WHERE sub_category = ?");
+                                        $stmt_sub_count2 = $pdo->prepare("SELECT COUNT(*) FROM products WHERE sub_category = ? AND {$vis_sql}");
                                         $stmt_sub_count2->execute([$s['name']]);
                                         $sub_count = $stmt_sub_count2->fetchColumn();
                                     }
@@ -222,7 +253,7 @@ include 'header.php';
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-8">
-                    <?php foreach($products as $p): ?>
+                    <?php foreach($products as $p): $p['image_url'] = resolveProductDisplayImage($pdo, $p); ?>
                         <div class="product-card group relative flex flex-col bg-white rounded-xl overflow-hidden shadow-sm border border-royal-gold/5 p-3 hover:shadow-lg transition-shadow">
                             <!-- الصورة والتأثيرات -->
                             <a href="product.php?id=<?php echo $p['id']; ?>" class="product-image-container block overflow-hidden bg-gray-50 aspect-[4/5] relative rounded-lg">
@@ -295,6 +326,28 @@ include 'header.php';
                     <?php endforeach; ?>
                 </div>
             <?php endif; ?>
+        <?php if (isset($total_pages) && $total_pages > 1): ?>
+            <div class="mt-10 flex flex-wrap items-center justify-center gap-2">
+                <?php
+                $qp = $_GET;
+                $renderPageLink = function(int $pNum, string $label, bool $active = false) use ($qp): string {
+                    $qp['page'] = $pNum;
+                    $url = 'shop.php?' . http_build_query($qp);
+                    $cls = $active
+                        ? 'bg-royal-charcoal text-royal-gold border-royal-charcoal font-bold shadow-md'
+                        : 'bg-white text-gray-700 hover:bg-royal-sand border-royal-gold/20';
+                    return '<a href="' . htmlspecialchars($url) . '" class="px-4 py-2 rounded-xl border text-xs transition ' . $cls . '">' . $label . '</a>';
+                };
+                if ($page > 1) echo $renderPageLink($page - 1, 'السابق');
+                $start_p = max(1, $page - 2);
+                $end_p = min($total_pages, $page + 2);
+                for ($i = $start_p; $i <= $end_p; $i++) {
+                    echo $renderPageLink($i, (string)$i, $i === $page);
+                }
+                if ($page < $total_pages) echo $renderPageLink($page + 1, 'التالي');
+                ?>
+            </div>
+        <?php endif; ?>
         </main>
 
     </div>

@@ -25,6 +25,8 @@ class App {
   async init() {
     this.applyTheme(this.theme);
     this.bindEvents();
+    // Render persistent cart items on startup
+    window.cart?.render();
 
     // Render initial products from local cache immediately (instant startup)
     if (this.products.length > 0) {
@@ -851,29 +853,35 @@ class App {
     if (window.lucide) window.lucide.createIcons();
   }
 
-  switchDeliveryHubSubTab(tab) {
+  switchDeliveryHubSubTab(tab = 'sales') {
+    const btnSales = document.getElementById('hub-tab-sales');
     const btnOrders = document.getElementById('hub-tab-orders');
     const btnSettlement = document.getElementById('hub-tab-settlement');
+    const panelSales = document.getElementById('hub-panel-sales');
     const panelOrders = document.getElementById('hub-panel-orders');
     const panelSettlement = document.getElementById('hub-panel-settlement');
 
-    if (tab === 'orders') {
+    // Reset all tabs
+    [btnSales, btnOrders, btnSettlement].forEach(btn => {
+      btn?.classList.remove('bg-indigo-600', 'text-white', 'shadow-xs');
+      btn?.classList.add('text-gray-600', 'dark:text-gray-300');
+    });
+    [panelSales, panelOrders, panelSettlement].forEach(p => p?.classList.add('hidden'));
+
+    if (tab === 'sales') {
+      btnSales?.classList.add('bg-indigo-600', 'text-white', 'shadow-xs');
+      btnSales?.classList.remove('text-gray-600', 'dark:text-gray-300');
+      panelSales?.classList.remove('hidden');
+      window.ordersController?.loadSalesInvoices();
+    } else if (tab === 'orders') {
       btnOrders?.classList.add('bg-indigo-600', 'text-white', 'shadow-xs');
       btnOrders?.classList.remove('text-gray-600', 'dark:text-gray-300');
-      btnSettlement?.classList.remove('bg-indigo-600', 'text-white', 'shadow-xs');
-      btnSettlement?.classList.add('text-gray-600', 'dark:text-gray-300');
-
       panelOrders?.classList.remove('hidden');
-      panelSettlement?.classList.add('hidden');
       window.ordersController?.loadOrders('pending');
     } else {
       btnSettlement?.classList.add('bg-indigo-600', 'text-white', 'shadow-xs');
       btnSettlement?.classList.remove('text-gray-600', 'dark:text-gray-300');
-      btnOrders?.classList.remove('bg-indigo-600', 'text-white', 'shadow-xs');
-      btnOrders?.classList.add('text-gray-600', 'dark:text-gray-300');
-
       panelSettlement?.classList.remove('hidden');
-      panelOrders?.classList.add('hidden');
       window.deliverySettlementController?.init();
     }
 
@@ -1253,7 +1261,13 @@ class App {
     if (modal) {
       modal.classList.remove('hidden');
       modal.style.display = 'flex';
-      document.getElementById('new-driver-name')?.focus();
+      const n = document.getElementById('new-driver-name');
+      const p = document.getElementById('new-driver-phone');
+      const pin = document.getElementById('new-driver-pin');
+      if (n) n.value = '';
+      if (p) p.value = '';
+      if (pin) pin.value = '1234';
+      setTimeout(() => n?.focus(), 50);
       if (window.lucide) window.lucide.createIcons();
     }
   }
@@ -1265,8 +1279,10 @@ class App {
       modal.style.display = 'none';
       const n = document.getElementById('new-driver-name');
       const p = document.getElementById('new-driver-phone');
+      const pin = document.getElementById('new-driver-pin');
       if (n) n.value = '';
       if (p) p.value = '';
+      if (pin) pin.value = '1234';
     }
   }
 
@@ -1292,14 +1308,21 @@ class App {
 
       if (res && res.success) {
         this.showToast(`تمت إضافة الطيار (${name}) بنجاح!`, 'success');
-        window.cart.deliveryPerson = name;
+        if (window.cart) {
+          window.cart.deliveryPerson = name;
+        }
         await this.loadDeliveryDrivers();
         if (window.employeesController) {
           window.employeesController.loadEmployees();
         }
+        if (window.deliverySettlementController) {
+          await window.deliverySettlementController.loadDrivers();
+          window.deliverySettlementController.renderActiveTab();
+          window.deliverySettlementController.renderKPIs();
+        }
         this.closeNewDriverModal();
       } else {
-        throw new Error(res.message || 'فشل حفظ الطيار');
+        throw new Error(res.message || res.error || 'فشل حفظ الطيار');
       }
     } catch (e) {
       this.showLoading(false);
@@ -1456,9 +1479,7 @@ class App {
     document.getElementById('btn-close-receipt')?.addEventListener('click', () => {
       document.getElementById('receipt-modal')?.classList.add('hidden');
     });
-    document.getElementById('btn-print-receipt')?.addEventListener('click', () => {
-      window.cart?.printReceiptDirectly();
-    });
+    // #btn-print-receipt already calls window.cart?.printViaCloudPrinter() via onclick cleanly.
 
     // Cash calculation listener
     document.getElementById('checkout-cash-input')?.addEventListener('input', () => this.updateChangeCalculation());
